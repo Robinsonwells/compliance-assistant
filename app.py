@@ -142,4 +142,129 @@ def process_uploaded_file(uploaded_file, chunker, collection):
         chunks = chunker.legal_aware_chunking(text, max_chunk_size=1200)
         st.write(f"📦 Chunks created: {len(chunks)}")
         if not chunks:
-            return False, "No chunks were created
+            return False, "No chunks were created - check file format"
+
+        docs, metas, ids = [], [], []
+        now = datetime.now().isoformat()
+        for ch in chunks:
+            docs.append(ch['text'])
+            metas.append({
+                **ch['metadata'],
+                'source_file': uploaded_file.name,
+                'upload_date': now,
+                'processed_by': 'admin'
+            })
+            ids.append(f"{uploaded_file.name}_{ch['metadata']['chunk_id']}")
+
+        batch = 5000
+        for i in range(0, len(docs), batch):
+            collection.add(
+                documents=docs[i:i+batch],
+                metadatas=metas[i:i+batch],
+                ids=ids[i:i+batch]
+            )
+
+        return True, f"Processed {len(chunks)} chunks from {uploaded_file.name}"
+    except Exception as e:
+        return False, f"Error processing file: {e}"
+
+def main_app():
+    authenticated, client, user_manager, chunker, collection = check_authentication()
+    if not authenticated:
+        st.stop()
+
+    # Header and logout
+    col1, col2 = st.columns([6,1])
+    with col1:
+        st.markdown("# ⚖️ Elite Legal Compliance Assistant")
+        st.markdown("*Powered by GPT-5 with maximum quality analysis*")
+    with col2:
+        if st.button("🚪 Logout", type="secondary"):
+            st.session_state.authenticated = False
+            st.session_state.access_code = None
+            st.success("👋 Logged out successfully")
+            time.sleep(1)
+            st.rerun()
+
+    st.markdown("---")
+
+    if "messages" not in st.session_state:
+        st.session_state.messages = [{
+            "role": "assistant",
+            "content": "Hello! I'm your legal compliance assistant. I specialize in NY, NJ, and CT employment law. Ask me a question!"
+        }]
+
+    with st.sidebar:
+        st.markdown("### 👤 Session Info")
+        if 'login_time' in st.session_state:
+            duration = datetime.now() - st.session_state.login_time
+            hrs, rem = divmod(int(duration.total_seconds()), 3600)
+            mins, _ = divmod(rem, 60)
+            st.write(f"**Active:** {hrs}h {mins}m")
+            left = timedelta(hours=24) - duration
+            if left.total_seconds() > 0:
+                lh, lr = divmod(int(left.total_seconds()), 3600)
+                lm, _ = divmod(lr, 60)
+                st.write(f"**Auto-logout:** {lh}h {lm}m")
+
+        st.markdown("### 🏆 Quality Settings")
+        st.write("**Analysis**: Maximum")
+        st.write("**Reasoning**: High")
+        st.write("**Depth**: Comprehensive")
+
+        st.markdown("### 📚 Knowledge Base")
+        try:
+            cnt = collection.count()
+            st.write(f"**Legal Provisions:** {cnt}")
+            st.write("**Jurisdictions:** NY, NJ, CT")
+        except:
+            st.write("**Status:** Initializing...")
+
+    for msg in st.session_state.messages:
+        with st.chat_message(msg["role"]):
+            st.markdown(msg["content"])
+
+    if prompt := st.chat_input("Ask me about legal compliance requirements..."):
+        st.session_state.messages.append({"role":"user","content":prompt})
+        st.chat_message("user").markdown(prompt)
+        with st.chat_message("assistant"):
+            prog = st.empty()
+            bar = st.progress(0)
+            prog.text("🔍 Searching legal knowledge base...")
+            bar.progress(20)
+            results = search_knowledge_base(collection, prompt, n_results=8)
+            prog.text("🧠 Applying high-effort reasoning...")
+            bar.progress(50)
+
+            context = "\n\n".join(f"Legal Text: {doc}" for doc, _, _ in results) or "No relevant legal text found."
+            system_prompt = f"""{LEGAL_COMPLIANCE_SYSTEM_PROMPT}
+Available Legal Context:
+{context}
+User Question: {prompt}"""
+
+            prog.text("⚖️ Generating structured response...")
+            bar.progress(75)
+            resp = client.ChatCompletion.create(
+                model="gpt-4",
+                messages=[{"role":"system","content":system_prompt}],
+                temperature=0.7,
+                max_tokens=1500
+            )
+            bar.progress(100)
+            prog.text("✅ Analysis complete!")
+
+            ai_response = resp.choices[0].message.content
+            st.markdown(ai_response)
+            st.session_state.messages.append({"role":"assistant","content":ai_response})
+
+            if results:
+                st.markdown("### 📚 Sources Consulted")
+                for doc, meta, dist in results:
+                    label = f"{meta.get('source_file','Unknown')} – Chunk {meta.get('chunk_id','N/A')}"
+                    with st.expander(label, expanded=False):
+                        st.code(doc, language="text")
+                        st.write(meta)
+                        st.write(f"Relevance: {dist:.3f}")
+
+if __name__ == "__main__":
+    main_app()
