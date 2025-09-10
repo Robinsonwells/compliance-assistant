@@ -8,6 +8,7 @@ import time
 from datetime import datetime, timedelta
 from user_management import UserManager
 import chromadb
+from chromadb.config import Settings
 from advanced_chunking import LegalSemanticChunker, extract_pdf_text, extract_docx_text
 from system_prompts import LEGAL_COMPLIANCE_SYSTEM_PROMPT
 
@@ -19,7 +20,12 @@ def init_systems():
     client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
     user_manager = UserManager()
     chunker = LegalSemanticChunker(os.getenv("OPENAI_API_KEY"))
-    vector_client = chromadb.PersistentClient(path="./legal_compliance_db")
+    vector_client = chromadb.Client(
+        Settings(
+            persist_directory="./legal_compliance_db",
+            chroma_db_impl="duckdb+parquet"
+        )
+    )
     collection = vector_client.get_or_create_collection(
         name="legal_regulations",
         metadata={"description": "Multi-state employment law regulations"}
@@ -62,6 +68,7 @@ def check_authentication():
             st.error("🕐 Your session has expired. Please log in again.")
             time.sleep(2)
             st.rerun()
+
     st.markdown("# 🔐 Legal Compliance Assistant")
     st.markdown("**Professional AI-Powered Legal Analysis**")
     st.markdown("---")
@@ -88,10 +95,12 @@ def check_authentication():
             else:
                 st.error("❌ Invalid or expired access code")
                 time.sleep(2)
+
     with st.expander("ℹ️ Session Information"):
         st.write("• Sessions expire after 24 hours of inactivity")
         st.write("• Your session renews with each interaction")
         st.write("• Access can be revoked by administrator")
+
     return False, None, None, None, None
 
 def search_knowledge_base(collection, query, n_results=5):
@@ -120,17 +129,21 @@ def process_uploaded_file(uploaded_file, chunker, collection):
             text = uploaded_file.read().decode("utf-8")
         else:
             return False, f"Unsupported file type: {t}"
+
         if text.startswith("Error"):
             return False, text
+
         # Debug info
         st.write(f"📊 File size: {len(text)} characters")
         st.write("🔍 First 500 characters:")
         st.text(text[:500])
         st.write(f"🏷️ XML detection: {'XML' if text.strip().startswith('<?xml') or '<code type=' in text else 'Plain text'}")
+
         chunks = chunker.legal_aware_chunking(text, max_chunk_size=1200)
         st.write(f"📦 Chunks created: {len(chunks)}")
         if not chunks:
             return False, "No chunks were created - check file format"
+
         docs, metas, ids = [], [], []
         now = datetime.now().isoformat()
         for ch in chunks:
@@ -142,6 +155,7 @@ def process_uploaded_file(uploaded_file, chunker, collection):
                 'processed_by': 'admin'
             })
             ids.append(f"{uploaded_file.name}_{ch['metadata']['chunk_id']}")
+
         batch = 5000
         for i in range(0, len(docs), batch):
             collection.add(
@@ -149,6 +163,7 @@ def process_uploaded_file(uploaded_file, chunker, collection):
                 metadatas=metas[i:i+batch],
                 ids=ids[i:i+batch]
             )
+
         return True, f"Processed {len(chunks)} chunks from {uploaded_file.name}"
     except Exception as e:
         return False, f"Error processing file: {e}"
@@ -157,6 +172,7 @@ def main_app():
     authenticated, client, user_manager, chunker, collection = check_authentication()
     if not authenticated:
         st.stop()
+
     # Header and logout
     col1, col2 = st.columns([6,1])
     with col1:
@@ -169,12 +185,15 @@ def main_app():
             st.success("👋 Logged out successfully")
             time.sleep(1)
             st.rerun()
+
     st.markdown("---")
+
     if "messages" not in st.session_state:
         st.session_state.messages = [{
             "role": "assistant",
             "content": "Hello! I'm your legal compliance assistant. I specialize in NY, NJ, and CT employment law. Ask me a question!"
         }]
+
     with st.sidebar:
         st.markdown("### 👤 Session Info")
         if 'login_time' in st.session_state:
@@ -183,14 +202,16 @@ def main_app():
             mins, _ = divmod(rem, 60)
             st.write(f"**Active:** {hrs}h {mins}m")
             left = timedelta(hours=24) - duration
-            if left.total_seconds()>0:
-                lh, lr = divmod(int(left.total_seconds()),3600)
-                lm,_=divmod(lr,60)
+            if left.total_seconds() > 0:
+                lh, lr = divmod(int(left.total_seconds()), 3600)
+                lm, _ = divmod(lr, 60)
                 st.write(f"**Auto-logout:** {lh}h {lm}m")
+
         st.markdown("### 🏆 Quality Settings")
         st.write("**Analysis**: Maximum")
         st.write("**Reasoning**: High")
         st.write("**Depth**: Comprehensive")
+
         st.markdown("### 📚 Knowledge Base")
         try:
             cnt = collection.count()
@@ -198,9 +219,11 @@ def main_app():
             st.write("**Jurisdictions:** NY, NJ, CT")
         except:
             st.write("**Status:** Initializing...")
+
     for msg in st.session_state.messages:
         with st.chat_message(msg["role"]):
             st.markdown(msg["content"])
+
     if prompt := st.chat_input("Ask me about legal compliance requirements..."):
         st.session_state.messages.append({"role":"user","content":prompt})
         st.chat_message("user").markdown(prompt)
@@ -209,11 +232,13 @@ def main_app():
             prog.text("🔍 Searching legal knowledge base..."); bar.progress(20)
             results = search_knowledge_base(collection, prompt, n_results=8)
             prog.text("🧠 Applying high-effort reasoning..."); bar.progress(50)
+
             context = "\n\n".join(f"Legal Text: {doc}" for doc,_,_ in results) or "No relevant legal text found."
             system_prompt = f"""{LEGAL_COMPLIANCE_SYSTEM_PROMPT}
 Available Legal Context:
 {context}
 User Question: {prompt}"""
+
             prog.text("⚖️ Generating structured response..."); bar.progress(75)
             response = client.responses.create(
                 model="gpt-5",
@@ -222,9 +247,11 @@ User Question: {prompt}"""
                 text={"verbosity":"high"}
             )
             bar.progress(100); prog.text("✅ Analysis complete!")
+
             ai_response = response.output_text
             st.markdown(ai_response)
             st.session_state.messages.append({"role":"assistant","content":ai_response})
+
             if results:
                 st.markdown("### 📚 Sources Consulted")
                 for doc, meta, dist in results:
@@ -233,5 +260,6 @@ User Question: {prompt}"""
                         st.code(doc, language="text")
                         st.write(meta)
                         st.write(f"Relevance: {dist:.3f}")
+
 if __name__ == "__main__":
     main_app()
