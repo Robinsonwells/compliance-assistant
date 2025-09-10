@@ -69,7 +69,9 @@ def process_uploaded_file(uploaded_file, chunker, collection):
         st.write(f"📊 File size: {len(text)} characters")
         st.write("🔍 First 500 characters:")
         st.text(text[:500])
-        st.write(f"🏷️ XML detection: {'XML' if text.strip().startswith('<?xml') or '<code type=' in text else 'Plain text'}")
+        st.write(
+            f"🏷️ XML detection: {'XML' if text.strip().startswith('<?xml') or '<code type=' in text else 'Plain text'}"
+        )
 
         chunks = chunker.legal_aware_chunking(text, max_chunk_size=1200)
         st.write(f"📦 Chunks created: {len(chunks)}")
@@ -96,6 +98,7 @@ def process_uploaded_file(uploaded_file, chunker, collection):
                 ids=ids[i:i+batch]
             )
         return True, f"Processed {len(chunks)} chunks from {uploaded_file.name}"
+
     except Exception as e:
         return False, f"Error processing file: {e}"
 
@@ -136,28 +139,27 @@ def main():
             if users:
                 for u in users:
                     code, name, email, created, last, active, exp, tier = u
-                    with st.container():
-                        info_col, action_col = st.columns([4, 1])
-                        with info_col:
-                            status = "🟢 Active" if active else "🔴 Inactive"
-                            st.write(f"**{name}** ({status})")
-                            st.write("**Access Code:**")
-                            st.code(code)
-                            # Fixed: move columns outside any conditional button logic
-                            dates_col, email_col = st.columns(2)
-                            with dates_col:
-                                st.caption(f"Created: {created[:10]}")
-                                st.caption(f"Last login: {last[:16] if last else 'Never'}")
-                            with email_col:
-                                if email:
-                                    st.caption(f"Email: {email}")
-                                st.caption(f"Expires: {exp[:10] if exp else 'No expiry'}")
-                        with action_col:
-                            if active and st.button("🚫 Revoke", key=f"r_{code}"):
-                                um.deactivate_user(code)
-                                st.success(f"Revoked access for {name}")
-                                st.rerun()
-                        st.divider()
+                    # Create layout columns unconditionally
+                    info_col, action_col = st.columns([4, 1])
+                    dates_col, email_col = st.columns(2)
+                    with info_col:
+                        status = "🟢 Active" if active else "🔴 Inactive"
+                        st.write(f"**{name}** ({status})")
+                        st.write("**Access Code:**")
+                        st.code(code)
+                    with dates_col:
+                        st.caption(f"Created: {created[:10]}")
+                        st.caption(f"Last login: {last[:16] if last else 'Never'}")
+                    with email_col:
+                        if email:
+                            st.caption(f"Email: {email}")
+                        st.caption(f"Expires: {exp[:10] if exp else 'No expiry'}")
+                    with action_col:
+                        if active and st.button("🚫 Revoke", key=f"r_{code}"):
+                            um.deactivate_user(code)
+                            st.success(f"Revoked access for {name}")
+                            st.rerun()
+                    st.divider()
             else:
                 st.info("No users created yet")
 
@@ -174,7 +176,7 @@ def main():
 
         st.markdown("---")
         st.subheader("📄 Upload Documents")
-        uploads = st.file_uploader("Upload documents", accept_multiple_files=True, type=['pdf', 'docx', 'txt'])
+        uploads = st.file_uploader("Upload documents", accept_multiple_files=True, type=['pdf','docx','txt'])
         if uploads and st.button("Process"):
             for f in uploads:
                 st.write(f"Processing {f.name}")
@@ -198,28 +200,26 @@ def main():
                 for fn, cnt in files.items():
                     with st.expander(f"📄 {fn} ({cnt} chunks)", expanded=False):
                         chunks_to_show = st.selectbox(
-                            "Chunks to display:", [10, 25, 50, 100],
-                            index=1, key=f"chunks_{fn}"
+                            "Chunks to display:",
+                            [10,25,50,100],
+                            index=1,
+                            key=f"chunks_{fn}"
                         )
                         if st.button("🔍 Browse Chunks", key=f"browse_{fn}"):
                             try:
                                 fr = coll.get(
                                     where={"source_file": fn},
                                     limit=chunks_to_show,
-                                    include=['documents', 'metadatas']
+                                    include=['documents','metadatas']
                                 )
                                 docs = fr.get('documents', [])
                                 metas = fr.get('metadatas', [])
                                 if docs:
-                                    st.success(f"Displaying {len(docs)} chunks from {fn}")
-                                    for i, (doc, meta) in enumerate(zip(docs, metas), start=1):
-                                        # Use container instead of nested expander
+                                    st.success(f"Displaying {len(docs)} chunks")
+                                    for i,(doc,meta) in enumerate(zip(docs,metas),start=1):
                                         with st.container():
                                             st.markdown(f"**Chunk {i}: {meta.get('chunk_id','N/A')}**")
-                                            st.text_area(
-                                                "Content", doc,
-                                                height=150, key=f"chunk_txt_{fn}_{i}"
-                                            )
+                                            st.text_area("Content", doc, height=150, key=f"chunk_txt_{fn}_{i}")
                                             st.json(meta, expanded=False)
                                 else:
                                     st.warning("No chunks to display")
@@ -227,19 +227,16 @@ def main():
                                 st.error(f"Error browsing chunks for {fn}: {e}")
 
                         if st.button(f"🗑️ Delete {fn}", key=f"del_{fn}"):
-                            st.session_state[f"confirm_del_{fn}"] = True
+                            st.session_state[f"confirm_del_{fn}"]=True
                         if st.session_state.get(f"confirm_del_{fn}"):
                             if st.button("✅ Confirm Delete", key=f"confirm_{fn}"):
-                                ok, msg = delete_file_chunks(coll, fn)
-                                if ok:
-                                    st.success(msg)
-                                else:
-                                    st.error(msg)
-                                st.session_state[f"confirm_del_{fn}"] = False
-                                time.sleep(1)
-                                st.rerun()
+                                ok,msg=delete_file_chunks(coll,fn)
+                                if ok: st.success(msg)
+                                else: st.error(msg)
+                                st.session_state[f"confirm_del_{fn}"]=False
+                                time.sleep(1); st.rerun()
                             if st.button("❌ Cancel", key=f"cancel_{fn}"):
-                                st.session_state[f"confirm_del_{fn}"] = False
+                                st.session_state[f"confirm_del_{fn}"]=False
                                 st.rerun()
             else:
                 st.info("No files uploaded yet")
