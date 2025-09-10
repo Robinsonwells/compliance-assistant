@@ -24,12 +24,13 @@ def init_systems():
     client = openai
     user_manager = UserManager()
     chunker = LegalSemanticChunker(os.getenv("OPENAI_API_KEY"))
-    vector_client = chromadb.Client(
-        Settings(
-            persist_directory="./legal_compliance_db",
-            chroma_db_impl="duckdb+parquet"
-        )
+   vector_client = chromadb.Client(
+    settings=Settings(
+        persist_directory="./legal_compliance_db",
+        chroma_db_impl="duckdb+parquet"
     )
+)
+
     collection = vector_client.get_or_create_collection(
         name="legal_regulations",
         metadata={"description": "Multi-state employment law regulations"}
@@ -272,3 +273,4 @@ User Question: {prompt}"""
 
 if __name__ == "__main__":
     main_app()
+
