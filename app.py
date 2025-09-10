@@ -2,15 +2,18 @@ __import__('pysqlite3')
 import sys
 sys.modules['sqlite3'] = sys.modules.pop('pysqlite3')
 
-import streamlit as st
-import openai
-from dotenv import load_dotenv
 import os
 import uuid
 import time
 from datetime import datetime, timedelta
-from user_management import UserManager
+
+import streamlit as st
+import openai
 import chromadb
+from dotenv import load_dotenv
+from chromadb.config import Settings
+
+from user_management import UserManager
 from advanced_chunking import LegalSemanticChunker, extract_pdf_text, extract_docx_text
 from system_prompts import LEGAL_COMPLIANCE_SYSTEM_PROMPT
 
@@ -18,28 +21,39 @@ from system_prompts import LEGAL_COMPLIANCE_SYSTEM_PROMPT
 load_dotenv()
 openai.api_key = os.getenv("OPENAI_API_KEY")
 
-# Hide Streamlit header and footer links/buttons
+# Hide Streamlit header/footer and branding
 st.markdown("""
 <style>
-  /* Hide the "Run on Streamlit" or Deploy buttons and repo links in the top bar */
   .stAppViewerButton, .stAppViewerIcon, .stAppViewerLink,
-  .css-1avcm0n.e1fqkh3o2 { visibility: hidden; }
-  /* Hide the entire footer */
-  footer { visibility: hidden; height: 0; margin: 0; padding: 0; }
+  .css-1avcm0n.e1fqkh3o2,
+  .stAppDeployButton, .stDecoration, #MainMenu,
+  footer, header {
+    visibility: hidden !important;
+    height: 0 !important;
+    margin: 0;
+    padding: 0;
+  }
 </style>
 """, unsafe_allow_html=True)
 
 @st.cache_resource
 def init_systems():
+    """
+    Initialize OpenAI client, user manager, chunker, and Chroma collection
+    using the new Chroma Settings API (no legacy config).
+    """
     client = openai
     user_manager = UserManager()
     chunker = LegalSemanticChunker(os.getenv("OPENAI_API_KEY"))
-    # Use new default client; will create a fresh database automatically
-    vector_client = chromadb.Client()
+
+    # New Chroma client configuration (no legacy settings)
+    settings = Settings()
+    vector_client = chromadb.Client(settings=settings)
     collection = vector_client.get_or_create_collection(
         name="legal_regulations",
         metadata={"description": "Multi-state employment law regulations"}
     )
+
     return client, user_manager, chunker, collection
 
 # Page config
@@ -49,42 +63,35 @@ st.set_page_config(
     layout="wide"
 )
 
-# (rest of your app.py follows unchanged)...
-
-
-# Hide Streamlit branding
-st.markdown("""
-<style>
-    .stAppDeployButton {display:none;}
-    .stDecoration {display:none;}
-    #MainMenu {visibility: hidden;}
-    footer {visibility: hidden;}
-    header {visibility: hidden;}
-</style>
-""", unsafe_allow_html=True)
-
 def get_session_id():
+    """
+    Generate or retrieve a unique session ID stored in Streamlit session_state.
+    """
     if 'session_id' not in st.session_state:
         st.session_state.session_id = str(uuid.uuid4())
     return st.session_state.session_id
 
 def check_authentication():
-    """Check if user is authenticated"""
+    """
+    Display login form or verify existing session. Returns
+    (authenticated_flag, client, user_manager, chunker, collection).
+    """
     client, user_manager, chunker, collection = init_systems()
-    if 'authenticated' in st.session_state and st.session_state.authenticated:
+
+    if st.session_state.get('authenticated'):
         session_id = get_session_id()
         if user_manager.is_session_valid(session_id, hours_timeout=24):
             user_manager.update_session_activity(session_id)
             return True, client, user_manager, chunker, collection
-        else:
-            st.session_state.authenticated = False
-            st.error("🕐 Your session has expired. Please log in again.")
-            time.sleep(2)
-            st.rerun()
+        st.session_state.authenticated = False
+        st.error("🕐 Your session has expired. Please log in again.")
+        time.sleep(2)
+        st.rerun()
 
     st.markdown("# 🔐 Legal Compliance Assistant")
     st.markdown("**Professional AI-Powered Legal Analysis**")
     st.markdown("---")
+
     with st.form("login_form"):
         st.markdown("### Enter Your Access Code")
         access_code = st.text_input(
@@ -93,8 +100,7 @@ def check_authentication():
             placeholder="Enter your access code...",
             help="Contact your administrator for access"
         )
-        submit_button = st.form_submit_button("🚀 Access Assistant")
-        if submit_button and access_code:
+        if st.form_submit_button("🚀 Access Assistant") and access_code:
             if user_manager.validate_access_code(access_code):
                 session_id = get_session_id()
                 user_manager.create_session(access_code, session_id)
@@ -117,7 +123,9 @@ def check_authentication():
     return False, None, None, None, None
 
 def search_knowledge_base(collection, query, n_results=5):
-    """Search the legal knowledge base"""
+    """
+    Query the Chroma collection for relevant legal text chunks.
+    """
     try:
         results = collection.query(
             query_texts=[query],
@@ -132,11 +140,14 @@ def search_knowledge_base(collection, query, n_results=5):
         return []
 
 def process_uploaded_file(uploaded_file, chunker, collection):
+    """
+    Extract text from PDF, DOCX, or TXT, chunk it, and add to the Chroma collection.
+    """
     try:
         t = uploaded_file.type
         if t == "application/pdf":
             text = extract_pdf_text(uploaded_file)
-        elif t == "application/vnd.openxmlformats-officedocument.wordprocessingml.document":
+        elif t.endswith("wordprocessingml.document"):
             text = extract_docx_text(uploaded_file)
         elif t == "text/plain":
             text = uploaded_file.read().decode("utf-8")
@@ -146,11 +157,11 @@ def process_uploaded_file(uploaded_file, chunker, collection):
         if text.startswith("Error"):
             return False, text
 
-        # Debug info
         st.write(f"📊 File size: {len(text)} characters")
         st.write("🔍 First 500 characters:")
         st.text(text[:500])
-        st.write(f"🏷️ XML detection: {'XML' if text.strip().startswith('<?xml') or '<code type=' in text else 'Plain text'}")
+        xml_flag = text.strip().startswith("<?xml") or "<code type=" in text
+        st.write(f"🏷️ XML detection: {'XML' if xml_flag else 'Plain text'}")
 
         chunks = chunker.legal_aware_chunking(text, max_chunk_size=1200)
         st.write(f"📦 Chunks created: {len(chunks)}")
@@ -169,25 +180,29 @@ def process_uploaded_file(uploaded_file, chunker, collection):
             })
             ids.append(f"{uploaded_file.name}_{ch['metadata']['chunk_id']}")
 
-        batch = 5000
-        for i in range(0, len(docs), batch):
+        batch_size = 5000
+        for i in range(0, len(docs), batch_size):
             collection.add(
-                documents=docs[i:i+batch],
-                metadatas=metas[i:i+batch],
-                ids=ids[i:i+batch]
+                documents=docs[i:i+batch_size],
+                metadatas=metas[i:i+batch_size],
+                ids=ids[i:i+batch_size]
             )
 
         return True, f"Processed {len(chunks)} chunks from {uploaded_file.name}"
+
     except Exception as e:
         return False, f"Error processing file: {e}"
 
 def main_app():
+    """
+    Main application logic: authentication, chat interface, and file uploads.
+    """
     authenticated, client, user_manager, chunker, collection = check_authentication()
     if not authenticated:
         st.stop()
 
-    # Header and logout
-    col1, col2 = st.columns([6,1])
+    # Header and logout button
+    col1, col2 = st.columns([6, 1])
     with col1:
         st.markdown("# ⚖️ Elite Legal Compliance Assistant")
         st.markdown("*Powered by GPT-5 with maximum quality analysis*")
@@ -201,12 +216,14 @@ def main_app():
 
     st.markdown("---")
 
+    # Initialize chat history
     if "messages" not in st.session_state:
         st.session_state.messages = [{
             "role": "assistant",
             "content": "Hello! I'm your legal compliance assistant. I specialize in NY, NJ, and CT employment law. Ask me a question!"
         }]
 
+    # Sidebar: session and knowledge-base info
     with st.sidebar:
         st.markdown("### 👤 Session Info")
         if 'login_time' in st.session_state:
@@ -233,22 +250,25 @@ def main_app():
         except:
             st.write("**Status:** Initializing...")
 
+    # Display chat history
     for msg in st.session_state.messages:
         with st.chat_message(msg["role"]):
             st.markdown(msg["content"])
 
+    # Handle new user prompt
     if prompt := st.chat_input("Ask me about legal compliance requirements..."):
         st.session_state.messages.append({"role":"user","content":prompt})
         st.chat_message("user").markdown(prompt)
         with st.chat_message("assistant"):
             prog = st.empty()
             bar = st.progress(0)
+
             prog.text("🔍 Searching legal knowledge base...")
             bar.progress(20)
             results = search_knowledge_base(collection, prompt, n_results=8)
+
             prog.text("🧠 Applying high-effort reasoning...")
             bar.progress(50)
-
             context = "\n\n".join(f"Legal Text: {doc}" for doc, _, _ in results) or "No relevant legal text found."
             system_prompt = f"""{LEGAL_COMPLIANCE_SYSTEM_PROMPT}
 Available Legal Context:
@@ -263,6 +283,7 @@ User Question: {prompt}"""
                 temperature=0.7,
                 max_tokens=1500
             )
+
             bar.progress(100)
             prog.text("✅ Analysis complete!")
 
@@ -270,6 +291,7 @@ User Question: {prompt}"""
             st.markdown(ai_response)
             st.session_state.messages.append({"role":"assistant","content":ai_response})
 
+            # Show sources consulted
             if results:
                 st.markdown("### 📚 Sources Consulted")
                 for doc, meta, dist in results:
@@ -281,4 +303,3 @@ User Question: {prompt}"""
 
 if __name__ == "__main__":
     main_app()
-
