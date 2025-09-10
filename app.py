@@ -18,6 +18,16 @@ from system_prompts import LEGAL_COMPLIANCE_SYSTEM_PROMPT
 load_dotenv()
 openai.api_key = os.getenv("OPENAI_API_KEY")
 
+st.markdown("""
+<style>
+    /* Hide the entire footer */
+    footer { visibility: hidden; }
+    /* Remove footer space entirely */
+    footer { height: 0; margin: 0; padding: 0; }
+</style>
+""", unsafe_allow_html=True)
+
+
 @st.cache_resource
 def init_systems():
     client = openai
@@ -268,3 +278,4 @@ User Question: {prompt}"""
 
 if __name__ == "__main__":
     main_app()
+
