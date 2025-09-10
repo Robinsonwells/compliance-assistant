@@ -62,7 +62,6 @@ def process_uploaded_file(uploaded_file, chunker, collection):
             text = uploaded_file.read().decode("utf-8")
         else:
             return False, f"Unsupported file type: {t}"
-
         if text.startswith("Error"):
             return False, text
 
@@ -73,7 +72,6 @@ def process_uploaded_file(uploaded_file, chunker, collection):
 
         chunks = chunker.legal_aware_chunking(text, max_chunk_size=1200)
         st.write(f"📦 Chunks created: {len(chunks)}")
-
         if not chunks:
             return False, "No chunks were created - check file format"
 
@@ -96,7 +94,6 @@ def process_uploaded_file(uploaded_file, chunker, collection):
                 metadatas=metas[i:i+batch],
                 ids=ids[i:i+batch]
             )
-
         return True, f"Processed {len(chunks)} chunks from {uploaded_file.name}"
     except Exception as e:
         return False, f"Error processing file: {e}"
@@ -198,7 +195,6 @@ def main():
                 st.write(f"📊 **Total Files:** {len(files)} | **Total Chunks:** {sum(files.values())}")
                 for fn, cnt in files.items():
                     with st.expander(f"📄 {fn} ({cnt} chunks)", expanded=False):
-                        # Choose how many chunks to show at once
                         chunks_to_show = st.selectbox("Chunks to display:", [10, 25, 50, 100], index=1, key=f"chunks_{fn}")
                         if st.button("🔍 Browse Chunks", key=f"browse_{fn}"):
                             try:
@@ -212,15 +208,15 @@ def main():
                                 if docs:
                                     st.success(f"Displaying {len(docs)} chunks from {fn}")
                                     for i, (doc, meta) in enumerate(zip(docs, metas), start=1):
-                                        with st.expander(f"Chunk {i}: {meta.get('chunk_id', 'N/A')}", expanded=False):
-                                            st.write(doc)
-                                            st.json(meta)
+                                        with st.container():
+                                            st.markdown(f"**Chunk {i}: {meta.get('chunk_id','N/A')}**")
+                                            st.text_area("Content", doc, height=150, key=f"chunk_txt_{fn}_{i}")
+                                            st.json(meta, expanded=False)
                                 else:
                                     st.warning("No chunks to display")
                             except Exception as e:
                                 st.error(f"Error browsing chunks for {fn}: {e}")
 
-                        # Delete confirmation
                         if st.button(f"🗑️ Delete {fn}", key=f"del_{fn}"):
                             st.session_state[f"confirm_del_{fn}"] = True
                         if st.session_state.get(f"confirm_del_{fn}"):
