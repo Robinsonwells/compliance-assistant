@@ -6,3 +6,5 @@ pysqlite3-binary
 numpy>=1.24.0
 pandas>=2.1.2
 duckdb
+PyPDF2
+python-docx
