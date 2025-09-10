@@ -18,6 +18,17 @@ from system_prompts import LEGAL_COMPLIANCE_SYSTEM_PROMPT
 load_dotenv()
 openai.api_key = os.getenv("OPENAI_API_KEY")
 
+# Hide Streamlit header and footer links/buttons
+st.markdown("""
+<style>
+  /* Hide the "Run on Streamlit" or Deploy buttons and repo links in the top bar */
+  .stAppViewerButton, .stAppViewerIcon, .stAppViewerLink,
+  .css-1avcm0n.e1fqkh3o2 { visibility: hidden; }
+  /* Hide the entire footer */
+  footer { visibility: hidden; height: 0; margin: 0; padding: 0; }
+</style>
+""", unsafe_allow_html=True)
+
 @st.cache_resource
 def init_systems():
     client = openai
@@ -25,7 +36,6 @@ def init_systems():
     chunker = LegalSemanticChunker(os.getenv("OPENAI_API_KEY"))
     # Use new default client; will create a fresh database automatically
     vector_client = chromadb.Client()
-
     collection = vector_client.get_or_create_collection(
         name="legal_regulations",
         metadata={"description": "Multi-state employment law regulations"}
@@ -38,6 +48,9 @@ st.set_page_config(
     page_icon="⚖️",
     layout="wide"
 )
+
+# (rest of your app.py follows unchanged)...
+
 
 # Hide Streamlit branding
 st.markdown("""
@@ -268,3 +281,4 @@ User Question: {prompt}"""
 
 if __name__ == "__main__":
     main_app()
+
