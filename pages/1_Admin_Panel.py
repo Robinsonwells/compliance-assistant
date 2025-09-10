@@ -118,7 +118,6 @@ def main():
     with tab1:
         st.header("User Management")
         left, right = st.columns(2)
-
         with left:
             st.subheader("➕ New Access Code")
             with st.form("add_u"):
@@ -133,7 +132,6 @@ def main():
                         st.warning("Save this code now!")
                     else:
                         st.error("Name required")
-
         with right:
             st.subheader("👥 Manage Users")
             users = um.get_all_users()
@@ -156,13 +154,10 @@ def main():
                                     st.caption(f"Email: {email}")
                                 st.caption(f"Expires: {exp[:10] if exp else 'No expiry'}")
                         with action_col:
-                            if active:
-                                if st.button("🚫 Revoke", key=f"r_{code}"):
-                                    um.deactivate_user(code)
-                                    st.success(f"Revoked access for {name}")
-                                    st.rerun()
-                            else:
-                                st.write("*Revoked*")
+                            if active and st.button("🚫 Revoke", key=f"r_{code}"):
+                                um.deactivate_user(code)
+                                st.success(f"Revoked access for {name}")
+                                st.rerun()
                         st.divider()
             else:
                 st.info("No users created yet")
@@ -203,8 +198,29 @@ def main():
                 st.write(f"📊 **Total Files:** {len(files)} | **Total Chunks:** {sum(files.values())}")
                 for fn, cnt in files.items():
                     with st.expander(f"📄 {fn} ({cnt} chunks)", expanded=False):
-                        # Browse and search controls omitted for brevity...
-                        # Delete confirmation logic
+                        # Choose how many chunks to show at once
+                        chunks_to_show = st.selectbox("Chunks to display:", [10, 25, 50, 100], index=1, key=f"chunks_{fn}")
+                        if st.button("🔍 Browse Chunks", key=f"browse_{fn}"):
+                            try:
+                                fr = coll.get(
+                                    where={"source_file": fn},
+                                    limit=chunks_to_show,
+                                    include=['documents', 'metadatas']
+                                )
+                                docs = fr.get('documents', [])
+                                metas = fr.get('metadatas', [])
+                                if docs:
+                                    st.success(f"Displaying {len(docs)} chunks from {fn}")
+                                    for i, (doc, meta) in enumerate(zip(docs, metas), start=1):
+                                        with st.expander(f"Chunk {i}: {meta.get('chunk_id', 'N/A')}", expanded=False):
+                                            st.write(doc)
+                                            st.json(meta)
+                                else:
+                                    st.warning("No chunks to display")
+                            except Exception as e:
+                                st.error(f"Error browsing chunks for {fn}: {e}")
+
+                        # Delete confirmation
                         if st.button(f"🗑️ Delete {fn}", key=f"del_{fn}"):
                             st.session_state[f"confirm_del_{fn}"] = True
                         if st.session_state.get(f"confirm_del_{fn}"):
