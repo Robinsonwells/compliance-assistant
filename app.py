@@ -7,6 +7,7 @@ import time
 from datetime import datetime
 from dotenv import load_dotenv
 import streamlit as st
+from openai import OpenAI
 import chromadb
 from user_management import UserManager
 from advanced_chunking import LegalSemanticChunker, extract_pdf_text, extract_docx_text
@@ -14,13 +15,6 @@ from system_prompts import LEGAL_COMPLIANCE_SYSTEM_PROMPT
 
 # Load environment variables
 load_dotenv()
-
-# Import OpenAI after ensuring compatibility
-try:
-    from openai import OpenAI
-except ImportError:
-    st.error("OpenAI library not found. Please install: pip install openai")
-    st.stop()
 
 @st.cache_resource
 def init_systems():
@@ -34,7 +28,7 @@ def init_systems():
     )
     return client, user_manager, chunker, collection
 
-# Streamlit page configuration and hide branding
+# Page config & hide branding
 st.set_page_config(page_title="Legal Compliance Assistant", page_icon="⚖️", layout="wide")
 st.markdown("""
 <style>
@@ -62,7 +56,6 @@ def check_authentication():
     st.markdown("# 🔐 Legal Compliance Assistant")
     st.markdown("**Professional AI-Powered Legal Analysis**")
     st.markdown("---")
-    
     with st.form("login_form"):
         access_code = st.text_input("Access Code", type="password", placeholder="Enter access code")
         if st.form_submit_button("🚀 Access Assistant") and access_code:
@@ -82,7 +75,6 @@ def check_authentication():
     with st.expander("ℹ️ Session Information"):
         st.write("• Sessions expire after 24h inactivity")
         st.write("• Session renews each interaction")
-
     return False, None, None, None, None
 
 def search_knowledge_base(collection, query, n_results=5):
@@ -90,7 +82,7 @@ def search_knowledge_base(collection, query, n_results=5):
         r = collection.query(
             query_texts=[query],
             n_results=n_results,
-            include=['documents', 'metadatas', 'distances']
+            include=['documents','metadatas','distances']
         )
         docs, metas, dists = r['documents'][0], r['metadatas'][0], r['distances'][0]
         return list(zip(docs, metas, dists))
@@ -102,21 +94,20 @@ def main_app():
     if not authenticated:
         st.stop()
 
-    c1, c2 = st.columns([6, 1])
+    c1, c2 = st.columns([6,1])
     with c1:
         st.markdown("# ⚖️ Elite Legal Compliance Assistant")
-        st.markdown("*Powered by GPT-5 with maximal reasoning and verbosity*")
+        st.markdown("*Powered by GPT-5 via ChatCompletion*")
     with c2:
         if st.button("🚪 Logout"):
             st.session_state.authenticated = False
             st.rerun()
 
     st.markdown("---")
-    
     if "messages" not in st.session_state:
         st.session_state.messages = [{
-            "role": "assistant",
-            "content": "Hello! I specialize in NY, NJ, and CT employment law. Ask me anything about compliance requirements."
+            "role":"assistant",
+            "content":"Hello! I specialize in NY, NJ, and CT employment law. Ask me anything."
         }]
 
     for msg in st.session_state.messages:
@@ -124,71 +115,48 @@ def main_app():
             st.markdown(msg["content"])
 
     if prompt := st.chat_input("Ask about legal compliance..."):
-        st.session_state.messages.append({"role": "user", "content": prompt})
+        st.session_state.messages.append({"role":"user","content":prompt})
         st.chat_message("user").markdown(prompt)
 
         with st.chat_message("assistant"):
-            prog = st.empty()
-            bar = st.progress(0)
-            
-            prog.text("🔍 Searching legal knowledge base...")
-            bar.progress(20)
+            prog = st.empty(); bar = st.progress(0)
+            prog.text("🔍 Searching knowledge base..."); bar.progress(20)
             results = search_knowledge_base(collection, prompt, n_results=8)
-            
-            prog.text("🧠 Building comprehensive context...")
-            bar.progress(50)
-            context = "\n\n".join(f"{doc}" for doc, _, _ in results) or "No context found."
+            prog.text("🧠 Building context..."); bar.progress(50)
+            context = "\n\n".join(f"{doc}" for doc,_,_ in results) or "No context found."
             system_prompt = (
                 f"{LEGAL_COMPLIANCE_SYSTEM_PROMPT}\n\n"
                 f"Available Legal Context:\n{context}\n\nUser Question: {prompt}"
             )
-            
-            prog.text("⚖️ Generating response with GPT-5...")
-            bar.progress(75)
+            prog.text("⚖️ Generating response..."); bar.progress(75)
 
             try:
-                # Use GPT-5 Responses API with correct parameters based on official docs
-                response = client.responses.create(
+                resp = client.chat.completions.create(
                     model="gpt-5",
-                    input=system_prompt,
-                    reasoning={"effort": "high"},  # minimal, low, medium, high
-                    text={"verbosity": "high"},    # low, medium, high
-                    max_output_tokens=32000,
-                    stream=False
+                    messages=[
+                        {"role":"system","content":system_prompt}
+                    ],
+                    temperature=0.0,
+                    top_p=1.0,
+                    frequency_penalty=0.0,
+                    presence_penalty=0.0,
+                    max_tokens=32000,
                 )
-                
-                bar.progress(100)
-                prog.text("✅ Analysis complete!")
-                
-                reply = response.output_text
+                bar.progress(100); prog.text("✅ Done")
+                reply = resp.choices[0].message.content
                 st.markdown(reply)
-                st.session_state.messages.append({"role": "assistant", "content": reply})
-
+                st.session_state.messages.append({"role":"assistant","content":reply})
             except Exception as e:
-                st.error(f"Error with GPT-5 API: {str(e)}")
-                # Fallback to GPT-4o if GPT-5 fails
-                try:
-                    fallback_response = client.chat.completions.create(
-                        model="gpt-4o",
-                        messages=[{"role": "system", "content": system_prompt}],
-                        temperature=0.1,
-                        max_tokens=4000
-                    )
-                    reply = fallback_response.choices[0].message.content
-                    st.markdown(f"*Using GPT-4o fallback*\n\n{reply}")
-                    st.session_state.messages.append({"role": "assistant", "content": reply})
-                except Exception as fallback_error:
-                    st.error(f"Both GPT-5 and fallback failed: {str(fallback_error)}")
+                st.error(f"GPT-5 ChatCompletion error: {e}")
 
-            # Show sources if available
             if results:
-                st.markdown("### 📚 Sources Consulted")
+                st.markdown("### 📚 Sources")
                 for doc, meta, dist in results:
-                    label = f"{meta.get('source_file', 'Unknown')} – Chunk {meta.get('chunk_id', 'N/A')}"
+                    label = f"{meta.get('source_file','Unknown')} – Chunk {meta.get('chunk_id','N/A')}"
                     with st.expander(label):
                         st.code(doc)
                         st.write(meta)
                         st.write(f"Relevance: {dist:.3f}")
 
-if __name__ == "__main__":
+if __name__=="__main__":
     main_app()
