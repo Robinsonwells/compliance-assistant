@@ -4,7 +4,7 @@ sys.modules['sqlite3'] = sys.modules.pop('pysqlite3')
 
 import streamlit as st
 import openai
-from dotenv import load_dotenv
+from dotenv import load_dotenv    # load API key into openai.api_key
 import os
 import uuid
 import time
@@ -18,28 +18,26 @@ from system_prompts import LEGAL_COMPLIANCE_SYSTEM_PROMPT
 load_dotenv()
 openai.api_key = os.getenv("OPENAI_API_KEY")
 
+# Custom CSS to hide footer
 st.markdown("""
 <style>
-    /* Hide the entire footer */
-    footer { visibility: hidden; }
-    /* Remove footer space entirely */
-    footer { height: 0; margin: 0; padding: 0; }
+    footer { visibility: hidden; height: 0; margin: 0; padding: 0; }
 </style>
 """, unsafe_allow_html=True)
-
 
 @st.cache_resource
 def init_systems():
     client = openai
     user_manager = UserManager()
     chunker = LegalSemanticChunker(os.getenv("OPENAI_API_KEY"))
-    # Use new default client; will create a fresh database automatically
-    vector_client = chromadb.Client()
 
+    # Initialize Chroma using the new, non-legacy API
+    vector_client = chromadb.Client()
     collection = vector_client.get_or_create_collection(
         name="legal_regulations",
-        metadata={"description": "Multi-state employment law regulations"}
+        metadata={"description":"Multi-state employment law regulations"}
     )
+
     return client, user_manager, chunker, collection
 
 # Page config
@@ -68,6 +66,7 @@ def get_session_id():
 def check_authentication():
     """Check if user is authenticated"""
     client, user_manager, chunker, collection = init_systems()
+
     if 'authenticated' in st.session_state and st.session_state.authenticated:
         session_id = get_session_id()
         if user_manager.is_session_valid(session_id, hours_timeout=24):
@@ -143,7 +142,6 @@ def process_uploaded_file(uploaded_file, chunker, collection):
         if text.startswith("Error"):
             return False, text
 
-        # Debug info
         st.write(f"📊 File size: {len(text)} characters")
         st.write("🔍 First 500 characters:")
         st.text(text[:500])
@@ -235,18 +233,21 @@ def main_app():
             st.markdown(msg["content"])
 
     if prompt := st.chat_input("Ask me about legal compliance requirements..."):
-        st.session_state.messages.append({"role":"user","content":prompt})
+        st.session_state.messages.append({"role": "user", "content": prompt})
         st.chat_message("user").markdown(prompt)
+
         with st.chat_message("assistant"):
             prog = st.empty()
             bar = st.progress(0)
+
             prog.text("🔍 Searching legal knowledge base...")
             bar.progress(20)
             results = search_knowledge_base(collection, prompt, n_results=8)
+
             prog.text("🧠 Applying high-effort reasoning...")
             bar.progress(50)
-
             context = "\n\n".join(f"Legal Text: {doc}" for doc, _, _ in results) or "No relevant legal text found."
+
             system_prompt = f"""{LEGAL_COMPLIANCE_SYSTEM_PROMPT}
 Available Legal Context:
 {context}
@@ -256,16 +257,16 @@ User Question: {prompt}"""
             bar.progress(75)
             resp = client.ChatCompletion.create(
                 model="gpt-4",
-                messages=[{"role":"system","content":system_prompt}],
+                messages=[{"role": "system", "content": system_prompt}],
                 temperature=0.7,
                 max_tokens=1500
             )
+
             bar.progress(100)
             prog.text("✅ Analysis complete!")
-
             ai_response = resp.choices[0].message.content
             st.markdown(ai_response)
-            st.session_state.messages.append({"role":"assistant","content":ai_response})
+            st.session_state.messages.append({"role": "assistant", "content": ai_response})
 
             if results:
                 st.markdown("### 📚 Sources Consulted")
@@ -278,4 +279,3 @@ User Question: {prompt}"""
 
 if __name__ == "__main__":
     main_app()
-
