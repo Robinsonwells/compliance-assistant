@@ -33,9 +33,13 @@ st.markdown("""
 
 @st.cache_resource
 def init_systems():
+    # OpenAI is already configured via openai.api_key
     user_manager = UserManager()
     chunker = LegalSemanticChunker(os.getenv("OPENAI_API_KEY"))
-    vector_client = chromadb.Client(Settings(persist_directory="./legal_compliance_db"))
+
+    # Use the default, in-memory Chroma client (no Settings/persist_directory)
+    vector_client = chromadb.Client()
+
     collection = vector_client.get_or_create_collection(
         name="legal_regulations",
         metadata={"description": "Multi-state employment law regulations"}
@@ -167,3 +171,4 @@ def main_app():
 
 if __name__=="__main__":
     main_app()
+
