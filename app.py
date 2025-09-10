@@ -1,6 +1,7 @@
-import __import__('pysqlite3')  # ensure sqlite compatibility
+import pysqlite3 as sqlite3  # ensure sqlite compatibility
 import sys
-sys.modules['sqlite3'] = sys.modules.pop('pysqlite3')
+sys.modules['sqlite3'] = sqlite3
+
 import os
 import uuid
 import time
@@ -32,10 +33,8 @@ st.markdown("""
 
 @st.cache_resource
 def init_systems():
-    # OpenAI client configured via openai.api_key
     user_manager = UserManager()
     chunker = LegalSemanticChunker(os.getenv("OPENAI_API_KEY"))
-    # New ChromaDB client with default settings (auto-duckdb+parquet)
     vector_client = chromadb.Client(Settings(persist_directory="./legal_compliance_db"))
     collection = vector_client.get_or_create_collection(
         name="legal_regulations",
@@ -59,7 +58,6 @@ def check_authentication():
         st.error("🕐 Session expired. Please log in again.")
         time.sleep(2)
         st.rerun()
-    # login form
     st.markdown("# 🔐 Legal Compliance Assistant")
     st.markdown("**Professional AI-Powered Legal Analysis**")
     st.markdown("---")
@@ -125,7 +123,6 @@ def main_app():
     auth, user_manager, chunker, collection = check_authentication()
     if not auth:
         st.stop()
-    # header & logout
     c1,c2=st.columns([6,1])
     with c1:
         st.markdown("# ⚖️ Elite Legal Compliance Assistant")
@@ -135,7 +132,6 @@ def main_app():
             st.session_state.authenticated=False
             st.rerun()
     st.markdown("---")
-    # chat history
     if "messages" not in st.session_state:
         st.session_state.messages = [{"role":"assistant","content":"Hello! Ask about NY/NJ/CT employment law."}]
     for m in st.session_state.messages:
