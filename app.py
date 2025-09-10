@@ -4,7 +4,6 @@ sys.modules['sqlite3'] = sys.modules.pop('pysqlite3')
 
 import streamlit as st
 import openai
-from openai import OpenAI
 from dotenv import load_dotenv
 import os
 import uuid
@@ -18,10 +17,11 @@ from system_prompts import LEGAL_COMPLIANCE_SYSTEM_PROMPT
 
 # Load environment variables
 load_dotenv()
+openai.api_key = os.getenv("OPENAI_API_KEY")
 
 @st.cache_resource
 def init_systems():
-    client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+    client = openai
     user_manager = UserManager()
     chunker = LegalSemanticChunker(os.getenv("OPENAI_API_KEY"))
     vector_client = chromadb.Client(
@@ -232,27 +232,32 @@ def main_app():
         st.session_state.messages.append({"role":"user","content":prompt})
         st.chat_message("user").markdown(prompt)
         with st.chat_message("assistant"):
-            prog = st.empty(); bar = st.progress(0)
-            prog.text("🔍 Searching legal knowledge base..."); bar.progress(20)
+            prog = st.empty()
+            bar = st.progress(0)
+            prog.text("🔍 Searching legal knowledge base...")
+            bar.progress(20)
             results = search_knowledge_base(collection, prompt, n_results=8)
-            prog.text("🧠 Applying high-effort reasoning..."); bar.progress(50)
+            prog.text("🧠 Applying high-effort reasoning...")
+            bar.progress(50)
 
-            context = "\n\n".join(f"Legal Text: {doc}" for doc,_,_ in results) or "No relevant legal text found."
+            context = "\n\n".join(f"Legal Text: {doc}" for doc, _, _ in results) or "No relevant legal text found."
             system_prompt = f"""{LEGAL_COMPLIANCE_SYSTEM_PROMPT}
 Available Legal Context:
 {context}
 User Question: {prompt}"""
 
-            prog.text("⚖️ Generating structured response..."); bar.progress(75)
-            response = client.responses.create(
+            prog.text("⚖️ Generating structured response...")
+            bar.progress(75)
+            resp = client.ChatCompletion.create(
                 model="gpt-5",
-                input=system_prompt,
-                reasoning={"effort":"high"},
-                text={"verbosity":"high"}
+                messages=[{"role":"system","content":system_prompt}],
+                temperature=0.7,
+                max_tokens=1500
             )
-            bar.progress(100); prog.text("✅ Analysis complete!")
+            bar.progress(100)
+            prog.text("✅ Analysis complete!")
 
-            ai_response = response.output_text
+            ai_response = resp.choices[0].message.content
             st.markdown(ai_response)
             st.session_state.messages.append({"role":"assistant","content":ai_response})
 
