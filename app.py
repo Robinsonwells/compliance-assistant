@@ -133,14 +133,12 @@ def main_app():
             try:
                 resp = client.chat.completions.create(
                     model="gpt-5",
-                    messages=[
-                        {"role":"system","content":system_prompt}
-                    ],
+                    messages=[{"role":"system","content":system_prompt}],
                     temperature=0.0,
                     top_p=1.0,
                     frequency_penalty=0.0,
                     presence_penalty=0.0,
-                    max_tokens=32000,
+                    max_completion_tokens=32000
                 )
                 bar.progress(100); prog.text("✅ Done")
                 reply = resp.choices[0].message.content
