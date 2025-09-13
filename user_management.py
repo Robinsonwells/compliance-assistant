@@ -1,46 +1,18 @@
-import sqlite3
+from supabase import create_client, Client
 import secrets
 from datetime import datetime, timedelta
 import uuid
+import os
 
 class UserManager:
-    def __init__(self, db_path="users.db"):
-        self.db_path = db_path
-        self.init_database()
-    
-    def init_database(self):
-        """Create users and sessions tables"""
-        conn = sqlite3.connect(self.db_path)
-        cursor = conn.cursor()
+    def __init__(self):
+        self.supabase_url = os.getenv("SUPABASE_URL")
+        self.supabase_key = os.getenv("SUPABASE_KEY")
         
-        cursor.execute('''
-            CREATE TABLE IF NOT EXISTS users (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                access_code TEXT UNIQUE NOT NULL,
-                client_name TEXT NOT NULL,
-                email TEXT,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                last_login TIMESTAMP,
-                is_active BOOLEAN DEFAULT 1,
-                expires_at TIMESTAMP,
-                subscription_tier TEXT DEFAULT 'basic'
-            )
-        ''')
+        if not self.supabase_url or not self.supabase_key:
+            raise ValueError("SUPABASE_URL and SUPABASE_KEY environment variables must be set")
         
-        cursor.execute('''
-            CREATE TABLE IF NOT EXISTS user_sessions (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                access_code TEXT NOT NULL,
-                session_id TEXT UNIQUE NOT NULL,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                last_activity TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                is_active BOOLEAN DEFAULT 1,
-                FOREIGN KEY (access_code) REFERENCES users (access_code)
-            )
-        ''')
-        
-        conn.commit()
-        conn.close()
+        self.supabase: Client = create_client(self.supabase_url, self.supabase_key)
     
     def generate_access_code(self, length=12):
         """Generate secure access code"""
@@ -49,127 +21,147 @@ class UserManager:
     def add_user(self, client_name, email=None, subscription_tier='basic', days_valid=365):
         """Add new user with access code"""
         access_code = self.generate_access_code()
-        expires_at = datetime.now() + timedelta(days=days_valid)
-        
-        conn = sqlite3.connect(self.db_path)
-        cursor = conn.cursor()
+        expires_at = (datetime.now() + timedelta(days=days_valid)).isoformat()
         
         try:
-            cursor.execute('''
-                INSERT INTO users (access_code, client_name, email, expires_at, subscription_tier)
-                VALUES (?, ?, ?, ?, ?)
-            ''', (access_code, client_name, email, expires_at, subscription_tier))
+            result = self.supabase.table('users').insert({
+                'access_code': access_code,
+                'client_name': client_name,
+                'email': email,
+                'expires_at': expires_at,
+                'subscription_tier': subscription_tier
+            }).execute()
             
-            conn.commit()
-            return access_code
-        except sqlite3.IntegrityError:
-            return self.add_user(client_name, email, subscription_tier, days_valid)
-        finally:
-            conn.close()
+            if result.data:
+                return access_code
+            else:
+                # If insertion failed due to duplicate, try again
+                return self.add_user(client_name, email, subscription_tier, days_valid)
+        except Exception as e:
+            # Handle duplicate access code by generating a new one
+            if "duplicate" in str(e).lower() or "unique" in str(e).lower():
+                return self.add_user(client_name, email, subscription_tier, days_valid)
+            raise e
     
     def validate_access_code(self, access_code):
         """Check if access code is valid"""
-        conn = sqlite3.connect(self.db_path)
-        cursor = conn.cursor()
-        
-        cursor.execute('''
-            SELECT * FROM users 
-            WHERE access_code = ? AND is_active = 1 AND expires_at > ?
-        ''', (access_code, datetime.now()))
-        
-        user = cursor.fetchone()
-        conn.close()
-        
-        return user is not None
+        try:
+            result = self.supabase.table('users').select('*').eq('access_code', access_code).eq('is_active', True).execute()
+            
+            if not result.data:
+                return False
+            
+            user = result.data[0]
+            
+            # Check if user has expired
+            if user.get('expires_at'):
+                expires_at = datetime.fromisoformat(user['expires_at'].replace('Z', '+00:00'))
+                if expires_at < datetime.now(expires_at.tzinfo):
+                    return False
+            
+            return True
+        except Exception as e:
+            print(f"Error validating access code: {e}")
+            return False
     
     def create_session(self, access_code, session_id):
         """Create user session"""
-        conn = sqlite3.connect(self.db_path)
-        cursor = conn.cursor()
-        
-        cursor.execute('''
-            INSERT INTO user_sessions (access_code, session_id, last_activity)
-            VALUES (?, ?, ?)
-        ''', (access_code, session_id, datetime.now()))
-        
-        conn.commit()
-        conn.close()
+        try:
+            result = self.supabase.table('user_sessions').insert({
+                'access_code': access_code,
+                'session_id': session_id,
+                'last_activity': datetime.now().isoformat()
+            }).execute()
+            
+            return result.data is not None
+        except Exception as e:
+            print(f"Error creating session: {e}")
+            return False
     
     def is_session_valid(self, session_id, hours_timeout=24):
         """Check if session is valid (not expired)"""
-        conn = sqlite3.connect(self.db_path)
-        cursor = conn.cursor()
-        
-        timeout_threshold = datetime.now() - timedelta(hours=hours_timeout)
-        
-        cursor.execute('''
-            SELECT us.*, u.is_active as user_active 
-            FROM user_sessions us
-            JOIN users u ON us.access_code = u.access_code
-            WHERE us.session_id = ? AND us.is_active = 1 AND u.is_active = 1
-            AND us.last_activity > ?
-        ''', (session_id, timeout_threshold))
-        
-        result = cursor.fetchone()
-        conn.close()
-        
-        return result is not None
+        try:
+            timeout_threshold = (datetime.now() - timedelta(hours=hours_timeout)).isoformat()
+            
+            result = self.supabase.table('user_sessions').select('''
+                *,
+                users!inner(is_active)
+            ''').eq('session_id', session_id).eq('is_active', True).gt('last_activity', timeout_threshold).execute()
+            
+            if not result.data:
+                return False
+            
+            session = result.data[0]
+            return session['users']['is_active'] == True
+        except Exception as e:
+            print(f"Error validating session: {e}")
+            return False
     
     def update_session_activity(self, session_id):
         """Update session activity"""
-        conn = sqlite3.connect(self.db_path)
-        cursor = conn.cursor()
-        
-        cursor.execute('''
-            UPDATE user_sessions 
-            SET last_activity = ? 
-            WHERE session_id = ? AND is_active = 1
-        ''', (datetime.now(), session_id))
-        
-        conn.commit()
-        conn.close()
+        try:
+            result = self.supabase.table('user_sessions').update({
+                'last_activity': datetime.now().isoformat()
+            }).eq('session_id', session_id).eq('is_active', True).execute()
+            
+            return result.data is not None
+        except Exception as e:
+            print(f"Error updating session activity: {e}")
+            return False
     
     def deactivate_user(self, access_code):
         """Deactivate user and all their sessions"""
-        conn = sqlite3.connect(self.db_path)
-        cursor = conn.cursor()
-        
-        cursor.execute('''
-            UPDATE users SET is_active = 0 WHERE access_code = ?
-        ''', (access_code,))
-        
-        cursor.execute('''
-            UPDATE user_sessions SET is_active = 0 WHERE access_code = ?
-        ''', (access_code,))
-        
-        conn.commit()
-        conn.close()
+        try:
+            # Deactivate user
+            self.supabase.table('users').update({
+                'is_active': False
+            }).eq('access_code', access_code).execute()
+            
+            # Deactivate all sessions for this user
+            self.supabase.table('user_sessions').update({
+                'is_active': False
+            }).eq('access_code', access_code).execute()
+            
+            return True
+        except Exception as e:
+            print(f"Error deactivating user: {e}")
+            return False
     
     def get_all_users(self):
         """Get all users for admin panel"""
-        conn = sqlite3.connect(self.db_path)
-        cursor = conn.cursor()
-        
-        cursor.execute('''
-            SELECT access_code, client_name, email, created_at, last_login, 
-                   is_active, expires_at, subscription_tier
-            FROM users 
-            ORDER BY created_at DESC
-        ''')
-        
-        users = cursor.fetchall()
-        conn.close()
-        
-        return users
+        try:
+            result = self.supabase.table('users').select(
+                'access_code, client_name, email, created_at, last_login, is_active, expires_at, subscription_tier'
+            ).order('created_at', desc=True).execute()
+            
+            if result.data:
+                # Convert to tuple format to match original SQLite implementation
+                users = []
+                for user in result.data:
+                    users.append((
+                        user['access_code'],
+                        user['client_name'],
+                        user['email'],
+                        user['created_at'],
+                        user['last_login'],
+                        user['is_active'],
+                        user['expires_at'],
+                        user['subscription_tier']
+                    ))
+                return users
+            return []
+        except Exception as e:
+            print(f"Error getting all users: {e}")
+            return []
     
     def update_last_login(self, access_code):
         """Update last login time"""
-        conn = sqlite3.connect(self.db_path)
-        cursor = conn.cursor()
-        
-        cursor.execute('''
-            UPDATE users SET last_login = ? WHERE access_code = ?
-        ''', (datetime.now(), access_code))
-        
-        conn.commit()
-        conn.close()
+        try:
+            result = self.supabase.table('users').update({
+                'last_login': datetime.now().isoformat()
+            }).eq('access_code', access_code).execute()
+            
+            return result.data is not None
+        except Exception as e:
+            print(f"Error updating last login: {e}")
+            return False

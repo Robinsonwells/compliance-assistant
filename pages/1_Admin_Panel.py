@@ -3,19 +3,50 @@ from user_management import UserManager
 from datetime import datetime
 from dotenv import load_dotenv
 import os
-import chromadb
+from qdrant_client import QdrantClient
+from qdrant_client.models import Distance, VectorParams, PointStruct, Filter, FieldCondition, MatchValue
 from advanced_chunking import LegalSemanticChunker, extract_pdf_text, extract_docx_text
+from openai import OpenAI
 import time
 
-def delete_file_chunks(collection, source_file: str) -> tuple[bool, str]:
+def delete_file_chunks(qdrant_client, source_file: str) -> tuple[bool, str]:
     """Delete all chunks associated with a specific source file"""
     try:
-        result = collection.get(where={"source_file": source_file}, include=['metadatas'])
-        metas = result.get('metadatas', [])
-        count = len(metas)
+        # First, get all points with this source file to count them
+        scroll_result = qdrant_client.scroll(
+            collection_name="legal_regulations",
+            scroll_filter=Filter(
+                must=[
+                    FieldCondition(
+                        key="source_file",
+                        match=MatchValue(value=source_file)
+                    )
+                ]
+            ),
+            limit=10000,  # Large limit to get all matching points
+            with_payload=False,
+            with_vectors=False
+        )
+        
+        points = scroll_result[0]
+        count = len(points)
+        
         if count == 0:
             return False, "No chunks found for this file"
-        collection.delete(where={"source_file": source_file})
+        
+        # Delete all points with this source file
+        qdrant_client.delete(
+            collection_name="legal_regulations",
+            points_selector=Filter(
+                must=[
+                    FieldCondition(
+                        key="source_file",
+                        match=MatchValue(value=source_file)
+                    )
+                ]
+            )
+        )
+        
         return True, f"Deleted {count} chunks"
     except Exception as e:
         return False, str(e)
@@ -29,11 +60,31 @@ st.set_page_config(page_title="Admin Panel", page_icon="👨‍💼", layout="wi
 def init_admin_systems():
     user_manager = UserManager()
     chunker = LegalSemanticChunker(os.getenv("OPENAI_API_KEY"))
-    client = chromadb.PersistentClient(path="./legal_compliance_db")
-    collection = client.get_or_create_collection(
-        name="legal_regulations",
-        metadata={"description": "Multi-state employment law regulations"}
+    
+    # Initialize Qdrant client
+    qdrant_url = os.getenv("QDRANT_URL")
+    qdrant_api_key = os.getenv("QDRANT_API_KEY")
+    
+    if not qdrant_url or not qdrant_api_key:
+        raise ValueError("QDRANT_URL and QDRANT_API_KEY environment variables must be set")
+    
+    client = QdrantClient(
+        url=qdrant_url,
+        api_key=qdrant_api_key,
     )
+    
+    collection_name = "legal_regulations"
+    
+    # Create collection if it doesn't exist
+    try:
+        client.get_collection(collection_name)
+    except Exception:
+        client.create_collection(
+            collection_name=collection_name,
+            vectors_config=VectorParams(size=1536, distance=Distance.COSINE),
+        )
+    
+    collection = client
     return user_manager, chunker, collection
 
 def admin_login():
@@ -51,7 +102,7 @@ def admin_login():
         return False
     return True
 
-def process_uploaded_file(uploaded_file, chunker, collection):
+def process_uploaded_file(uploaded_file, chunker, qdrant_client):
     try:
         t = uploaded_file.type
         if t == "application/pdf":
@@ -78,25 +129,45 @@ def process_uploaded_file(uploaded_file, chunker, collection):
         if not chunks:
             return False, "No chunks were created - check file format"
 
-        docs, metas, ids = [], [], []
+        # Generate embeddings and prepare points for Qdrant
+        openai_client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+        points = []
         now = datetime.now().isoformat()
-        for ch in chunks:
-            docs.append(ch['text'])
-            metas.append({
+        
+        for i, ch in enumerate(chunks):
+            # Generate embedding for the chunk
+            embedding_response = openai_client.embeddings.create(
+                model="text-embedding-ada-002",
+                input=ch['text']
+            )
+            vector = embedding_response.data[0].embedding
+            
+            # Prepare payload
+            payload = {
+                'text': ch['text'],
                 **ch['metadata'],
                 'source_file': uploaded_file.name,
                 'upload_date': now,
                 'processed_by': 'admin'
-            })
-            ids.append(f"{uploaded_file.name}_{ch['metadata']['chunk_id']}")
-
-        batch = 5000
-        for i in range(0, len(docs), batch):
-            collection.add(
-                documents=docs[i:i+batch],
-                metadatas=metas[i:i+batch],
-                ids=ids[i:i+batch]
+            }
+            
+            # Create point
+            point = PointStruct(
+                id=f"{uploaded_file.name}_{ch['metadata']['chunk_id']}",
+                vector=vector,
+                payload=payload
             )
+            points.append(point)
+
+        # Upload points to Qdrant in batches
+        batch_size = 100
+        for i in range(0, len(points), batch_size):
+            batch = points[i:i+batch_size]
+            qdrant_client.upsert(
+                collection_name="legal_regulations",
+                points=batch
+            )
+        
         return True, f"Processed {len(chunks)} chunks from {uploaded_file.name}"
 
     except Exception as e:
@@ -166,7 +237,8 @@ def main():
     with tab2:
         st.header("Knowledge Base")
         try:
-            total = coll.count()
+            collection_info = coll.get_collection("legal_regulations")
+            total = collection_info.points_count
             m1, m2, m3 = st.columns(3)
             m1.metric("Total Chunks", total)
             m2.metric("Jurisdictions", "NY,NJ,CT")
@@ -189,10 +261,18 @@ def main():
         st.markdown("---")
         st.subheader("🗂️ Browse Files & Chunks")
         try:
-            all_metas = coll.get(include=['metadatas']).get('metadatas', [])
+            # Get all points to extract file information
+            scroll_result = coll.scroll(
+                collection_name="legal_regulations",
+                limit=10000,  # Large limit to get all points
+                with_payload=True,
+                with_vectors=False
+            )
+            
+            all_points = scroll_result[0]
             files = {}
-            for md in all_metas:
-                sf = md.get('source_file', 'Unknown')
+            for point in all_points:
+                sf = point.payload.get('source_file', 'Unknown')
                 files[sf] = files.get(sf, 0) + 1
 
             if files:
@@ -207,18 +287,29 @@ def main():
                         )
                         if st.button("🔍 Browse Chunks", key=f"browse_{fn}"):
                             try:
-                                fr = coll.get(
-                                    where={"source_file": fn},
+                                scroll_result = coll.scroll(
+                                    collection_name="legal_regulations",
+                                    scroll_filter=Filter(
+                                        must=[
+                                            FieldCondition(
+                                                key="source_file",
+                                                match=MatchValue(value=fn)
+                                            )
+                                        ]
+                                    ),
                                     limit=chunks_to_show,
-                                    include=['documents','metadatas']
+                                    with_payload=True,
+                                    with_vectors=False
                                 )
-                                docs = fr.get('documents', [])
-                                metas = fr.get('metadatas', [])
-                                if docs:
-                                    st.success(f"Displaying {len(docs)} chunks")
-                                    for i,(doc,meta) in enumerate(zip(docs,metas),start=1):
+                                
+                                points = scroll_result[0]
+                                if points:
+                                    st.success(f"Displaying {len(points)} chunks")
+                                    for i, point in enumerate(points, start=1):
+                                        doc = point.payload.get('text', '')
+                                        meta = {k: v for k, v in point.payload.items() if k != 'text'}
                                         with st.container():
-                                            st.markdown(f"**Chunk {i}: {meta.get('chunk_id','N/A')}**")
+                                            st.markdown(f"**Chunk {i}: {meta.get('chunk_id', 'N/A')}**")
                                             st.text_area("Content", doc, height=150, key=f"chunk_txt_{fn}_{i}")
                                             st.json(meta, expanded=False)
                                 else:
@@ -230,7 +321,7 @@ def main():
                             st.session_state[f"confirm_del_{fn}"]=True
                         if st.session_state.get(f"confirm_del_{fn}"):
                             if st.button("✅ Confirm Delete", key=f"confirm_{fn}"):
-                                ok,msg=delete_file_chunks(coll,fn)
+                                ok,msg=delete_file_chunks(coll, fn)
                                 if ok: st.success(msg)
                                 else: st.error(msg)
                                 st.session_state[f"confirm_del_{fn}"]=False

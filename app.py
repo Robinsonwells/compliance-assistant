@@ -7,7 +7,8 @@ import uuid
 import time
 from datetime import datetime, timedelta
 from user_management import UserManager
-import chromadb
+from qdrant_client import QdrantClient
+from qdrant_client.models import Distance, VectorParams, PointStruct
 from advanced_chunking import LegalSemanticChunker, extract_pdf_text, extract_docx_text
 from system_prompts import LEGAL_COMPLIANCE_SYSTEM_PROMPT
 
@@ -19,11 +20,31 @@ def init_systems():
     client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
     user_manager = UserManager()
     chunker = LegalSemanticChunker(os.getenv("OPENAI_API_KEY"))
-    vector_client = chromadb.PersistentClient(path="./legal_compliance_db")
-    collection = vector_client.get_or_create_collection(
-        name="legal_regulations",
-        metadata={"description": "Multi-state employment law regulations"}
+    
+    # Initialize Qdrant client
+    qdrant_url = os.getenv("QDRANT_URL")
+    qdrant_api_key = os.getenv("QDRANT_API_KEY")
+    
+    if not qdrant_url or not qdrant_api_key:
+        raise ValueError("QDRANT_URL and QDRANT_API_KEY environment variables must be set")
+    
+    vector_client = QdrantClient(
+        url=qdrant_url,
+        api_key=qdrant_api_key,
     )
+    
+    collection_name = "legal_regulations"
+    
+    # Create collection if it doesn't exist
+    try:
+        vector_client.get_collection(collection_name)
+    except Exception:
+        vector_client.create_collection(
+            collection_name=collection_name,
+            vectors_config=VectorParams(size=1536, distance=Distance.COSINE),
+        )
+    
+    collection = vector_client
     return client, user_manager, chunker, collection
 
 # Page config
@@ -94,22 +115,38 @@ def check_authentication():
         st.write("• Access can be revoked by administrator")
     return False, None, None, None, None
 
-def search_knowledge_base(collection, query, n_results=5):
+def search_knowledge_base(qdrant_client, query, n_results=5):
     """Search the legal knowledge base"""
     try:
-        results = collection.query(
-            query_texts=[query],
-            n_results=n_results,
-            include=['documents', 'metadatas', 'distances']
+        # Generate embedding for the query using OpenAI
+        openai_client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+        embedding_response = openai_client.embeddings.create(
+            model="text-embedding-ada-002",
+            input=query
         )
-        docs = results.get('documents', [[]])[0]
-        metas = results.get('metadatas', [[]])[0]
-        dists = results.get('distances', [[]])[0]
-        return list(zip(docs, metas, dists))
+        query_vector = embedding_response.data[0].embedding
+        
+        # Search in Qdrant
+        search_results = qdrant_client.search(
+            collection_name="legal_regulations",
+            query_vector=query_vector,
+            limit=n_results,
+            with_payload=True
+        )
+        
+        # Convert results to match original format
+        results = []
+        for result in search_results:
+            doc = result.payload.get('text', '')
+            meta = {k: v for k, v in result.payload.items() if k != 'text'}
+            dist = 1 - result.score  # Convert similarity to distance
+            results.append((doc, meta, dist))
+        
+        return results
     except Exception:
         return []
 
-def process_uploaded_file(uploaded_file, chunker, collection):
+def process_uploaded_file(uploaded_file, chunker, qdrant_client):
     try:
         t = uploaded_file.type
         if t == "application/pdf":
@@ -131,24 +168,46 @@ def process_uploaded_file(uploaded_file, chunker, collection):
         st.write(f"📦 Chunks created: {len(chunks)}")
         if not chunks:
             return False, "No chunks were created - check file format"
-        docs, metas, ids = [], [], []
+        
+        # Generate embeddings and prepare points for Qdrant
+        openai_client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+        points = []
         now = datetime.now().isoformat()
-        for ch in chunks:
-            docs.append(ch['text'])
-            metas.append({
+        
+        for i, ch in enumerate(chunks):
+            # Generate embedding for the chunk
+            embedding_response = openai_client.embeddings.create(
+                model="text-embedding-ada-002",
+                input=ch['text']
+            )
+            vector = embedding_response.data[0].embedding
+            
+            # Prepare payload
+            payload = {
+                'text': ch['text'],
                 **ch['metadata'],
                 'source_file': uploaded_file.name,
                 'upload_date': now,
                 'processed_by': 'admin'
-            })
-            ids.append(f"{uploaded_file.name}_{ch['metadata']['chunk_id']}")
-        batch = 5000
-        for i in range(0, len(docs), batch):
-            collection.add(
-                documents=docs[i:i+batch],
-                metadatas=metas[i:i+batch],
-                ids=ids[i:i+batch]
+            }
+            
+            # Create point
+            point = PointStruct(
+                id=f"{uploaded_file.name}_{ch['metadata']['chunk_id']}",
+                vector=vector,
+                payload=payload
             )
+            points.append(point)
+        
+        # Upload points to Qdrant in batches
+        batch_size = 100
+        for i in range(0, len(points), batch_size):
+            batch = points[i:i+batch_size]
+            qdrant_client.upsert(
+                collection_name="legal_regulations",
+                points=batch
+            )
+        
         return True, f"Processed {len(chunks)} chunks from {uploaded_file.name}"
     except Exception as e:
         return False, f"Error processing file: {e}"
@@ -193,7 +252,8 @@ def main_app():
         st.write("**Depth**: Comprehensive")
         st.markdown("### 📚 Knowledge Base")
         try:
-            cnt = collection.count()
+            collection_info = collection.get_collection("legal_regulations")
+            cnt = collection_info.points_count
             st.write(f"**Legal Provisions:** {cnt}")
             st.write("**Jurisdictions:** NY, NJ, CT")
         except:
