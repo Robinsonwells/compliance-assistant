@@ -1,6 +1,7 @@
 import streamlit as st
 import openai
 from openai import OpenAI
+from sentence_transformers import SentenceTransformer
 from dotenv import load_dotenv
 import os
 import uuid
@@ -20,6 +21,9 @@ def init_systems():
     client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
     user_manager = UserManager()
     chunker = LegalSemanticChunker(os.getenv("OPENAI_API_KEY"))
+    
+    # Initialize local embedding model
+    embedding_model = SentenceTransformer('all-MiniLM-L6-v2')
     
     # Initialize Qdrant client
     qdrant_url = os.getenv("QDRANT_URL")
@@ -45,7 +49,7 @@ def init_systems():
         )
     
     collection = vector_client
-    return client, user_manager, chunker, collection
+    return client, user_manager, chunker, collection, embedding_model
 
 # Page config
 st.set_page_config(
@@ -72,12 +76,12 @@ def get_session_id():
 
 def check_authentication():
     """Check if user is authenticated"""
-    client, user_manager, chunker, collection = init_systems()
+    client, user_manager, chunker, collection, embedding_model = init_systems()
     if 'authenticated' in st.session_state and st.session_state.authenticated:
         session_id = get_session_id()
         if user_manager.is_session_valid(session_id, hours_timeout=24):
             user_manager.update_session_activity(session_id)
-            return True, client, user_manager, chunker, collection
+            return True, client, user_manager, chunker, collection, embedding_model
         else:
             st.session_state.authenticated = False
             st.error("🕐 Your session has expired. Please log in again.")
@@ -114,17 +118,13 @@ def check_authentication():
         st.write("• Your session renews with each interaction")
         st.write("• Access can be revoked by administrator")
     return False, None, None, None, None
+    return False, None, None, None, None, None
 
-def search_knowledge_base(qdrant_client, query, n_results=5):
+def search_knowledge_base(qdrant_client, embedding_model, query, n_results=5):
     """Search the legal knowledge base"""
     try:
-        # Generate embedding for the query using OpenAI
-        openai_client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
-        embedding_response = openai_client.embeddings.create(
-            model="text-embedding-ada-002",
-            input=query
-        )
-        query_vector = embedding_response.data[0].embedding
+        # Generate embedding for the query using local model
+        query_vector = embedding_model.encode([query])[0].tolist()
         
         # Search in Qdrant
         search_results = qdrant_client.search(
@@ -146,7 +146,7 @@ def search_knowledge_base(qdrant_client, query, n_results=5):
     except Exception:
         return []
 
-def process_uploaded_file(uploaded_file, chunker, qdrant_client):
+def process_uploaded_file(uploaded_file, chunker, qdrant_client, embedding_model):
     try:
         t = uploaded_file.type
         if t == "application/pdf":
@@ -169,18 +169,19 @@ def process_uploaded_file(uploaded_file, chunker, qdrant_client):
         if not chunks:
             return False, "No chunks were created - check file format"
         
-        # Generate embeddings and prepare points for Qdrant
-        openai_client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+        # Collect all chunk texts for batch embedding generation
+        chunk_texts = [ch['text'] for ch in chunks]
+        
+        # Generate embeddings locally in batch
+        st.write("🧠 Generating embeddings locally...")
+        embeddings = embedding_model.encode(chunk_texts, show_progress_bar=True)
+        
+        # Prepare points for Qdrant
         points = []
         now = datetime.now().isoformat()
         
-        for i, ch in enumerate(chunks):
-            # Generate embedding for the chunk
-            embedding_response = openai_client.embeddings.create(
-                model="text-embedding-ada-002",
-                input=ch['text']
-            )
-            vector = embedding_response.data[0].embedding
+        for i, (ch, embedding) in enumerate(zip(chunks, embeddings)):
+            vector = embedding.tolist()
             
             # Prepare payload
             payload = {
@@ -200,6 +201,7 @@ def process_uploaded_file(uploaded_file, chunker, qdrant_client):
             points.append(point)
         
         # Upload points to Qdrant in batches
+        st.write("📤 Uploading vectors to Qdrant...")
         batch_size = 100
         for i in range(0, len(points), batch_size):
             batch = points[i:i+batch_size]
@@ -213,7 +215,7 @@ def process_uploaded_file(uploaded_file, chunker, qdrant_client):
         return False, f"Error processing file: {e}"
 
 def main_app():
-    authenticated, client, user_manager, chunker, collection = check_authentication()
+    authenticated, client, user_manager, chunker, collection, embedding_model = check_authentication()
     if not authenticated:
         st.stop()
     # Header and logout
@@ -267,7 +269,7 @@ def main_app():
         with st.chat_message("assistant"):
             prog = st.empty(); bar = st.progress(0)
             prog.text("🔍 Searching legal knowledge base..."); bar.progress(20)
-            results = search_knowledge_base(collection, prompt, n_results=8)
+            results = search_knowledge_base(collection, embedding_model, prompt, n_results=8)
             prog.text("🧠 Applying high-effort reasoning..."); bar.progress(50)
             context = "\n\n".join(f"Legal Text: {doc}" for doc,_,_ in results) or "No relevant legal text found."
             system_prompt = f"""{LEGAL_COMPLIANCE_SYSTEM_PROMPT}

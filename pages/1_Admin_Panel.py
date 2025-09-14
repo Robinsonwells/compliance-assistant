@@ -3,10 +3,10 @@ from user_management import UserManager
 from datetime import datetime
 from dotenv import load_dotenv
 import os
+from sentence_transformers import SentenceTransformer
 from qdrant_client import QdrantClient
 from qdrant_client.models import Distance, VectorParams, PointStruct, Filter, FieldCondition, MatchValue
 from advanced_chunking import LegalSemanticChunker, extract_pdf_text, extract_docx_text
-from openai import OpenAI
 import time
 
 def delete_file_chunks(qdrant_client, source_file: str) -> tuple[bool, str]:
@@ -61,6 +61,9 @@ def init_admin_systems():
     user_manager = UserManager()
     chunker = LegalSemanticChunker(os.getenv("OPENAI_API_KEY"))
     
+    # Initialize local embedding model
+    embedding_model = SentenceTransformer('all-MiniLM-L6-v2')
+    
     # Initialize Qdrant client
     qdrant_url = os.getenv("QDRANT_URL")
     qdrant_api_key = os.getenv("QDRANT_API_KEY")
@@ -85,7 +88,7 @@ def init_admin_systems():
         )
     
     collection = client
-    return user_manager, chunker, collection
+    return user_manager, chunker, collection, embedding_model
 
 def admin_login():
     if 'admin_authenticated' not in st.session_state:
@@ -102,7 +105,7 @@ def admin_login():
         return False
     return True
 
-def process_uploaded_file(uploaded_file, chunker, qdrant_client):
+def process_uploaded_file(uploaded_file, chunker, qdrant_client, embedding_model):
     try:
         t = uploaded_file.type
         if t == "application/pdf":
@@ -129,18 +132,19 @@ def process_uploaded_file(uploaded_file, chunker, qdrant_client):
         if not chunks:
             return False, "No chunks were created - check file format"
 
-        # Generate embeddings and prepare points for Qdrant
-        openai_client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+        # Collect all chunk texts for batch embedding generation
+        chunk_texts = [ch['text'] for ch in chunks]
+        
+        # Generate embeddings locally in batch
+        st.write("🧠 Generating embeddings locally...")
+        embeddings = embedding_model.encode(chunk_texts, show_progress_bar=True)
+        
+        # Prepare points for Qdrant
         points = []
         now = datetime.now().isoformat()
         
-        for i, ch in enumerate(chunks):
-            # Generate embedding for the chunk
-            embedding_response = openai_client.embeddings.create(
-                model="text-embedding-ada-002",
-                input=ch['text']
-            )
-            vector = embedding_response.data[0].embedding
+        for i, (ch, embedding) in enumerate(zip(chunks, embeddings)):
+            vector = embedding.tolist()
             
             # Prepare payload
             payload = {
@@ -160,6 +164,7 @@ def process_uploaded_file(uploaded_file, chunker, qdrant_client):
             points.append(point)
 
         # Upload points to Qdrant in batches
+        st.write("📤 Uploading vectors to Qdrant...")
         batch_size = 100
         for i in range(0, len(points), batch_size):
             batch = points[i:i+batch_size]
@@ -185,6 +190,7 @@ def main():
             st.rerun()
 
     um, chunker, coll = init_admin_systems()
+    um, chunker, coll, embedding_model = init_admin_systems()
     tab1, tab2 = st.tabs(["👥 Users", "📚 Knowledge Base"])
 
     with tab1:
@@ -252,7 +258,7 @@ def main():
         if uploads and st.button("Process"):
             for f in uploads:
                 st.write(f"Processing {f.name}")
-                ok, msg = process_uploaded_file(f, chunker, coll)
+                ok,msg = process_uploaded_file(f,chunker,coll,embedding_model)
                 if ok:
                     st.success(msg)
                 else:
