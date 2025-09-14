@@ -189,7 +189,6 @@ def main():
             st.session_state.admin_authenticated = False
             st.rerun()
 
-    um, chunker, coll = init_admin_systems()
     um, chunker, coll, embedding_model = init_admin_systems()
     tab1, tab2 = st.tabs(["👥 Users", "📚 Knowledge Base"])
 

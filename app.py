@@ -117,7 +117,6 @@ def check_authentication():
         st.write("• Sessions expire after 24 hours of inactivity")
         st.write("• Your session renews with each interaction")
         st.write("• Access can be revoked by administrator")
-    return False, None, None, None, None
     return False, None, None, None, None, None
 
 def search_knowledge_base(qdrant_client, embedding_model, query, n_results=5):
