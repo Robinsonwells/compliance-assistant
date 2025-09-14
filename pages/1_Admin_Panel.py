@@ -3,6 +3,7 @@ from user_management import UserManager
 from datetime import datetime
 from dotenv import load_dotenv
 import os
+import uuid
 from sentence_transformers import SentenceTransformer
 from qdrant_client import QdrantClient
 from qdrant_client.models import Distance, VectorParams, PointStruct, Filter, FieldCondition, MatchValue
@@ -157,7 +158,7 @@ def process_uploaded_file(uploaded_file, chunker, qdrant_client, embedding_model
             
             # Create point
             point = PointStruct(
-                id=f"{uploaded_file.name}_{ch['metadata']['chunk_id']}",
+                id=str(uuid.uuid4()),
                 vector=vector,
                 payload=payload
             )

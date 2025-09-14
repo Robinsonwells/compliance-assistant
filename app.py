@@ -193,7 +193,7 @@ def process_uploaded_file(uploaded_file, chunker, qdrant_client, embedding_model
             
             # Create point
             point = PointStruct(
-                id=f"{uploaded_file.name}_{ch['metadata']['chunk_id']}",
+                id=str(uuid.uuid4()),
                 vector=vector,
                 payload=payload
             )
