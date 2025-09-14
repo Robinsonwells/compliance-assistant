@@ -50,7 +50,7 @@ class LegalSemanticChunker:
         legal_blocks = self._extract_legal_content(text)
         
         # Step 3: Split by semantic meaning
-        semantic_chunks = self._semantic_legal_splitting(legal_blocks, doc_metadata)
+        semantic_chunks = self._semantic_legal_splitting(legal_blocks, doc_metadata, max_chunk_size)
         
         # Step 4: Generate proper citations and metadata
         final_chunks = self._enrich_chunks_with_citations(semantic_chunks, doc_metadata)
@@ -181,7 +181,7 @@ class LegalSemanticChunker:
         
         return text.strip()
 
-    def _semantic_legal_splitting(self, legal_blocks: List[Dict], doc_metadata: Dict) -> List[Dict]:
+    def _semantic_legal_splitting(self, legal_blocks: List[Dict], doc_metadata: Dict, max_chunk_size: int) -> List[Dict]:
         """Split legal content by semantic meaning, not arbitrary size"""
         
         chunks = []
@@ -201,14 +201,30 @@ class LegalSemanticChunker:
             for i, subsection in enumerate(subsections):
                 # Only create chunk if it has meaningful legal content
                 if self._has_legal_significance(subsection):
-                    chunks.append({
-                        'text': subsection.strip(),
-                        'section_number': block['number'],
-                        'section_title': block['title'],
-                        'subsection_index': i,
-                        'semantic_type': self._classify_legal_content(subsection),
-                        'version': block.get('version', '')
-                    })
+                    # Check if subsection exceeds max_chunk_size
+                    subsection_text = subsection.strip()
+                    if len(subsection_text) <= max_chunk_size:
+                        # Subsection fits within limit, add as single chunk
+                        chunks.append({
+                            'text': subsection_text,
+                            'section_number': block['number'],
+                            'section_title': block['title'],
+                            'subsection_index': str(i),
+                            'semantic_type': self._classify_legal_content(subsection_text),
+                            'version': block.get('version', '')
+                        })
+                    else:
+                        # Subsection is too large, split into smaller sub-chunks
+                        sub_chunks = self._split_oversized_subsection(subsection_text, max_chunk_size)
+                        for j, sub_chunk in enumerate(sub_chunks):
+                            chunks.append({
+                                'text': sub_chunk,
+                                'section_number': block['number'],
+                                'section_title': block['title'],
+                                'subsection_index': f"{i}.{j}",
+                                'semantic_type': self._classify_legal_content(sub_chunk),
+                                'version': block.get('version', '')
+                            })
         
         return chunks
 
@@ -217,30 +233,21 @@ class LegalSemanticChunker:
         
         # Look for common legal subsection markers
         patterns = [
-            r'\n\s*\([a-z]\)',  # (a), (b), (c)
-            r'\n\s*\(\d+\)',    # (1), (2), (3) 
-            r'\n\s*\([ivx]+\)', # (i), (ii), (iii)
-            r'\n\s*[A-Z][^.]*\.',  # New sentence starting paragraph
+            r'(?=\n\s*\([a-z]\))',  # (a), (b), (c) - with lookahead
+            r'(?=\n\s*\(\d+\))',    # (1), (2), (3) - with lookahead
+            r'(?=\n\s*\([ivx]+\))', # (i), (ii), (iii) - with lookahead
+            r'(?=\n\s*\d+\.\s)',    # 1. 2. 3. - with lookahead
         ]
         
         # Try to split by subsection markers first
         for pattern in patterns:
             if re.search(pattern, text):
                 splits = re.split(pattern, text)
-                if len(splits) > 1:
-                    # Reconstruct with markers
-                    result = []
-                    markers = re.findall(pattern, text)
-                    if splits[0].strip():
-                        result.append(splits[0].strip())
-                    for marker, split in zip(markers, splits[1:]):
-                        if split.strip():
-                            result.append(marker.strip() + ' ' + split.strip())
+                # Filter out empty splits and return non-empty subsections
+                result = [split.strip() for split in splits if split.strip()]
+                if len(result) > 1:
                     return result
         
-        # Fall back to paragraph-based splitting
-        paragraphs = [p.strip() for p in text.split('\n\n') if p.strip()]
-        return paragraphs if len(paragraphs) > 1 else [text]
 
     def _has_legal_significance(self, text: str) -> bool:
         """Determine if text chunk has legal significance worth indexing"""
@@ -297,7 +304,7 @@ class LegalSemanticChunker:
                     'citation': citation,
                     'section_type': chunk['semantic_type'],
                     'semantic_density': calculate_semantic_density(chunk['text']),
-                    'is_complete_section': chunk['subsection_index'] == 0,
+                    'is_complete_section': chunk['subsection_index'] == '0' or chunk['subsection_index'].endswith('.0'),
                     'version': chunk.get('version', '')
                 }
             })
