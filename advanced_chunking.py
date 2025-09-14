@@ -249,6 +249,79 @@ class LegalSemanticChunker:
                     return result
         
 
+    def _split_oversized_subsection(self, text: str, max_chunk_size: int) -> List[str]:
+        """Split an oversized subsection into smaller chunks while preserving semantic meaning"""
+        if len(text) <= max_chunk_size:
+            return [text]
+        
+        sub_chunks = []
+        
+        # Try splitting by sentences first (preserves most semantic meaning)
+        sentences = re.split(r'(?<=[.!?])\s+', text)
+        current_chunk = ""
+        
+        for sentence in sentences:
+            # Check if adding this sentence would exceed the limit
+            test_chunk = current_chunk + (" " if current_chunk else "") + sentence
+            
+            if len(test_chunk) <= max_chunk_size:
+                current_chunk = test_chunk
+            else:
+                # Save current chunk if it has content
+                if current_chunk:
+                    sub_chunks.append(current_chunk.strip())
+                
+                # Handle case where single sentence is too large
+                if len(sentence) > max_chunk_size:
+                    # Split by clauses (semicolons, commas)
+                    clauses = re.split(r'[;,]\s*', sentence)
+                    clause_chunk = ""
+                    
+                    for clause in clauses:
+                        test_clause_chunk = clause_chunk + ("; " if clause_chunk else "") + clause
+                        
+                        if len(test_clause_chunk) <= max_chunk_size:
+                            clause_chunk = test_clause_chunk
+                        else:
+                            if clause_chunk:
+                                sub_chunks.append(clause_chunk.strip())
+                            
+                            # If single clause is still too large, split by words
+                            if len(clause) > max_chunk_size:
+                                words = clause.split()
+                                word_chunk = ""
+                                
+                                for word in words:
+                                    test_word_chunk = word_chunk + (" " if word_chunk else "") + word
+                                    
+                                    if len(test_word_chunk) <= max_chunk_size:
+                                        word_chunk = test_word_chunk
+                                    else:
+                                        if word_chunk:
+                                            sub_chunks.append(word_chunk.strip())
+                                        word_chunk = word
+                                
+                                if word_chunk:
+                                    clause_chunk = word_chunk
+                                else:
+                                    clause_chunk = ""
+                            else:
+                                clause_chunk = clause
+                    
+                    if clause_chunk:
+                        current_chunk = clause_chunk
+                    else:
+                        current_chunk = ""
+                else:
+                    current_chunk = sentence
+        
+        # Add any remaining chunk
+        if current_chunk:
+            sub_chunks.append(current_chunk.strip())
+        
+        # Filter out empty chunks
+        return [chunk for chunk in sub_chunks if chunk.strip()]
+
     def _has_legal_significance(self, text: str) -> bool:
         """Determine if text chunk has legal significance worth indexing"""
         
