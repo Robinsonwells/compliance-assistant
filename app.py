@@ -45,7 +45,7 @@ def init_systems():
     except Exception:
         vector_client.create_collection(
             collection_name=collection_name,
-            vectors_config=VectorParams(size=1536, distance=Distance.COSINE),
+            vectors_config=VectorParams(size=384, distance=Distance.COSINE),
         )
     
     collection = vector_client

@@ -85,7 +85,7 @@ def init_admin_systems():
     except Exception:
         client.create_collection(
             collection_name=collection_name,
-            vectors_config=VectorParams(size=1536, distance=Distance.COSINE),
+            vectors_config=VectorParams(size=384, distance=Distance.COSINE),
         )
     
     collection = client
