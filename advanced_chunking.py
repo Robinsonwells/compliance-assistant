@@ -335,30 +335,14 @@ class LegalSemanticChunker:
             else:
                 if current_chunk:
                     chunks.append({
-                    # Check if subsection exceeds max_chunk_size
-                    subsection_text = subsection.strip()
-                    if len(subsection_text) <= max_chunk_size:
-                        # Subsection fits within limit, add as single chunk
-                        chunks.append({
-                            'text': subsection_text,
-                            'section_number': block['number'],
-                            'section_title': block['title'],
-                            'subsection_index': str(i),
-                            'semantic_type': self._classify_legal_content(subsection_text),
-                            'version': block.get('version', '')
-                        })
-                    else:
-                        # Subsection is too large, split into smaller sub-chunks
-                        sub_chunks = self._split_oversized_subsection(subsection_text, max_chunk_size)
-                        for j, sub_chunk in enumerate(sub_chunks):
-                            chunks.append({
-                                'text': sub_chunk,
-                                'section_number': block['number'],
-                                'section_title': block['title'],
-                                'subsection_index': f"{i}.{j}",
-                                'semantic_type': self._classify_legal_content(sub_chunk),
-                                'version': block.get('version', '')
-                            })
+                        'text': current_chunk.strip(),
+                        'metadata': {
+                            'chunk_id': chunk_id,
+                            'section': f'Chunk {chunk_id}',
+                            'semantic_density': calculate_semantic_density(current_chunk),
+                            'section_type': 'basic'
+                        }
+                    })
                     chunk_id += 1
                 current_chunk = sentence + ". "
 
