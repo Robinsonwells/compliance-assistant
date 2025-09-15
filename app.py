@@ -283,12 +283,16 @@ Available Legal Context:
 {context}
 User Question: {prompt}"""
             prog.text("⚖️ Generating structured response..."); bar.progress(75)
-            response = client.responses.create(
-                model="gpt-5",
-                input=system_prompt,
-                reasoning={"effort":"high"},
-                text={"verbosity":"high"}
-            ai_response = response.output_text
+            response = client.chat.completions.create(
+                model="gpt-4",
+                messages=[
+                    {"role": "system", "content": LEGAL_COMPLIANCE_SYSTEM_PROMPT},
+                    {"role": "user", "content": f"Available Legal Context:\n{context}\n\nUser Question: {prompt}"}
+                ],
+                temperature=0.1,
+                max_tokens=2000
+            )
+            ai_response = response.choices[0].message.content
             st.markdown(ai_response)
             st.session_state.messages.append({"role":"assistant","content":ai_response})
             if results:
