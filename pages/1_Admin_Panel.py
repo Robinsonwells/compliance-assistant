@@ -275,15 +275,26 @@ def main():
         st.markdown("---")
         st.subheader("🗂️ Browse Files & Chunks")
         try:
-            # Get all points to extract file information
-            scroll_result = coll.scroll(
-                collection_name="legal_regulations",
-                limit=10000,  # Large limit to get all points
-                with_payload=True,
-                with_vectors=False
-            )
+            # Get ALL points using pagination to extract accurate file information
+            all_points = []
+            next_page_offset = None
             
-            all_points = scroll_result[0]
+            while True:
+                scroll_result = coll.scroll(
+                    collection_name="legal_regulations",
+                    limit=1000,  # Reasonable batch size
+                    offset=next_page_offset,
+                    with_payload=True,
+                    with_vectors=False
+                )
+                
+                points, next_page_offset = scroll_result
+                all_points.extend(points)
+                
+                # Break if no more pages
+                if next_page_offset is None:
+                    break
+            
             files = {}
             for point in all_points:
                 sf = point.payload.get('source_file', 'Unknown')
