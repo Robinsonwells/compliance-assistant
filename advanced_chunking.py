@@ -495,7 +495,7 @@ class LegalSemanticChunker:
             else:
                 if current_chunk:
                     chunks.append({
-                        'text': current_chunk.strip(),
+                            'version': chunk.get('version', ''),
                         'metadata': {
                             'chunk_id': chunk_id,
                             'section': f'Chunk {chunk_id}',
