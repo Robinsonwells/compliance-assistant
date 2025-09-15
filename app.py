@@ -175,6 +175,8 @@ class GPT5Handler:
         except Exception:
             return str(response)
     if 'authenticated' in st.session_state and st.session_state.authenticated:
+        pass  # This will be handled in check_authentication function
+
 @st.cache_resource
 def init_systems():
     """Initialize all system components"""
