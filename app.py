@@ -279,15 +279,13 @@ Available Legal Context:
 {context}
 User Question: {prompt}"""
             prog.text("⚖️ Generating structured response..."); bar.progress(75)
-            response = client.chat.completions.create(
-                model="gpt-4o",
-                messages=[
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": prompt}
-                ]
+            response = client.responses.create(
+                model="gpt-5",
+                reasoning=system_prompt,
+                text=prompt
             )
             bar.progress(100); prog.text("✅ Analysis complete!")
-            ai_response = response.choices[0].message.content
+            ai_response = response.output_text
             st.markdown(ai_response)
             st.session_state.messages.append({"role":"assistant","content":ai_response})
             if results:
