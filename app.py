@@ -10,7 +10,6 @@ from datetime import datetime, timedelta
 from user_management import UserManager
 from qdrant_client import QdrantClient
 from qdrant_client.models import Distance, VectorParams, PointStruct, Filter, FieldCondition, MatchValue
-from qdrant_client.http.models import FieldIndex, FieldType
 from advanced_chunking import LegalSemanticChunker, extract_pdf_text, extract_docx_text
 from system_prompts import LEGAL_COMPLIANCE_SYSTEM_PROMPT
 
@@ -46,10 +45,14 @@ def init_systems():
     except Exception:
         vector_client.create_collection(
             collection_name=collection_name,
-            vectors_config=VectorParams(size=384, distance=Distance.COSINE),
-            field_indexes=[
-                FieldIndex(field_name="source_file", field_type=FieldType.KEYWORD)
-            ]
+            vectors_config=VectorParams(size=384, distance=Distance.COSINE)
+        )
+        
+        # Create payload index for source_file field
+        vector_client.create_payload_index(
+            collection_name=collection_name,
+            field_name="source_file",
+            field_schema="keyword"
         )
     
     collection = vector_client

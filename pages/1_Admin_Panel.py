@@ -7,7 +7,6 @@ import uuid
 from sentence_transformers import SentenceTransformer
 from qdrant_client import QdrantClient
 from qdrant_client.models import Distance, VectorParams, PointStruct, Filter, FieldCondition, MatchValue
-from qdrant_client.http.models import FieldIndex, FieldType
 from advanced_chunking import LegalSemanticChunker, extract_pdf_text, extract_docx_text
 import time
 
@@ -86,10 +85,14 @@ def init_admin_systems():
     except Exception:
         client.create_collection(
             collection_name=collection_name,
-            vectors_config=VectorParams(size=384, distance=Distance.COSINE),
-            field_indexes=[
-                FieldIndex(field_name="source_file", field_type=FieldType.KEYWORD)
-            ]
+            vectors_config=VectorParams(size=384, distance=Distance.COSINE)
+        )
+        
+        # Create payload index for source_file field
+        client.create_payload_index(
+            collection_name=collection_name,
+            field_name="source_file",
+            field_schema="keyword"
         )
     
     collection = client
