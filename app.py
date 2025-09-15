@@ -288,7 +288,7 @@ User Question: {prompt}"""
                 messages=[
                     {"role": "system", "content": LEGAL_COMPLIANCE_SYSTEM_PROMPT},
                     {"role": "user", "content": f"Available Legal Context:\n{context}\n\nUser Question: {prompt}"}
-                ],
+            )
                 temperature=0.1,
                 max_tokens=2000
             )
