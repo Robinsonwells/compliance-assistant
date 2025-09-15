@@ -15,6 +15,7 @@ from qdrant_client import QdrantClient
 from qdrant_client.models import Distance, VectorParams, PointStruct, Filter, FieldCondition, MatchValue
 from advanced_chunking import LegalSemanticChunker, extract_pdf_text, extract_docx_text
 from system_prompts import LEGAL_COMPLIANCE_SYSTEM_PROMPT
+from typing import Dict, List, Optional
 
 class GPT5Handler:
     def __init__(self):
