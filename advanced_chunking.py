@@ -459,13 +459,13 @@ class LegalSemanticChunker:
             final_chunks.append({
                 'text': chunk['text'],
                 'metadata': {
-                    'chunk_id': chunk_id,
-                    'section': f"{chunk['section_number']} - {chunk['section_title']}",
-                    'citation': citation,
-                    'section_type': chunk['semantic_type'],
-                    'semantic_density': calculate_semantic_density(chunk['text']),
-                    'is_complete_section': chunk['subsection_index'] == '0' or chunk['subsection_index'].endswith('.0'),
-                    'version': chunk.get('version', '')
+                        'version': chunk.get('version', ''),
+                        'jurisdiction': detect_jurisdiction(chunk['text']),
+                        'law_type': detect_law_type(chunk['text']),
+                        'industry_specific': detect_industry_specific(chunk['text']),
+                        'federal_vs_state': classify_federal_state(chunk['text']),
+                        'complexity_level': assess_content_complexity(chunk['text'])
+                    }
                 }
             })
             chunk_id += 1
