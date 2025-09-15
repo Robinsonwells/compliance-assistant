@@ -3,6 +3,7 @@ os.environ["PYTORCH_DISABLE_WARNING"] = "1"
 import warnings
 warnings.filterwarnings("ignore", message=".*torch.classes.*")
 
+import torch  # Initialize PyTorch early to prevent torch.classes errors
 import streamlit as st
 import openai
 from openai import OpenAI

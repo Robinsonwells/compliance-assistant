@@ -1,3 +1,4 @@
+import torch  # Initialize PyTorch early to prevent torch.classes errors
 import streamlit as st
 from user_management import UserManager
 from datetime import datetime
