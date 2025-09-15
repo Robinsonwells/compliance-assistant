@@ -281,10 +281,9 @@ User Question: {prompt}"""
             prog.text("⚖️ Generating structured response..."); bar.progress(75)
             response = client.responses.create(
                 model="gpt-5",
-                reasoning=system_prompt,
-                text=prompt
-            )
-            bar.progress(100); prog.text("✅ Analysis complete!")
+                input=system_prompt,
+                reasoning={"effort":"high"},
+                text={"verbosity":"high"}
             ai_response = response.output_text
             st.markdown(ai_response)
             st.session_state.messages.append({"role":"assistant","content":ai_response})
