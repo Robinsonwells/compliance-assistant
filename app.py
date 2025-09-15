@@ -259,7 +259,7 @@ def search_knowledge_base(qdrant_client, embedding_model, query, n_results=5):
     """Search the legal knowledge base using modern query_points method"""
     try:
         # Generate embedding for the query using local model
-        query_vector = embedding_model.encode([query]).tolist()
+        query_vector = embedding_model.encode([query])[0].tolist()
         
         # ✅ FIXED: Use query_points instead of deprecated search method
         search_results = qdrant_client.query_points(
@@ -500,7 +500,6 @@ def main_app():
                     input_text=full_prompt,
                     model=selected_model,
                     reasoning_effort=reasoning_effort,
-                    verbosity=verbosity,
                     max_tokens=max_tokens
                 )
             else:
@@ -527,7 +526,6 @@ def main_app():
                     "metadata": {
                         "model_used": response_result.get("model_used", selected_model),
                         "reasoning_effort": response_result.get("reasoning_effort", reasoning_effort),
-                        "verbosity": response_result.get("verbosity", verbosity),
                         "total_tokens": response_result.get("total_tokens", 0),
                         "finish_reason": response_result.get("finish_reason", "N/A")
                     }
