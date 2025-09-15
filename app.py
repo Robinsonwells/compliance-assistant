@@ -10,8 +10,8 @@ from datetime import datetime, timedelta
 from user_management import UserManager
 from qdrant_client import QdrantClient
 from qdrant_client import QdrantClient, models
-from qdrant_client.models import Distance, VectorParams, PointStruct, FieldType
-from qdrant_client.http.models import FieldIndex
+from qdrant_client.models import Distance, VectorParams, PointStruct
+from qdrant_client.http.models import FieldIndex, FieldType
 from advanced_chunking import LegalSemanticChunker, extract_pdf_text, extract_docx_text
 from system_prompts import LEGAL_COMPLIANCE_SYSTEM_PROMPT
 
