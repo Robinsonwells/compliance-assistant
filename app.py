@@ -555,7 +555,7 @@ def main_app():
                     "role": "assistant",
                     "content": ai_response,
                     "metadata": {
-                        "model_used": response_result.get("model_used", selected_model),
+                        "model_used": response_result.get("model_used", "GPT-5"),
                         "reasoning_effort": response_result.get("reasoning_effort", reasoning_effort),
                         "total_tokens": response_result.get("total_tokens", 0),
                         "finish_reason": response_result.get("finish_reason", "N/A")
