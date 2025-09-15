@@ -9,4 +9,5 @@ pandas>=2.1.2
 duckdb
 PyPDF2
 python-docx
+torch==2.0.1+cpu --find-links https://download.pytorch.org/whl/torch_stable.html
 sentence-transformers>=2.2.0
