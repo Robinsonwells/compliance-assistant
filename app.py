@@ -24,111 +24,151 @@ class GPT5Handler:
             api_key=os.getenv("OPENAI_API_KEY")
         )
         
-        # ✅ CORRECT - Keep this as a dictionary, don't overwrite it
+        # GPT-5 Model Configuration
         self.models = {
             "gpt-5": "Full reasoning model for complex tasks",
             "gpt-5-mini": "Balanced performance and cost", 
             "gpt-5-nano": "Ultra-fast responses",
-            "gpt-5-chat": "Advanced conversational model"
+            "gpt-5-chat": "Advanced conversational model",
+            "gpt-4o": "Fallback model (supports all parameters)"
         }
         
-        # Reasoning effort levels
+        # GPT-5 specific parameters
         self.reasoning_efforts = {
-            "minimal": {"description": "Fastest responses", "cost": "lowest", "speed": "very fast", "use_case": "Simple definitions"},
-            "low": {"description": "Light reasoning", "cost": "low", "speed": "fast", "use_case": "Basic compliance questions"},
-            "medium": {"description": "Balanced performance", "cost": "medium", "speed": "moderate", "use_case": "Standard legal analysis"},
-            "high": {"description": "Maximum accuracy", "cost": "highest", "speed": "slow", "use_case": "Complex multi-jurisdictional issues"}
+            "minimal": {"description": "Fastest responses, minimal thinking"},
+            "low": {"description": "Light reasoning"},
+            "medium": {"description": "Balanced performance (default)"},
+            "high": {"description": "Maximum accuracy, deep thinking"}
+        }
+        
+        self.verbosity_levels = {
+            "low": "Concise responses",
+            "medium": "Balanced detail (default)",
+            "high": "Comprehensive explanations"
         }
 
-    def create_legal_response(
+    def get_available_models(self) -> List[str]:
+        """Return list of available model names"""
+        return list(self.models.keys())
+
+    def get_model_description(self, model_name: str) -> str:
+        """Get description for a specific model"""
+        return self.models.get(model_name, "Unknown model")
+
+    def is_gpt5_model(self, model_name: str) -> bool:
+        """Check if model is GPT-5 series"""
+        return model_name.startswith("gpt-5")
+
+    def create_chat_completion(
         self,
-        system_prompt: str,
-        user_query: str,
-        legal_context: str,
+        messages: List[Dict],
         model: str = "gpt-5",
-        reasoning_effort: str = "high",
+        reasoning_effort: str = "medium",
+        verbosity: str = "medium",
         max_tokens: int = 2000,
-        temperature: float = 0.1,
-        conversation_id: Optional[str] = None
+        temperature: float = 0.7
     ) -> Dict:
-        """Create GPT-5 legal response using Responses API with fallback to Chat Completions"""
-        
-        # Prepare the full prompt with legal context
-        full_prompt = f"""{system_prompt}
-
-Available Legal Context:
-{legal_context}
-
-User Question: {user_query}"""
-        
-        # Try Responses API first (GPT-5 preferred method)
+        """Create chat completion with proper parameter handling for GPT-5"""
         try:
+            # Base parameters that work for all models
             request_params = {
                 "model": model,
-                "input": [{"role": "user", "content": full_prompt}],
-                "reasoning": {"effort": reasoning_effort},
-                "max_output_tokens": max_tokens,
-                "temperature": temperature
+                "messages": messages
             }
             
-            # Add conversation continuity if available
-            if conversation_id:
-                request_params["previous_response_id"] = conversation_id
+            # Handle GPT-5 specific parameters
+            if self.is_gpt5_model(model):
+                # ✅ GPT-5 uses max_completion_tokens instead of max_tokens
+                request_params["max_completion_tokens"] = max_tokens
+                
+                # ✅ GPT-5 uses reasoning_effort parameter
+                request_params["reasoning_effort"] = reasoning_effort
+                
+                # ✅ GPT-5 uses verbosity parameter
+                request_params["verbosity"] = verbosity
+                
+                # ❌ GPT-5 does NOT support temperature - it's fixed at 1.0
+                # ❌ Do not include temperature parameter for GPT-5
+                
+            else:
+                # Legacy models (GPT-4o, etc.) use old parameters
+                request_params["max_tokens"] = max_tokens
+                request_params["temperature"] = temperature
+                # Legacy models don't support reasoning_effort or verbosity
             
-            # Make Responses API request
-            response = self.client.responses.create(**request_params)
+            # Make API request
+            response = self.client.chat.completions.create(**request_params)
             
             return {
                 "success": True,
-                "content": self._extract_content(response),
-                "response_id": getattr(response, 'id', None),
-                "model_used": getattr(response, 'model', model),
-                "reasoning_tokens": self._get_reasoning_tokens(response),
-                "total_tokens": getattr(response.usage, 'total_tokens', 0) if hasattr(response, 'usage') else 0,
-                "reasoning_effort": reasoning_effort,
-                "fallback_used": False
+                "content": response.choices[0].message.content,
+                "model_used": response.model,
+                "total_tokens": response.usage.total_tokens if response.usage else 0,
+                "reasoning_effort": reasoning_effort if self.is_gpt5_model(model) else "N/A",
+                "verbosity": verbosity if self.is_gpt5_model(model) else "N/A",
+                "finish_reason": response.choices[0].finish_reason
             }
             
-        except Exception as responses_error:
-            # Fallback to Chat Completions API
-            try:
-                messages = [
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": f"Legal Context:\n{legal_context}\n\nQuestion: {user_query}"}
-                ]
-                
-                request_params = {
-                    "model": model,
-                    "messages": messages,
-                    "max_tokens": max_tokens,
-                    "temperature": temperature
-                }
-                
-                # Add reasoning parameter for GPT-5 models
-                if model.startswith("gpt-5"):
-                    request_params["reasoning_effort"] = reasoning_effort
-                
-                response = self.client.chat.completions.create(**request_params)
-                
-                return {
-                    "success": True,
-                    "content": response.choices[0].message.content,
-                    "model_used": response.model,
-                    "total_tokens": response.usage.total_tokens if response.usage else 0,
-                    "reasoning_tokens": 0,
-                    "reasoning_effort": reasoning_effort,
-                    "fallback_used": True
-                }
-                
-            except Exception as chat_error:
-                return {
-                    "success": False,
-                    "error": f"Both APIs failed. Responses API: {str(responses_error)}, Chat API: {str(chat_error)}",
-                    "content": None
-                }
+        except Exception as e:
+            return {
+                "success": False,
+                "error": str(e),
+                "content": None
+            }
 
-    def _extract_content(self, response) -> str:
-        """Extract text content from Responses API response"""
+    def create_responses_api(
+        self,
+        input_text: str,
+        model: str = "gpt-5",
+        reasoning_effort: str = "medium",
+        verbosity: str = "medium",
+        max_tokens: int = 4000
+    ) -> Dict:
+        """Create response using the newer Responses API (recommended for GPT-5)"""
+        try:
+            # Responses API has different parameter names
+            request_params = {
+                "model": model,
+                "input": [{"role": "user", "content": input_text}]
+            }
+            
+            if self.is_gpt5_model(model):
+                # ✅ Responses API uses max_output_tokens
+                request_params["max_output_tokens"] = max_tokens
+                
+                # ✅ Reasoning and verbosity parameters
+                request_params["reasoning"] = {"effort": reasoning_effort}
+                request_params["verbosity"] = verbosity
+                
+                # ❌ Still no temperature support
+            else:
+                # Legacy model fallback
+                request_params["max_output_tokens"] = max_tokens
+            
+            # Use Responses API
+            response = self.client.responses.create(**request_params)
+            
+            # Extract content from Responses API format
+            content = self._extract_responses_content(response)
+            
+            return {
+                "success": True,
+                "content": content,
+                "model_used": response.model if hasattr(response, 'model') else model,
+                "response_id": response.id if hasattr(response, 'id') else None,
+                "reasoning_effort": reasoning_effort,
+                "verbosity": verbosity
+            }
+            
+        except Exception as e:
+            return {
+                "success": False,
+                "error": str(e),
+                "content": None
+            }
+
+    def _extract_responses_content(self, response) -> str:
+        """Extract content from Responses API response"""
         try:
             if hasattr(response, 'output') and response.output:
                 for output_item in response.output:
@@ -136,20 +176,8 @@ User Question: {user_query}"""
                         for content_item in output_item.content:
                             if hasattr(content_item, 'text'):
                                 return content_item.text
-            return "No content extracted from response"
+            return "No content extracted"
         except Exception:
-            return str(response)
-
-    def _get_reasoning_tokens(self, response) -> int:
-        """Extract reasoning token count"""
-        try:
-            if (hasattr(response, 'usage') and 
-                hasattr(response.usage, 'output_tokens_details') and
-                hasattr(response.usage.output_tokens_details, 'reasoning_tokens')):
-                return response.usage.output_tokens_details.reasoning_tokens
-            return 0
-        except Exception:
-            return 0
 
 @st.cache_resource
 def init_systems():
@@ -376,8 +404,8 @@ def main_app():
     st.markdown("---")
     
     # Initialize conversation tracking for GPT-5
-    if 'conversation_id' not in st.session_state:
-        st.session_state.conversation_id = None
+    if 'gpt5_handler' not in st.session_state:
+        st.session_state.gpt5_handler = gpt5_handler
     
     if "messages" not in st.session_state:
         st.session_state.messages = [{
@@ -402,25 +430,55 @@ def main_app():
         
         # Model Selection
         selected_model = st.selectbox(
-            "GPT-5 Model:",
-            options=list(gpt5_handler.models.keys()),
-            index=0,  # Default to full gpt-5
-            help="Choose based on complexity needs"
+            "Model:",
+            options=gpt5_handler.get_available_models(),
+            index=0,
+            help="GPT-5 models have different parameter support"
         )
         
-        # Reasoning Effort
-        reasoning_effort = st.selectbox(
-            "Reasoning Effort:",
-            options=list(gpt5_handler.reasoning_efforts.keys()),
-            index=3,  # Default to "high" for legal work
-            help="Higher effort = better accuracy but slower/more expensive"
-        )
+        # Show model info
+        st.info(gpt5_handler.get_model_description(selected_model))
         
-        # Show current settings
-        effort_info = gpt5_handler.reasoning_efforts[reasoning_effort]
-        st.write(f"**Speed**: {effort_info['speed'].title()}")
-        st.write(f"**Cost**: {effort_info['cost'].title()}")
-        st.write(f"**Best for**: {effort_info['use_case']}")
+        # Show parameter compatibility
+        if gpt5_handler.is_gpt5_model(selected_model):
+            st.success("✅ GPT-5 Model - Uses new parameters")
+            
+            # GPT-5 specific controls
+            reasoning_effort = st.selectbox(
+                "Reasoning Effort:",
+                options=list(gpt5_handler.reasoning_efforts.keys()),
+                index=2,
+                help="Controls how much the model 'thinks'"
+            )
+            
+            verbosity = st.selectbox(
+                "Verbosity:",
+                options=list(gpt5_handler.verbosity_levels.keys()),
+                index=1,
+                help="Controls response length and detail"
+            )
+            
+            # API Choice
+            api_choice = st.radio(
+                "API Type:",
+                ["Responses API (Recommended)", "Chat Completions API"],
+                help="Responses API is optimized for GPT-5"
+            )
+            
+            st.warning("⚠️ GPT-5 does not support temperature (fixed at 1.0)")
+            
+        else:
+            st.info("ℹ️ Legacy Model - Uses traditional parameters")
+            reasoning_effort = "medium"
+            verbosity = "medium"
+            api_choice = "Chat Completions API"
+            
+            # Legacy model controls
+            temperature = st.slider("Temperature", 0.0, 2.0, 0.7, 0.1)
+        
+        # Common settings
+        with st.expander("Advanced Settings"):
+            max_tokens = st.slider("Max Tokens", 100, 8000, 4000)
         
         st.markdown("### 📚 Knowledge Base")
         try:
@@ -437,19 +495,16 @@ def main_app():
             # Show GPT-5 metadata for assistant messages
             if msg["role"] == "assistant" and "metadata" in msg:
                 with st.expander("🔍 Response Details", expanded=False):
-                    col1, col2, col3 = st.columns(3)
+                    col1, col2, col3, col4 = st.columns(4)
                     with col1:
                         st.metric("Model", msg["metadata"].get("model_used", "N/A"))
                     with col2:
                         st.metric("Reasoning Effort", msg["metadata"].get("reasoning_effort", "N/A"))
                     with col3:
-                        st.metric("Total Tokens", msg["metadata"].get("total_tokens", 0))
+                        st.metric("Verbosity", msg["metadata"].get("verbosity", "N/A"))
+                    with col4:
+                        st.metric("Tokens", msg["metadata"].get("total_tokens", 0))
                     
-                    if msg["metadata"].get("reasoning_tokens", 0) > 0:
-                        st.metric("Reasoning Tokens", msg["metadata"]["reasoning_tokens"])
-                    
-                    if msg["metadata"].get("fallback_used"):
-                        st.warning("⚠️ Used Chat Completions API fallback")
     
     if prompt := st.chat_input("Ask me about legal compliance requirements..."):
         st.session_state.messages.append({"role":"user","content":prompt})
@@ -464,26 +519,47 @@ def main_app():
             
             prog.text("⚖️ Generating structured legal response..."); bar.progress(75)
             
-            # Use GPT-5 Handler with Responses API
-            response_result = gpt5_handler.create_legal_response(
-                system_prompt=LEGAL_COMPLIANCE_SYSTEM_PROMPT,
-                user_query=prompt,
-                legal_context=context,
-                model=selected_model,
-                reasoning_effort=reasoning_effort,
-                max_tokens=2000,
-                temperature=0.1,
-                conversation_id=st.session_state.conversation_id
-            )
+            # Set defaults for legacy models
+            temp = temperature if not gpt5_handler.is_gpt5_model(selected_model) else 0.7
+            
+            # Prepare messages with system prompt and legal context
+            messages = [
+                {"role": "system", "content": f"{LEGAL_COMPLIANCE_SYSTEM_PROMPT}\n\nAvailable Legal Context:\n{context}"}
+            ]
+            
+            # Add conversation history
+            for msg in st.session_state.messages:
+                messages.append({"role": msg["role"], "content": msg["content"]})
+            
+            # Add current prompt
+            messages.append({"role": "user", "content": prompt})
+            
+            # Choose API based on model and user preference
+            if api_choice == "Responses API (Recommended)" and gpt5_handler.is_gpt5_model(selected_model):
+                # Use Responses API for GPT-5
+                full_prompt = f"{LEGAL_COMPLIANCE_SYSTEM_PROMPT}\n\nAvailable Legal Context:\n{context}\n\nUser Question: {prompt}"
+                response_result = gpt5_handler.create_responses_api(
+                    input_text=full_prompt,
+                    model=selected_model,
+                    reasoning_effort=reasoning_effort,
+                    verbosity=verbosity,
+                    max_tokens=max_tokens
+                )
+            else:
+                # Use Chat Completions API
+                response_result = gpt5_handler.create_chat_completion(
+                    messages=messages,
+                    model=selected_model,
+                    reasoning_effort=reasoning_effort,
+                    verbosity=verbosity,
+                    max_tokens=max_tokens,
+                    temperature=temp
+                )
             
             bar.progress(100); prog.text("✅ Analysis complete!")
             
             if response_result["success"]:
                 ai_response = response_result["content"]
-                
-                # Update conversation ID for stateful conversations
-                if "response_id" in response_result:
-                    st.session_state.conversation_id = response_result["response_id"]
                 
                 st.markdown(ai_response)
                 
@@ -494,9 +570,9 @@ def main_app():
                     "metadata": {
                         "model_used": response_result.get("model_used", selected_model),
                         "reasoning_effort": response_result.get("reasoning_effort", reasoning_effort),
+                        "verbosity": response_result.get("verbosity", verbosity),
                         "total_tokens": response_result.get("total_tokens", 0),
-                        "reasoning_tokens": response_result.get("reasoning_tokens", 0),
-                        "fallback_used": response_result.get("fallback_used", False)
+                        "finish_reason": response_result.get("finish_reason", "N/A")
                     }
                 }
                 st.session_state.messages.append(message_data)
