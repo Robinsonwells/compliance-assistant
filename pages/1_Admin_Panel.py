@@ -7,7 +7,7 @@ import uuid
 from sentence_transformers import SentenceTransformer
 from qdrant_client import QdrantClient
 from qdrant_client import QdrantClient, models
-from qdrant_client.models import Distance, VectorParams, PointStruct, Filter, FieldCondition, MatchValue
+from qdrant_client.models import Distance, VectorParams, PointStruct, Filter, FieldCondition, MatchValue, FieldIndex, FieldType
 from advanced_chunking import LegalSemanticChunker, extract_pdf_text, extract_docx_text
 import time
 
@@ -88,7 +88,7 @@ def init_admin_systems():
             collection_name=collection_name,
             vectors_config=VectorParams(size=384, distance=Distance.COSINE),
             field_indexes=[
-                models.FieldIndex(field_name="source_file", field_type=models.FieldType.KEYWORD)
+                FieldIndex(field_name="source_file", field_type=FieldType.KEYWORD)
             ]
         )
     
