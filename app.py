@@ -595,6 +595,13 @@ def main_app():
                         st.metric("Tokens", f"{msg['metadata'].get('total_tokens', 0):,}")
                     with col4:
                         st.metric("Jurisdictions", msg["metadata"].get("jurisdictions_covered", "Multiple"))
+                
+                # Display comprehensive sources if available in metadata
+                if "sources_results" in msg["metadata"] and "sources_context_metadata" in msg["metadata"]:
+                    display_comprehensive_sources(
+                        msg["metadata"]["sources_results"], 
+                        msg["metadata"]["sources_context_metadata"]
+                    )
     
     # Chat input with unlimited context emphasis
     if prompt := st.chat_input("Ask comprehensive legal questions - I'll analyze ALL relevant sources across jurisdictions..."):
@@ -690,7 +697,9 @@ def main_app():
                             "finish_reason": response_result.get("finish_reason", "N/A"),
                             "total_sources": len(results),
                             "jurisdictions_covered": f"{sum(1 for k, v in context_metadata.items() if k.endswith('_sources') and v > 0)} jurisdictions",
-                            "context_metadata": context_metadata
+                            "context_metadata": context_metadata,
+                            "sources_results": results,
+                            "sources_context_metadata": context_metadata
                         }
                     }
                     st.session_state.messages.append(message_data)
@@ -699,10 +708,6 @@ def main_app():
                     error_message = f"I apologize, but I encountered an error with comprehensive analysis: {response_result.get('error', 'Unknown error')}"
                     st.error(error_message)
                     st.session_state.messages.append({"role":"assistant","content":error_message})
-                
-                # Show all sources organized by jurisdiction
-                if results:
-                    display_comprehensive_sources(results, context_metadata)
                     
             except Exception as e:
                 st.error(f"❌ **SYSTEM ERROR**: {str(e)}")
