@@ -223,6 +223,7 @@ def check_authentication():
     user_manager, chunker, collection, embedding_model = init_systems()
     gpt5_handler = GPT5Handler()
     
+    if 'authenticated' in st.session_state and st.session_state.authenticated:
         session_id = get_session_id()
         if user_manager.is_session_valid(session_id, hours_timeout=24):
             user_manager.update_session_activity(session_id)
