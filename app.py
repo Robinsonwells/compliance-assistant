@@ -38,6 +38,12 @@ class GPT5Handler:
             "medium": {"description": "Balanced performance (default)"},
             "high": {"description": "Maximum accuracy, deep thinking"}
         }
+        
+        self.verbosity_levels = {
+            "low": "Concise responses",
+            "medium": "Balanced detail (default)",
+            "high": "Comprehensive explanations"
+        }
 
     def get_available_models(self) -> List[str]:
         """Return list of available model names"""
@@ -56,6 +62,7 @@ class GPT5Handler:
         messages: List[Dict],
         model: str = "gpt-5",
         reasoning_effort: str = "medium",
+        verbosity: str = "medium",
         max_tokens: int = 4000,
         temperature: float = 0.7
     ) -> Dict:
@@ -75,12 +82,14 @@ class GPT5Handler:
                 # ✅ GPT-5 uses reasoning_effort parameter
                 request_params["reasoning_effort"] = reasoning_effort
                 
-                # ❌ GPT-5 does NOT support temperature
+                # ❌ GPT-5 does NOT support temperature - it's fixed at 1.0
+                # ❌ Do not include temperature parameter for GPT-5
                 
             else:
                 # Legacy models (GPT-4o, etc.) use old parameters
                 request_params["max_tokens"] = max_tokens
                 request_params["temperature"] = temperature
+                # Legacy models don't support reasoning_effort or verbosity
             
             # Make API request
             response = self.client.chat.completions.create(**request_params)
@@ -90,7 +99,9 @@ class GPT5Handler:
                 "content": response.choices[0].message.content,
                 "model_used": response.model,
                 "total_tokens": response.usage.total_tokens if response.usage else 0,
-                "reasoning_effort": reasoning_effort if self.is_gpt5_model(model) else "N/A"
+                "reasoning_effort": reasoning_effort if self.is_gpt5_model(model) else "N/A",
+                "verbosity": verbosity if self.is_gpt5_model(model) else "N/A",
+                "finish_reason": response.choices[0].finish_reason
             }
             
         except Exception as e:
@@ -100,74 +111,69 @@ class GPT5Handler:
                 "content": None
             }
 
-@st.cache_resource
-def init_systems():
-    gpt5_handler = GPT5Handler()
-    user_manager = UserManager()
-    chunker = LegalSemanticChunker(os.getenv("OPENAI_API_KEY"))
-    
-    # Initialize local embedding model
-    embedding_model = SentenceTransformer('all-MiniLM-L6-v2')
-    
-    # Initialize Qdrant client
-    qdrant_url = os.getenv("QDRANT_URL")
-    qdrant_api_key = os.getenv("QDRANT_API_KEY")
-    
-    if not qdrant_url or not qdrant_api_key:
-        raise ValueError("QDRANT_URL and QDRANT_API_KEY environment variables must be set")
-    
-    vector_client = QdrantClient(
-        url=qdrant_url,
-        api_key=qdrant_api_key,
-    )
-    
-    collection_name = "legal_regulations"
-    
-    # Create collection if it doesn't exist
-    try:
-        vector_client.get_collection(collection_name)
-    except Exception:
-        vector_client.create_collection(
-            collection_name=collection_name,
-            vectors_config=VectorParams(size=384, distance=Distance.COSINE)
-        )
-        
-        # Create payload index for source_file field
-        vector_client.create_payload_index(
-            collection_name=collection_name,
-            field_name="source_file",
-            field_schema="keyword"
-        )
-    
-    collection = vector_client
-    return gpt5_handler, user_manager, chunker, collection, embedding_model
+    def create_responses_api(
+        self,
+        input_text: str,
+        model: str = "gpt-5",
+        reasoning_effort: str = "medium",
+        verbosity: str = "medium",
+        max_tokens: int = 4000
+    ) -> Dict:
+        """Create response using the newer Responses API (recommended for GPT-5)"""
+        try:
+            # Responses API has different parameter names
+            request_params = {
+                "model": model,
+                "input": [{"role": "user", "content": input_text}]
+            }
+            
+            if self.is_gpt5_model(model):
+                # ✅ Responses API uses max_output_tokens
+                request_params["max_output_tokens"] = max_tokens
+                
+                # ✅ Reasoning and verbosity parameters
+                request_params["reasoning"] = {"effort": reasoning_effort}
+                request_params["verbosity"] = verbosity
+                
+                # ❌ Still no temperature support
+            else:
+                # Legacy model fallback
+                request_params["max_output_tokens"] = max_tokens
+            
+            # Use Responses API
+            response = self.client.responses.create(**request_params)
+            
+            # Extract content from Responses API format
+            content = self._extract_responses_content(response)
+            
+            return {
+                "success": True,
+                "content": content,
+                "model_used": response.model if hasattr(response, 'model') else model,
+                "response_id": response.id if hasattr(response, 'id') else None,
+                "reasoning_effort": reasoning_effort,
+                "verbosity": verbosity
+            }
+            
+        except Exception as e:
+            return {
+                "success": False,
+                "error": str(e),
+                "content": None
+            }
 
-# Page config
-st.set_page_config(
-    page_title="Legal Compliance Assistant",
-    page_icon="⚖️",
-    layout="wide"
-)
-
-# Hide Streamlit branding
-st.markdown("""
-<style>
-    .stAppDeployButton {display:none;}
-    .stDecoration {display:none;}
-    #MainMenu {visibility: hidden;}
-    footer {visibility: hidden;}
-    header {visibility: hidden;}
-</style>
-""", unsafe_allow_html=True)
-
-def get_session_id():
-    if 'session_id' not in st.session_state:
-        st.session_state.session_id = str(uuid.uuid4())
-    return st.session_state.session_id
-
-def check_authentication():
-    """Check if user is authenticated"""
-    gpt5_handler, user_manager, chunker, collection, embedding_model = init_systems()
+    def _extract_responses_content(self, response) -> str:
+        """Extract content from Responses API response"""
+        try:
+            if hasattr(response, 'output') and response.output:
+                for output_item in response.output:
+                    if hasattr(output_item, 'content') and output_item.content:
+                        for content_item in output_item.content:
+                            if hasattr(content_item, 'text'):
+                                return content_item.text
+            return "No content extracted"
+        except Exception:
+            return str(response)
     if 'authenticated' in st.session_state and st.session_state.authenticated:
         session_id = get_session_id()
         if user_manager.is_session_valid(session_id, hours_timeout=24):
