@@ -88,13 +88,18 @@ def init_admin_systems():
             collection_name=collection_name,
             vectors_config=VectorParams(size=384, distance=Distance.COSINE)
         )
-        
-        # Create payload index for source_file field
+    
+    # Always ensure payload index for source_file field exists
+    try:
         client.create_payload_index(
             collection_name=collection_name,
             field_name="source_file",
             field_schema="keyword"
         )
+    except Exception as e:
+        # Index might already exist, which is fine
+        if "already exists" not in str(e).lower():
+            print(f"Warning: Could not create payload index: {e}")
     
     collection = client
     return user_manager, chunker, collection, embedding_model
