@@ -6,7 +6,8 @@ import os
 import uuid
 from sentence_transformers import SentenceTransformer
 from qdrant_client import QdrantClient
-import qdrant_client.models as qdrant_models
+from qdrant_client.models import Distance, VectorParams, PointStruct, Filter, FieldCondition, MatchValue
+from qdrant_client.http.models import FieldIndex, FieldType
 from advanced_chunking import LegalSemanticChunker, extract_pdf_text, extract_docx_text
 import time
 
@@ -14,13 +15,13 @@ def delete_file_chunks(qdrant_client, source_file: str) -> tuple[bool, str]:
     """Delete all chunks associated with a specific source file"""
     try:
         # First, get all points with this source file to count them
-        scroll_result = qdrant_client.scroll(
+        scroll_result = client.scroll(
             collection_name="legal_regulations",
-            scroll_filter=qdrant_models.Filter(
+            scroll_filter=Filter(
                 must=[
-                    qdrant_models.FieldCondition(
+                    FieldCondition(
                         key="source_file",
-                        match=qdrant_models.MatchValue(value=source_file)
+                        match=MatchValue(value=source_file)
                     )
                 ]
             ),
@@ -36,13 +37,13 @@ def delete_file_chunks(qdrant_client, source_file: str) -> tuple[bool, str]:
             return False, "No chunks found for this file"
         
         # Delete all points with this source file
-        qdrant_client.delete(
+        client.delete(
             collection_name="legal_regulations",
-            points_selector=qdrant_models.Filter(
+            points_selector=Filter(
                 must=[
-                    qdrant_models.FieldCondition(
+                    FieldCondition(
                         key="source_file",
-                        match=qdrant_models.MatchValue(value=source_file)
+                        match=MatchValue(value=source_file)
                     )
                 ]
             )
@@ -85,9 +86,9 @@ def init_admin_systems():
     except Exception:
         client.create_collection(
             collection_name=collection_name,
-            vectors_config=qdrant_models.VectorParams(size=384, distance=qdrant_models.Distance.COSINE),
+            vectors_config=VectorParams(size=384, distance=Distance.COSINE),
             field_indexes=[
-                qdrant_models.FieldIndex(field_name="source_file", field_type=qdrant_models.FieldType.KEYWORD)
+                FieldIndex(field_name="source_file", field_type=FieldType.KEYWORD)
             ]
         )
     
@@ -160,7 +161,7 @@ def process_uploaded_file(uploaded_file, chunker, qdrant_client, embedding_model
             }
             
             # Create point
-            point = qdrant_models.PointStruct(
+            point = PointStruct(
                 id=str(uuid.uuid4()),
                 vector=vector,
                 payload=payload
@@ -298,11 +299,11 @@ def main():
                             try:
                                 scroll_result = coll.scroll(
                                     collection_name="legal_regulations",
-                                    scroll_filter=qdrant_models.Filter(
+                                    scroll_filter=Filter(
                                         must=[
-                                            qdrant_models.FieldCondition(
+                                            FieldCondition(
                                                 key="source_file",
-                                                match=qdrant_models.MatchValue(value=fn)
+                                                match=MatchValue(value=fn)
                                             )
                                         ]
                                     ),
