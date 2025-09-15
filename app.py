@@ -10,13 +10,11 @@ from datetime import datetime, timedelta
 from user_management import UserManager
 from qdrant_client import QdrantClient
 from qdrant_client.models import Distance, VectorParams, PointStruct, Filter, FieldCondition, MatchValue
+from user_management import UserManager
+from qdrant_client import QdrantClient
+from qdrant_client.models import Distance, VectorParams, PointStruct, Filter, FieldCondition, MatchValue
 from advanced_chunking import LegalSemanticChunker, extract_pdf_text, extract_docx_text
 from system_prompts import LEGAL_COMPLIANCE_SYSTEM_PROMPT
-from typing import Dict, List, Optional
-import json
-
-# Load environment variables
-load_dotenv()
 
 class GPT5Handler:
     def __init__(self):
@@ -29,7 +27,6 @@ class GPT5Handler:
             "gpt-5": "Full reasoning model for complex tasks",
             "gpt-5-mini": "Balanced performance and cost", 
             "gpt-5-nano": "Ultra-fast responses",
-            "gpt-5-chat": "Advanced conversational model",
             "gpt-4o": "Fallback model (supports all parameters)"
         }
         
@@ -39,12 +36,6 @@ class GPT5Handler:
             "low": {"description": "Light reasoning"},
             "medium": {"description": "Balanced performance (default)"},
             "high": {"description": "Maximum accuracy, deep thinking"}
-        }
-        
-        self.verbosity_levels = {
-            "low": "Concise responses",
-            "medium": "Balanced detail (default)",
-            "high": "Comprehensive explanations"
         }
 
     def get_available_models(self) -> List[str]:
@@ -64,8 +55,7 @@ class GPT5Handler:
         messages: List[Dict],
         model: str = "gpt-5",
         reasoning_effort: str = "medium",
-        verbosity: str = "medium",
-        max_tokens: int = 2000,
+        max_tokens: int = 4000,
         temperature: float = 0.7
     ) -> Dict:
         """Create chat completion with proper parameter handling for GPT-5"""
@@ -84,17 +74,12 @@ class GPT5Handler:
                 # ✅ GPT-5 uses reasoning_effort parameter
                 request_params["reasoning_effort"] = reasoning_effort
                 
-                # ✅ GPT-5 uses verbosity parameter
-                request_params["verbosity"] = verbosity
-                
-                # ❌ GPT-5 does NOT support temperature - it's fixed at 1.0
-                # ❌ Do not include temperature parameter for GPT-5
+                # ❌ GPT-5 does NOT support temperature
                 
             else:
                 # Legacy models (GPT-4o, etc.) use old parameters
                 request_params["max_tokens"] = max_tokens
                 request_params["temperature"] = temperature
-                # Legacy models don't support reasoning_effort or verbosity
             
             # Make API request
             response = self.client.chat.completions.create(**request_params)
@@ -104,9 +89,7 @@ class GPT5Handler:
                 "content": response.choices[0].message.content,
                 "model_used": response.model,
                 "total_tokens": response.usage.total_tokens if response.usage else 0,
-                "reasoning_effort": reasoning_effort if self.is_gpt5_model(model) else "N/A",
-                "verbosity": verbosity if self.is_gpt5_model(model) else "N/A",
-                "finish_reason": response.choices[0].finish_reason
+                "reasoning_effort": reasoning_effort if self.is_gpt5_model(model) else "N/A"
             }
             
         except Exception as e:
@@ -115,70 +98,6 @@ class GPT5Handler:
                 "error": str(e),
                 "content": None
             }
-
-    def create_responses_api(
-        self,
-        input_text: str,
-        model: str = "gpt-5",
-        reasoning_effort: str = "medium",
-        verbosity: str = "medium",
-        max_tokens: int = 4000
-    ) -> Dict:
-        """Create response using the newer Responses API (recommended for GPT-5)"""
-        try:
-            # Responses API has different parameter names
-            request_params = {
-                "model": model,
-                "input": [{"role": "user", "content": input_text}]
-            }
-            
-            if self.is_gpt5_model(model):
-                # ✅ Responses API uses max_output_tokens
-                request_params["max_output_tokens"] = max_tokens
-                
-                # ✅ Reasoning and verbosity parameters
-                request_params["reasoning"] = {"effort": reasoning_effort}
-                request_params["verbosity"] = verbosity
-                
-                # ❌ Still no temperature support
-            else:
-                # Legacy model fallback
-                request_params["max_output_tokens"] = max_tokens
-            
-            # Use Responses API
-            response = self.client.responses.create(**request_params)
-            
-            # Extract content from Responses API format
-            content = self._extract_responses_content(response)
-            
-            return {
-                "success": True,
-                "content": content,
-                "model_used": response.model if hasattr(response, 'model') else model,
-                "response_id": response.id if hasattr(response, 'id') else None,
-                "reasoning_effort": reasoning_effort,
-                "verbosity": verbosity
-            }
-            
-        except Exception as e:
-            return {
-                "success": False,
-                "error": str(e),
-                "content": None
-            }
-
-    def _extract_responses_content(self, response) -> str:
-        """Extract content from Responses API response"""
-        try:
-            if hasattr(response, 'output') and response.output:
-                for output_item in response.output:
-                    if hasattr(output_item, 'content') and output_item.content:
-                        for content_item in output_item.content:
-                            if hasattr(content_item, 'text'):
-                                return content_item.text
-            return "No content extracted"
-        except Exception:
-            return str(response)
 
 @st.cache_resource
 def init_systems():
