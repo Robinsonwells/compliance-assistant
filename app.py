@@ -178,6 +178,7 @@ class GPT5Handler:
                                 return content_item.text
             return "No content extracted"
         except Exception:
+            return str(response)
 
 @st.cache_resource
 def init_systems():
