@@ -9,7 +9,7 @@ import time
 from datetime import datetime, timedelta
 from user_management import UserManager
 from qdrant_client import QdrantClient
-from qdrant_client.models import Distance, VectorParams, PointStruct
+from qdrant_client.models import Distance, VectorParams, PointStruct, FieldType, FieldIndex
 from advanced_chunking import LegalSemanticChunker, extract_pdf_text, extract_docx_text
 from system_prompts import LEGAL_COMPLIANCE_SYSTEM_PROMPT
 
@@ -46,6 +46,9 @@ def init_systems():
         vector_client.create_collection(
             collection_name=collection_name,
             vectors_config=VectorParams(size=384, distance=Distance.COSINE),
+            field_indexes=[
+                FieldIndex(field_name="source_file", field_type=FieldType.KEYWORD)
+            ]
         )
     
     collection = vector_client
@@ -276,14 +279,15 @@ Available Legal Context:
 {context}
 User Question: {prompt}"""
             prog.text("⚖️ Generating structured response..."); bar.progress(75)
-            response = client.responses.create(
-                model="gpt-5",
-                input=system_prompt,
-                reasoning={"effort":"high"},
-                text={"verbosity":"high"}
+            response = client.chat.completions.create(
+                model="gpt-4o",
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": prompt}
+                ]
             )
             bar.progress(100); prog.text("✅ Analysis complete!")
-            ai_response = response.output_text
+            ai_response = response.choices[0].message.content
             st.markdown(ai_response)
             st.session_state.messages.append({"role":"assistant","content":ai_response})
             if results:
