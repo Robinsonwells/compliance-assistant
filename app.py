@@ -175,6 +175,52 @@ class GPT5Handler:
         except Exception:
             return str(response)
     if 'authenticated' in st.session_state and st.session_state.authenticated:
+@st.cache_resource
+def init_systems():
+    """Initialize all system components"""
+    user_manager = UserManager()
+    chunker = LegalSemanticChunker(os.getenv("OPENAI_API_KEY"))
+    
+    # Initialize local embedding model
+    embedding_model = SentenceTransformer('all-MiniLM-L6-v2')
+    
+    # Initialize Qdrant client
+    qdrant_url = os.getenv("QDRANT_URL")
+    qdrant_api_key = os.getenv("QDRANT_API_KEY")
+    
+    if not qdrant_url or not qdrant_api_key:
+        raise ValueError("QDRANT_URL and QDRANT_API_KEY environment variables must be set")
+    
+    client = QdrantClient(
+        url=qdrant_url,
+        api_key=qdrant_api_key,
+    )
+    
+    collection_name = "legal_regulations"
+    
+    # Create collection if it doesn't exist
+    try:
+        client.get_collection(collection_name)
+    except Exception:
+        client.create_collection(
+            collection_name=collection_name,
+            vectors_config=VectorParams(size=384, distance=Distance.COSINE)
+        )
+    
+    return user_manager, chunker, client, embedding_model
+
+def get_session_id():
+    """Get or create session ID"""
+    if 'session_id' not in st.session_state:
+        st.session_state.session_id = str(uuid.uuid4())
+    return st.session_state.session_id
+
+def check_authentication():
+    """Check user authentication and initialize systems"""
+    # Initialize systems
+    user_manager, chunker, collection, embedding_model = init_systems()
+    gpt5_handler = GPT5Handler()
+    
         session_id = get_session_id()
         if user_manager.is_session_valid(session_id, hours_timeout=24):
             user_manager.update_session_activity(session_id)
@@ -184,6 +230,7 @@ class GPT5Handler:
             st.error("🕐 Your session has expired. Please log in again.")
             time.sleep(2)
             st.rerun()
+    
     st.markdown("# 🔐 Legal Compliance Assistant")
     st.markdown("**Professional AI-Powered Legal Analysis**")
     st.markdown("---")
