@@ -38,12 +38,6 @@ class GPT5Handler:
             "medium": {"description": "Balanced performance (default)"},
             "high": {"description": "Maximum accuracy, deep thinking"}
         }
-        
-        self.verbosity_levels = {
-            "low": "Concise responses",
-            "medium": "Balanced detail (default)",
-            "high": "Comprehensive explanations"
-        }
 
     def get_available_models(self) -> List[str]:
         """Return list of available model names"""
@@ -62,7 +56,6 @@ class GPT5Handler:
         messages: List[Dict],
         model: str = "gpt-5",
         reasoning_effort: str = "medium",
-        verbosity: str = "medium",
         max_tokens: int = 4000,
         temperature: float = 0.7
     ) -> Dict:
@@ -100,7 +93,6 @@ class GPT5Handler:
                 "model_used": response.model,
                 "total_tokens": response.usage.total_tokens if response.usage else 0,
                 "reasoning_effort": reasoning_effort if self.is_gpt5_model(model) else "N/A",
-                "verbosity": verbosity if self.is_gpt5_model(model) else "N/A",
                 "finish_reason": response.choices[0].finish_reason
             }
             
@@ -116,7 +108,6 @@ class GPT5Handler:
         input_text: str,
         model: str = "gpt-5",
         reasoning_effort: str = "medium",
-        verbosity: str = "medium",
         max_tokens: int = 4000
     ) -> Dict:
         """Create response using the newer Responses API (recommended for GPT-5)"""
@@ -131,9 +122,8 @@ class GPT5Handler:
                 # ✅ Responses API uses max_output_tokens
                 request_params["max_output_tokens"] = max_tokens
                 
-                # ✅ Reasoning and verbosity parameters
+                # ✅ Reasoning parameter structure
                 request_params["reasoning"] = {"effort": reasoning_effort}
-                request_params["verbosity"] = verbosity
                 
                 # ❌ Still no temperature support
             else:
@@ -151,8 +141,7 @@ class GPT5Handler:
                 "content": content,
                 "model_used": response.model if hasattr(response, 'model') else model,
                 "response_id": response.id if hasattr(response, 'id') else None,
-                "reasoning_effort": reasoning_effort,
-                "verbosity": verbosity
+                "reasoning_effort": reasoning_effort
             }
             
         except Exception as e:
@@ -267,29 +256,30 @@ def check_authentication():
     return False, None, None, None, None, None
 
 def search_knowledge_base(qdrant_client, embedding_model, query, n_results=5):
-    """Search the legal knowledge base"""
+    """Search the legal knowledge base using modern query_points method"""
     try:
         # Generate embedding for the query using local model
-        query_vector = embedding_model.encode([query])[0].tolist()
+        query_vector = embedding_model.encode([query]).tolist()
         
-        # Search in Qdrant
-        search_results = qdrant_client.search(
+        # ✅ FIXED: Use query_points instead of deprecated search method
+        search_results = qdrant_client.query_points(
             collection_name="legal_regulations",
-            query_vector=query_vector,
+            query=query_vector,
             limit=n_results,
             with_payload=True
         )
         
         # Convert results to match original format
         results = []
-        for result in search_results:
+        for result in search_results.points:
             doc = result.payload.get('text', '')
             meta = {k: v for k, v in result.payload.items() if k != 'text'}
             dist = 1 - result.score  # Convert similarity to distance
             results.append((doc, meta, dist))
         
         return results
-    except Exception:
+    except Exception as e:
+        print(f"Search error: {e}")
         return []
 
 def process_uploaded_file(uploaded_file, chunker, qdrant_client, embedding_model):
@@ -428,13 +418,6 @@ def main_app():
                 help="Controls how much the model 'thinks'"
             )
             
-            verbosity = st.selectbox(
-                "Verbosity:",
-                options=list(gpt5_handler.verbosity_levels.keys()),
-                index=1,
-                help="Controls response length and detail"
-            )
-            
             # API Choice
             api_choice = st.radio(
                 "API Type:",
@@ -443,11 +426,11 @@ def main_app():
             )
             
             st.warning("⚠️ GPT-5 does not support temperature (fixed at 1.0)")
+            st.info("ℹ️ Verbosity control has been removed from GPT-5")
             
         else:
             st.info("ℹ️ Legacy Model - Uses traditional parameters")
             reasoning_effort = "medium"
-            verbosity = "medium"
             api_choice = "Chat Completions API"
             
             # Legacy model controls
@@ -472,14 +455,12 @@ def main_app():
             # Show GPT-5 metadata for assistant messages
             if msg["role"] == "assistant" and "metadata" in msg:
                 with st.expander("🔍 Response Details", expanded=False):
-                    col1, col2, col3, col4 = st.columns(4)
+                    col1, col2, col3 = st.columns(3)
                     with col1:
                         st.metric("Model", msg["metadata"].get("model_used", "N/A"))
                     with col2:
                         st.metric("Reasoning Effort", msg["metadata"].get("reasoning_effort", "N/A"))
                     with col3:
-                        st.metric("Verbosity", msg["metadata"].get("verbosity", "N/A"))
-                    with col4:
                         st.metric("Tokens", msg["metadata"].get("total_tokens", 0))
                     
     
@@ -528,7 +509,6 @@ def main_app():
                     messages=messages,
                     model=selected_model,
                     reasoning_effort=reasoning_effort,
-                    verbosity=verbosity,
                     max_tokens=max_tokens,
                     temperature=temp
                 )
