@@ -6,9 +6,7 @@ import os
 import uuid
 from sentence_transformers import SentenceTransformer
 from qdrant_client import QdrantClient
-from qdrant_client import QdrantClient, models
-from qdrant_client.models import Distance, VectorParams, PointStruct, Filter, FieldCondition, MatchValue
-from qdrant_client.http.models import FieldIndex, FieldType
+from qdrant_client import models
 from advanced_chunking import LegalSemanticChunker, extract_pdf_text, extract_docx_text
 import time
 
@@ -18,11 +16,11 @@ def delete_file_chunks(qdrant_client, source_file: str) -> tuple[bool, str]:
         # First, get all points with this source file to count them
         scroll_result = qdrant_client.scroll(
             collection_name="legal_regulations",
-            scroll_filter=Filter(
+            scroll_filter=models.Filter(
                 must=[
-                    FieldCondition(
+                    models.FieldCondition(
                         key="source_file",
-                        match=MatchValue(value=source_file)
+                        match=models.MatchValue(value=source_file)
                     )
                 ]
             ),
@@ -40,11 +38,11 @@ def delete_file_chunks(qdrant_client, source_file: str) -> tuple[bool, str]:
         # Delete all points with this source file
         qdrant_client.delete(
             collection_name="legal_regulations",
-            points_selector=Filter(
+            points_selector=models.Filter(
                 must=[
-                    FieldCondition(
+                    models.FieldCondition(
                         key="source_file",
-                        match=MatchValue(value=source_file)
+                        match=models.MatchValue(value=source_file)
                     )
                 ]
             )
@@ -87,9 +85,9 @@ def init_admin_systems():
     except Exception:
         client.create_collection(
             collection_name=collection_name,
-            vectors_config=VectorParams(size=384, distance=Distance.COSINE),
+            vectors_config=models.VectorParams(size=384, distance=models.Distance.COSINE),
             field_indexes=[
-                FieldIndex(field_name="source_file", field_type=FieldType.KEYWORD)
+                models.FieldIndex(field_name="source_file", field_type=models.FieldType.KEYWORD)
             ]
         )
     
@@ -162,7 +160,7 @@ def process_uploaded_file(uploaded_file, chunker, qdrant_client, embedding_model
             }
             
             # Create point
-            point = PointStruct(
+            point = models.PointStruct(
                 id=str(uuid.uuid4()),
                 vector=vector,
                 payload=payload
@@ -300,11 +298,11 @@ def main():
                             try:
                                 scroll_result = coll.scroll(
                                     collection_name="legal_regulations",
-                                    scroll_filter=Filter(
+                                    scroll_filter=models.Filter(
                                         must=[
-                                            FieldCondition(
+                                            models.FieldCondition(
                                                 key="source_file",
-                                                match=MatchValue(value=fn)
+                                                match=models.MatchValue(value=fn)
                                             )
                                         ]
                                     ),

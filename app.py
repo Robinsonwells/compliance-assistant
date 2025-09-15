@@ -10,8 +10,7 @@ from datetime import datetime, timedelta
 from user_management import UserManager
 from qdrant_client import QdrantClient
 from qdrant_client import QdrantClient, models
-from qdrant_client.models import Distance, VectorParams, PointStruct
-from qdrant_client.http.models import FieldIndex, FieldType
+from qdrant_client import models
 from advanced_chunking import LegalSemanticChunker, extract_pdf_text, extract_docx_text
 from system_prompts import LEGAL_COMPLIANCE_SYSTEM_PROMPT
 
@@ -47,9 +46,9 @@ def init_systems():
     except Exception:
         vector_client.create_collection(
             collection_name=collection_name,
-            vectors_config=VectorParams(size=384, distance=Distance.COSINE),
+            vectors_config=models.VectorParams(size=384, distance=models.Distance.COSINE),
             field_indexes=[
-                FieldIndex(field_name="source_file", field_type=FieldType.KEYWORD)
+                models.FieldIndex(field_name="source_file", field_type=models.FieldType.KEYWORD)
             ]
         )
     
@@ -197,7 +196,7 @@ def process_uploaded_file(uploaded_file, chunker, qdrant_client, embedding_model
             }
             
             # Create point
-            point = PointStruct(
+            point = models.PointStruct(
                 id=str(uuid.uuid4()),
                 vector=vector,
                 payload=payload
