@@ -456,18 +456,30 @@ class LegalSemanticChunker:
         for chunk in chunks:
             citation = self._create_citation(doc_metadata, chunk['section_number'])
             
-            final_chunks.append({
+            # Create metadata dictionary separately
+            chunk_metadata = {
+                'chunk_id': f"chunk_{chunk_id}",
+                'citation': citation,
+                'section_number': chunk['section_number'],
+                'section_title': chunk['section_title'],
+                'subsection_index': chunk['subsection_index'],
+                'semantic_type': chunk['semantic_type'],
+                'version': chunk.get('version', ''),
+                'jurisdiction': detect_jurisdiction(chunk['text']),
+                'law_type': detect_law_type(chunk['text']),
+                'industry_specific': detect_industry_specific(chunk['text']),
+                'federal_vs_state': classify_federal_state(chunk['text']),
+                'complexity_level': assess_content_complexity(chunk['text'])
+            }
+            
+            # Create final chunk data separately
+            final_chunk_data = {
                 'text': chunk['text'],
-                'metadata': {
-                        'version': chunk.get('version', ''),
-                        'jurisdiction': detect_jurisdiction(chunk['text']),
-                        'law_type': detect_law_type(chunk['text']),
-                        'industry_specific': detect_industry_specific(chunk['text']),
-                        'federal_vs_state': classify_federal_state(chunk['text']),
-                        'complexity_level': assess_content_complexity(chunk['text'])
-                    }
-                }
-            })
+                'metadata': chunk_metadata
+            }
+            
+            # Append to final chunks
+            final_chunks.append(final_chunk_data)
             chunk_id += 1
         
         return final_chunks
