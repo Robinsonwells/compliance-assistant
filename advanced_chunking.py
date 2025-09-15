@@ -494,26 +494,28 @@ class LegalSemanticChunker:
                 current_chunk += sentence + ". "
             else:
                 if current_chunk:
-                    chunks.append({
+                    chunk_data = {
                         'text': current_chunk.strip(),
                         'section_number': str(chunk_id),
                         'section_title': f'Chunk {chunk_id}',
                         'subsection_index': '0',
                         'semantic_type': 'basic',
                         'version': ''
-                    })
+                    }
+                    chunks.append(chunk_data)
                     chunk_id += 1
                 current_chunk = sentence + ". "
 
         if current_chunk:
-            chunks.append({
+            chunk_data = {
                 'text': current_chunk.strip(),
                 'section_number': str(chunk_id),
                 'section_title': f'Chunk {chunk_id}',
                 'subsection_index': '0',
                 'semantic_type': 'basic',
                 'version': ''
-            })
+            }
+            chunks.append(chunk_data)
 
         return chunks
 
