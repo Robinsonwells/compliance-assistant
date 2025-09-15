@@ -12,13 +12,148 @@ from qdrant_client import QdrantClient
 from qdrant_client.models import Distance, VectorParams, PointStruct, Filter, FieldCondition, MatchValue
 from advanced_chunking import LegalSemanticChunker, extract_pdf_text, extract_docx_text
 from system_prompts import LEGAL_COMPLIANCE_SYSTEM_PROMPT
+from typing import Dict, List, Optional
+import json
 
 # Load environment variables
 load_dotenv()
 
+class GPT5Handler:
+    def __init__(self):
+        self.client = OpenAI(
+            api_key=os.getenv("OPENAI_API_KEY")
+        )
+        
+        # ✅ CORRECT - Keep this as a dictionary, don't overwrite it
+        self.models = {
+            "gpt-5": "Full reasoning model for complex tasks",
+            "gpt-5-mini": "Balanced performance and cost", 
+            "gpt-5-nano": "Ultra-fast responses",
+            "gpt-5-chat": "Advanced conversational model"
+        }
+        
+        # Reasoning effort levels
+        self.reasoning_efforts = {
+            "minimal": {"description": "Fastest responses", "cost": "lowest", "speed": "very fast", "use_case": "Simple definitions"},
+            "low": {"description": "Light reasoning", "cost": "low", "speed": "fast", "use_case": "Basic compliance questions"},
+            "medium": {"description": "Balanced performance", "cost": "medium", "speed": "moderate", "use_case": "Standard legal analysis"},
+            "high": {"description": "Maximum accuracy", "cost": "highest", "speed": "slow", "use_case": "Complex multi-jurisdictional issues"}
+        }
+
+    def create_legal_response(
+        self,
+        system_prompt: str,
+        user_query: str,
+        legal_context: str,
+        model: str = "gpt-5",
+        reasoning_effort: str = "high",
+        max_tokens: int = 2000,
+        temperature: float = 0.1,
+        conversation_id: Optional[str] = None
+    ) -> Dict:
+        """Create GPT-5 legal response using Responses API with fallback to Chat Completions"""
+        
+        # Prepare the full prompt with legal context
+        full_prompt = f"""{system_prompt}
+
+Available Legal Context:
+{legal_context}
+
+User Question: {user_query}"""
+        
+        # Try Responses API first (GPT-5 preferred method)
+        try:
+            request_params = {
+                "model": model,
+                "input": [{"role": "user", "content": full_prompt}],
+                "reasoning": {"effort": reasoning_effort},
+                "max_output_tokens": max_tokens,
+                "temperature": temperature
+            }
+            
+            # Add conversation continuity if available
+            if conversation_id:
+                request_params["previous_response_id"] = conversation_id
+            
+            # Make Responses API request
+            response = self.client.responses.create(**request_params)
+            
+            return {
+                "success": True,
+                "content": self._extract_content(response),
+                "response_id": getattr(response, 'id', None),
+                "model_used": getattr(response, 'model', model),
+                "reasoning_tokens": self._get_reasoning_tokens(response),
+                "total_tokens": getattr(response.usage, 'total_tokens', 0) if hasattr(response, 'usage') else 0,
+                "reasoning_effort": reasoning_effort,
+                "fallback_used": False
+            }
+            
+        except Exception as responses_error:
+            # Fallback to Chat Completions API
+            try:
+                messages = [
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": f"Legal Context:\n{legal_context}\n\nQuestion: {user_query}"}
+                ]
+                
+                request_params = {
+                    "model": model,
+                    "messages": messages,
+                    "max_tokens": max_tokens,
+                    "temperature": temperature
+                }
+                
+                # Add reasoning parameter for GPT-5 models
+                if model.startswith("gpt-5"):
+                    request_params["reasoning_effort"] = reasoning_effort
+                
+                response = self.client.chat.completions.create(**request_params)
+                
+                return {
+                    "success": True,
+                    "content": response.choices[0].message.content,
+                    "model_used": response.model,
+                    "total_tokens": response.usage.total_tokens if response.usage else 0,
+                    "reasoning_tokens": 0,
+                    "reasoning_effort": reasoning_effort,
+                    "fallback_used": True
+                }
+                
+            except Exception as chat_error:
+                return {
+                    "success": False,
+                    "error": f"Both APIs failed. Responses API: {str(responses_error)}, Chat API: {str(chat_error)}",
+                    "content": None
+                }
+
+    def _extract_content(self, response) -> str:
+        """Extract text content from Responses API response"""
+        try:
+            if hasattr(response, 'output') and response.output:
+                for output_item in response.output:
+                    if hasattr(output_item, 'content') and output_item.content:
+                        for content_item in output_item.content:
+                            if hasattr(content_item, 'text'):
+                                return content_item.text
+            return "No content extracted from response"
+        except Exception:
+            return str(response)
+
+    def _get_reasoning_tokens(self, response) -> int:
+        """Extract reasoning token count"""
+        try:
+            if (hasattr(response, 'usage') and 
+                hasattr(response.usage, 'output_tokens_details') and
+                hasattr(response.usage.output_tokens_details, 'reasoning_tokens')):
+                return response.usage.output_tokens_details.reasoning_tokens
+            return 0
+        except Exception:
+            return 0
+
 @st.cache_resource
 def init_systems():
-    client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+    gpt5_handler = GPT5Handler()
     user_manager = UserManager()
     chunker = LegalSemanticChunker(os.getenv("OPENAI_API_KEY"))
     
@@ -56,7 +191,7 @@ def init_systems():
         )
     
     collection = vector_client
-    return client, user_manager, chunker, collection, embedding_model
+    return gpt5_handler, user_manager, chunker, collection, embedding_model
 
 # Page config
 st.set_page_config(
@@ -83,12 +218,12 @@ def get_session_id():
 
 def check_authentication():
     """Check if user is authenticated"""
-    client, user_manager, chunker, collection, embedding_model = init_systems()
+    gpt5_handler, user_manager, chunker, collection, embedding_model = init_systems()
     if 'authenticated' in st.session_state and st.session_state.authenticated:
         session_id = get_session_id()
         if user_manager.is_session_valid(session_id, hours_timeout=24):
             user_manager.update_session_activity(session_id)
-            return True, client, user_manager, chunker, collection, embedding_model
+            return True, gpt5_handler, user_manager, chunker, collection, embedding_model
         else:
             st.session_state.authenticated = False
             st.error("🕐 Your session has expired. Please log in again.")
