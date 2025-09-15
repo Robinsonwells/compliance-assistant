@@ -495,13 +495,12 @@ class LegalSemanticChunker:
             else:
                 if current_chunk:
                     chunks.append({
-                            'version': chunk.get('version', ''),
-                        'metadata': {
-                            'chunk_id': chunk_id,
-                            'section': f'Chunk {chunk_id}',
-                            'semantic_density': calculate_semantic_density(current_chunk),
-                            'section_type': 'basic'
-                        }
+                        'text': current_chunk.strip(),
+                        'section_number': str(chunk_id),
+                        'section_title': f'Chunk {chunk_id}',
+                        'subsection_index': '0',
+                        'semantic_type': 'basic',
+                        'version': ''
                     })
                     chunk_id += 1
                 current_chunk = sentence + ". "
@@ -509,18 +508,11 @@ class LegalSemanticChunker:
         if current_chunk:
             chunks.append({
                 'text': current_chunk.strip(),
-                'text': current_chunk.strip(),
-                'metadata': {
-                    'chunk_id': chunk_id,
-                    'section': f'Chunk {chunk_id}',
-                    'semantic_density': calculate_semantic_density(current_chunk),
-                    'section_type': 'basic',
-                    'jurisdiction': detect_jurisdiction(current_chunk),
-                    'law_type': detect_law_type(current_chunk),
-                    'industry_specific': detect_industry_specific(current_chunk),
-                    'federal_vs_state': classify_federal_state(current_chunk),
-                    'complexity_level': assess_content_complexity(current_chunk)
-                }
+                'section_number': str(chunk_id),
+                'section_title': f'Chunk {chunk_id}',
+                'subsection_index': '0',
+                'semantic_type': 'basic',
+                'version': ''
             })
 
         return chunks
