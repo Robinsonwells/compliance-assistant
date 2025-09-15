@@ -14,8 +14,90 @@ from user_management import UserManager
 from qdrant_client import QdrantClient
 from qdrant_client.models import Distance, VectorParams, PointStruct, Filter, FieldCondition, MatchValue
 from advanced_chunking import LegalSemanticChunker, extract_pdf_text, extract_docx_text
-from system_prompts import LEGAL_COMPLIANCE_SYSTEM_PROMPT
+from system_prompts import ENHANCED_LEGAL_COMPLIANCE_SYSTEM_PROMPT, format_complex_scenario_response
 from typing import Dict, List, Optional
+
+def assess_query_complexity(query):
+    """Warn users about complex scenarios"""
+    complexity_indicators = [
+        'multiple states', 'cross state lines', 'interstate',
+        'different jurisdictions', 'tri-state', 'federal and state'
+    ]
+    
+    is_complex = any(indicator in query.lower() for indicator in complexity_indicators)
+    
+    if is_complex:
+        st.warning("🚨 **COMPLEX MULTI-JURISDICTIONAL QUERY DETECTED**")
+        st.info("⚖️ This analysis will consider federal baseline laws and multiple state requirements. Response may take longer for comprehensive analysis.")
+        
+    return is_complex
+
+def display_sources_by_complexity(results, context_metadata):
+    """Better source organization for complex queries"""
+    
+    if context_metadata['total_sources'] > 20:
+        st.markdown("### 📚 **COMPREHENSIVE SOURCE ANALYSIS**")
+        
+        # Show federal vs state breakdown
+        col1, col2, col3, col4 = st.columns(4)
+        with col1:
+            st.metric("Federal Sources", context_metadata.get('federal_sources', 0))
+        with col2:
+            st.metric("NY Sources", context_metadata.get('ny_sources', 0))
+        with col3:
+            st.metric("NJ Sources", context_metadata.get('nj_sources', 0))
+        with col4:
+            st.metric("CT Sources", context_metadata.get('ct_sources', 0))
+        
+        # Warn about gaps
+        if context_metadata.get('federal_sources', 0) == 0:
+            st.error("⚠️ **FEDERAL LAW GAP**: No federal sources found. Add federal regulations to knowledge base for complete analysis.")
+    else:
+        st.markdown("### 📚 **SOURCE ANALYSIS**")
+        
+        # Show basic breakdown
+        col1, col2 = st.columns(2)
+        with col1:
+            st.metric("Total Sources", context_metadata['total_sources'])
+        with col2:
+            jurisdictions_found = []
+            if context_metadata.get('ny_sources', 0) > 0:
+                jurisdictions_found.append('NY')
+            if context_metadata.get('nj_sources', 0) > 0:
+                jurisdictions_found.append('NJ')
+            if context_metadata.get('ct_sources', 0) > 0:
+                jurisdictions_found.append('CT')
+            if context_metadata.get('federal_sources', 0) > 0:
+                jurisdictions_found.append('Federal')
+            st.metric("Jurisdictions", ', '.join(jurisdictions_found) if jurisdictions_found else 'Mixed')
+
+def detect_knowledge_gaps(query, context_metadata):
+    """Detect and warn about knowledge gaps"""
+    gaps = []
+    
+    query_lower = query.lower()
+    
+    # Check for missing jurisdictions
+    if 'connecticut' in query_lower or 'ct' in query_lower:
+        if context_metadata.get('ct_sources', 0) < 3:
+            gaps.append("Connecticut law coverage may be incomplete")
+    
+    # Check for multi-state without federal
+    if any(term in query_lower for term in ['interstate', 'multiple states', 'cross state']):
+        if context_metadata.get('federal_sources', 0) == 0:
+            gaps.append("Federal interstate commerce guidance not available")
+    
+    # Check for industry-specific needs
+    if 'transportation' in query_lower or 'logistics' in query_lower:
+        gaps.append("DOT transportation regulations not in current database")
+    
+    if 'construction' in query_lower or 'prevailing wage' in query_lower:
+        gaps.append("Davis-Bacon Act and prevailing wage regulations not in current database")
+    
+    if 'federal contractor' in query_lower or 'government contractor' in query_lower:
+        gaps.append("Federal contractor requirements not in current database")
+    
+    return gaps
 
 class GPT5Handler:
     def __init__(self):
@@ -474,7 +556,8 @@ def main_app():
             collection_info = collection.get_collection("legal_regulations")
             cnt = collection_info.points_count
             st.write(f"**Legal Provisions:** {cnt}")
-            st.write("**Jurisdictions:** NY, NJ, CT, Federal")
+            st.write("**Jurisdictions:** NY, NJ, CT")
+            st.write("**Federal Coverage:** Limited")
             st.write("**Context Limit:** UNLIMITED")
         except:
             st.write("**Status:** Initializing...")
@@ -497,6 +580,9 @@ def main_app():
     
     # Chat input with unlimited context emphasis
     if prompt := st.chat_input("Ask comprehensive legal questions - I'll analyze ALL relevant sources across jurisdictions..."):
+        # Assess query complexity and show warnings
+        complexity = assess_query_complexity(prompt)
+        
         st.session_state.messages.append({"role":"user","content":prompt})
         st.chat_message("user").markdown(prompt)
         
@@ -510,10 +596,18 @@ def main_app():
             
             # Create comprehensive context
             comprehensive_context, context_metadata = get_comprehensive_legal_context(results, prompt)
+            
+            # Detect and display knowledge gaps
+            gaps = detect_knowledge_gaps(prompt, context_metadata)
+            if gaps:
+                st.warning("📋 **KNOWLEDGE BASE LIMITATIONS:**")
+                for gap in gaps:
+                    st.write(f"• {gap}")
+            
             prog.text("🧠 **DETERMINISTIC ANALYSIS**: GPT-5 processing comprehensive context..."); bar.progress(60)
             
             # ✅ ANTI-HALLUCINATION SYSTEM PROMPT
-            anti_hallucination_prompt = f"""{LEGAL_COMPLIANCE_SYSTEM_PROMPT}
+            anti_hallucination_prompt = f"""{ENHANCED_LEGAL_COMPLIANCE_SYSTEM_PROMPT}
 
 **ZERO HALLUCINATION MODE - CRITICAL INSTRUCTIONS:**
 - Base ALL analysis STRICTLY on the provided legal context
@@ -567,19 +661,40 @@ def main_app():
                 st.error(error_message)
                 st.session_state.messages.append({"role":"assistant","content":error_message})
             
-            # Show all sources organized by jurisdiction
+            # Show sources with enhanced organization
             if results:
-                st.markdown("### 📚 **ALL SOURCES ANALYZED**")
+                display_sources_by_complexity(results, context_metadata)
                 st.info(f"🔍 **Comprehensive Review**: {len(results)} legal sources examined across jurisdictions")
                 
                 # Group by jurisdiction for display
-                jurisdictions = ['NY', 'NJ', 'CT', 'Federal', 'Multi-State']
+                jurisdictions = ['Federal', 'NY', 'NJ', 'CT', 'Multi-State']
                 for jurisdiction in jurisdictions:
-                    jurisdiction_results = [r for r in results if jurisdiction.lower() in r[1].get('source_file', '').lower() or jurisdiction.lower() in r[0].lower()]
+                    if jurisdiction == 'Federal':
+                        jurisdiction_results = [r for r in results if any(fed_term in r[1].get('source_file', '').lower() or fed_term in r[0].lower() 
+                                                                         for fed_term in ['federal', 'usc', 'cfr', 'flsa', 'fmla'])]
+                    else:
+                        jurisdiction_results = [r for r in results if jurisdiction.lower() in r[1].get('source_file', '').lower() or jurisdiction.lower() in r[0].lower()]
+                    
                     if jurisdiction_results:
                         with st.expander(f"📖 {jurisdiction} Sources ({len(jurisdiction_results)})", expanded=False):
                             for i, (doc, meta, dist) in enumerate(jurisdiction_results[:10]):  # Show top 10 per jurisdiction
                                 st.text_area(f"{jurisdiction}-{i+1} (Relevance: {dist:.3f})", doc, height=100, key=f"{jurisdiction}_{i}_{hash(doc[:50])}")
+                
+                # Show metadata summary
+                with st.expander("🔍 **Analysis Metadata**", expanded=False):
+                    st.json({
+                        "Query Complexity": "High" if complexity else "Standard",
+                        "Total Sources Analyzed": len(results),
+                        "Jurisdiction Breakdown": {
+                            "Federal": context_metadata.get('federal_sources', 0),
+                            "NY": context_metadata.get('ny_sources', 0),
+                            "NJ": context_metadata.get('nj_sources', 0),
+                            "CT": context_metadata.get('ct_sources', 0),
+                            "Multi-State": context_metadata.get('multi_state_sources', 0)
+                        },
+                        "Knowledge Gaps Detected": len(gaps),
+                        "Analysis Type": "Multi-Jurisdictional" if complexity else "Standard"
+                    })
 
 if __name__ == "__main__":
     main_app()

@@ -9,6 +9,88 @@ import re
 import xml.etree.ElementTree as ET
 import logging
 
+def detect_jurisdiction(text: str) -> str:
+    """Detect jurisdiction from legal text"""
+    text_lower = text.lower()
+    
+    # Check for specific state indicators
+    if any(ny_term in text_lower for ny_term in ['new york', 'ny admin', 'nycrr', 'ny labor law']):
+        return 'NY'
+    elif any(nj_term in text_lower for nj_term in ['new jersey', 'nj admin', 'njac', 'nj labor']):
+        return 'NJ'
+    elif any(ct_term in text_lower for ct_term in ['connecticut', 'ct admin', 'conn. gen. stat', 'ct labor']):
+        return 'CT'
+    elif any(fed_term in text_lower for fed_term in ['federal', 'usc', 'cfr', 'flsa', 'fmla', 'department of labor']):
+        return 'Federal'
+    else:
+        return 'Multi-State'
+
+def detect_law_type(text: str) -> str:
+    """Detect type of legal document"""
+    text_lower = text.lower()
+    
+    if any(term in text_lower for term in ['statute', 'general statutes', 'labor law']):
+        return 'statute'
+    elif any(term in text_lower for term in ['regulation', 'admin code', 'administrative code', 'cfr']):
+        return 'regulation'
+    elif any(term in text_lower for term in ['guidance', 'interpretation', 'advisory', 'bulletin']):
+        return 'guidance'
+    elif any(term in text_lower for term in ['case law', 'court decision', 'ruling']):
+        return 'case_law'
+    else:
+        return 'regulation'  # Default assumption
+
+def detect_industry_specific(text: str) -> str:
+    """Detect industry-specific legal requirements"""
+    text_lower = text.lower()
+    
+    if any(term in text_lower for term in ['transportation', 'trucking', 'logistics', 'dot', 'hours of service']):
+        return 'transportation'
+    elif any(term in text_lower for term in ['healthcare', 'medical', 'hospital', 'nursing']):
+        return 'healthcare'
+    elif any(term in text_lower for term in ['construction', 'building', 'prevailing wage', 'davis-bacon']):
+        return 'construction'
+    elif any(term in text_lower for term in ['government contractor', 'federal contractor', 'service contract act']):
+        return 'government_contractor'
+    elif any(term in text_lower for term in ['restaurant', 'food service', 'hospitality', 'tipped employee']):
+        return 'hospitality'
+    else:
+        return 'general'
+
+def classify_federal_state(text: str) -> str:
+    """Classify whether law is federal or state level"""
+    text_lower = text.lower()
+    
+    federal_indicators = ['usc', 'cfr', 'federal', 'flsa', 'fmla', 'department of labor', 'interstate commerce']
+    state_indicators = ['admin code', 'general statutes', 'state labor', 'commissioner']
+    
+    federal_count = sum(1 for indicator in federal_indicators if indicator in text_lower)
+    state_count = sum(1 for indicator in state_indicators if indicator in text_lower)
+    
+    if federal_count > state_count:
+        return 'federal'
+    elif state_count > federal_count:
+        return 'state'
+    else:
+        return 'mixed'
+
+def assess_content_complexity(text: str) -> str:
+    """Assess complexity level of legal content"""
+    text_lower = text.lower()
+    
+    # High complexity indicators
+    high_complexity = ['multi-state', 'interstate', 'choice of law', 'conflict of laws', 'federal preemption']
+    medium_complexity = ['exception', 'provided that', 'notwithstanding', 'subject to']
+    
+    if any(indicator in text_lower for indicator in high_complexity):
+        return 'high'
+    elif any(indicator in text_lower for indicator in medium_complexity):
+        return 'medium'
+    elif len(text.split()) > 200:  # Long text tends to be more complex
+        return 'medium'
+    else:
+        return 'low'
+
 def extract_pdf_text(file_obj) -> str:
     """Extract text from PDF file"""
     try:
@@ -138,7 +220,12 @@ class LegalSemanticChunker:
                 legal_blocks.append({
                     'number': groups[0].strip() if groups[0] else '',
                     'title': groups[-2].strip() if len(groups) > 2 else groups[1].strip() if len(groups) > 1 else '',
-                    'content': self._clean_legal_text(groups[-1]) if groups[-1] else '',
+                        'version': chunk.get('version', ''),
+                        'jurisdiction': detect_jurisdiction(chunk['text']),
+                        'law_type': detect_law_type(chunk['text']),
+                        'industry_specific': detect_industry_specific(chunk['text']),
+                        'federal_vs_state': classify_federal_state(chunk['text']),
+                        'complexity_level': assess_content_complexity(chunk['text'])
                     'version': groups[1].strip() if len(groups) > 3 and groups[1] else ''
                 })
         
