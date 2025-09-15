@@ -221,9 +221,10 @@ def process_uploaded_file(uploaded_file, chunker, qdrant_client, embedding_model
         return False, f"Error processing file: {e}"
 
 def main_app():
-    authenticated, client, user_manager, chunker, collection, embedding_model = check_authentication()
+    authenticated, gpt5_handler, user_manager, chunker, collection, embedding_model = check_authentication()
     if not authenticated:
         st.stop()
+    
     # Header and logout
     col1, col2 = st.columns([6,1])
     with col1:
@@ -236,12 +237,19 @@ def main_app():
             st.success("👋 Logged out successfully")
             time.sleep(1)
             st.rerun()
+    
     st.markdown("---")
+    
+    # Initialize conversation tracking for GPT-5
+    if 'conversation_id' not in st.session_state:
+        st.session_state.conversation_id = None
+    
     if "messages" not in st.session_state:
         st.session_state.messages = [{
             "role": "assistant",
             "content": "Hello! I'm your legal compliance assistant. I specialize in NY, NJ, and CT employment law. Ask me a question!"
         }]
+    
     with st.sidebar:
         st.markdown("### 👤 Session Info")
         if 'login_time' in st.session_state:
@@ -254,10 +262,31 @@ def main_app():
                 lh, lr = divmod(int(left.total_seconds()),3600)
                 lm,_=divmod(lr,60)
                 st.write(f"**Auto-logout:** {lh}h {lm}m")
-        st.markdown("### 🏆 Quality Settings")
-        st.write("**Analysis**: Maximum")
-        st.write("**Reasoning**: High")
-        st.write("**Depth**: Comprehensive")
+        
+        st.markdown("### 🧠 GPT-5 Configuration")
+        
+        # Model Selection
+        selected_model = st.selectbox(
+            "GPT-5 Model:",
+            options=list(gpt5_handler.models.keys()),
+            index=0,  # Default to full gpt-5
+            help="Choose based on complexity needs"
+        )
+        
+        # Reasoning Effort
+        reasoning_effort = st.selectbox(
+            "Reasoning Effort:",
+            options=list(gpt5_handler.reasoning_efforts.keys()),
+            index=3,  # Default to "high" for legal work
+            help="Higher effort = better accuracy but slower/more expensive"
+        )
+        
+        # Show current settings
+        effort_info = gpt5_handler.reasoning_efforts[reasoning_effort]
+        st.write(f"**Speed**: {effort_info['speed'].title()}")
+        st.write(f"**Cost**: {effort_info['cost'].title()}")
+        st.write(f"**Best for**: {effort_info['use_case']}")
+        
         st.markdown("### 📚 Knowledge Base")
         try:
             collection_info = collection.get_collection("legal_regulations")
@@ -266,36 +295,81 @@ def main_app():
             st.write("**Jurisdictions:** NY, NJ, CT")
         except:
             st.write("**Status:** Initializing...")
+    
     for msg in st.session_state.messages:
         with st.chat_message(msg["role"]):
             st.markdown(msg["content"])
+            # Show GPT-5 metadata for assistant messages
+            if msg["role"] == "assistant" and "metadata" in msg:
+                with st.expander("🔍 Response Details", expanded=False):
+                    col1, col2, col3 = st.columns(3)
+                    with col1:
+                        st.metric("Model", msg["metadata"].get("model_used", "N/A"))
+                    with col2:
+                        st.metric("Reasoning Effort", msg["metadata"].get("reasoning_effort", "N/A"))
+                    with col3:
+                        st.metric("Total Tokens", msg["metadata"].get("total_tokens", 0))
+                    
+                    if msg["metadata"].get("reasoning_tokens", 0) > 0:
+                        st.metric("Reasoning Tokens", msg["metadata"]["reasoning_tokens"])
+                    
+                    if msg["metadata"].get("fallback_used"):
+                        st.warning("⚠️ Used Chat Completions API fallback")
+    
     if prompt := st.chat_input("Ask me about legal compliance requirements..."):
         st.session_state.messages.append({"role":"user","content":prompt})
         st.chat_message("user").markdown(prompt)
+        
         with st.chat_message("assistant"):
             prog = st.empty(); bar = st.progress(0)
             prog.text("🔍 Searching legal knowledge base..."); bar.progress(20)
             results = search_knowledge_base(collection, embedding_model, prompt, n_results=8)
-            prog.text("🧠 Applying high-effort reasoning..."); bar.progress(50)
+            prog.text(f"🧠 GPT-5 applying {reasoning_effort} reasoning..."); bar.progress(50)
             context = "\n\n".join(f"Legal Text: {doc}" for doc,_,_ in results) or "No relevant legal text found."
-            system_prompt = f"""{LEGAL_COMPLIANCE_SYSTEM_PROMPT}
-Available Legal Context:
-{context}
-User Question: {prompt}"""
-            prog.text("⚖️ Generating structured response..."); bar.progress(75)
-            response = client.chat.completions.create(
-                model="gpt-4o",
-                messages=[
-                    {"role": "system", "content": LEGAL_COMPLIANCE_SYSTEM_PROMPT},
-                    {"role": "user", "content": f"Available Legal Context:\n{context}\n\nUser Question: {prompt}"}
-                ],
+            
+            prog.text("⚖️ Generating structured legal response..."); bar.progress(75)
+            
+            # Use GPT-5 Handler with Responses API
+            response_result = gpt5_handler.create_legal_response(
+                system_prompt=LEGAL_COMPLIANCE_SYSTEM_PROMPT,
+                user_query=prompt,
+                legal_context=context,
+                model=selected_model,
+                reasoning_effort=reasoning_effort,
+                max_tokens=2000,
                 temperature=0.1,
-                max_tokens=2000
+                conversation_id=st.session_state.conversation_id
             )
+            
             bar.progress(100); prog.text("✅ Analysis complete!")
-            ai_response = response.choices[0].message.content
-            st.markdown(ai_response)
-            st.session_state.messages.append({"role":"assistant","content":ai_response})
+            
+            if response_result["success"]:
+                ai_response = response_result["content"]
+                
+                # Update conversation ID for stateful conversations
+                if "response_id" in response_result:
+                    st.session_state.conversation_id = response_result["response_id"]
+                
+                st.markdown(ai_response)
+                
+                # Add response with metadata to session state
+                message_data = {
+                    "role": "assistant",
+                    "content": ai_response,
+                    "metadata": {
+                        "model_used": response_result.get("model_used", selected_model),
+                        "reasoning_effort": response_result.get("reasoning_effort", reasoning_effort),
+                        "total_tokens": response_result.get("total_tokens", 0),
+                        "reasoning_tokens": response_result.get("reasoning_tokens", 0),
+                        "fallback_used": response_result.get("fallback_used", False)
+                    }
+                }
+                st.session_state.messages.append(message_data)
+            else:
+                error_message = f"I apologize, but I encountered an error: {response_result.get('error', 'Unknown error')}"
+                st.error(error_message)
+                st.session_state.messages.append({"role":"assistant","content":error_message})
+            
             if results:
                 st.markdown("### 📚 Sources Consulted")
                 for doc, meta, dist in results:
@@ -304,5 +378,6 @@ User Question: {prompt}"""
                         st.code(doc, language="text")
                         st.write(meta)
                         st.write(f"Relevance: {dist:.3f}")
+
 if __name__ == "__main__":
     main_app()
