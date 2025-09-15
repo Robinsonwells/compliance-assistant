@@ -1,0 +1,15 @@
+{
+  "name": "compliance-assistant",
+  "version": "1.0.0",
+  "description": "PEO compliance assistant - Python/Streamlit application",
+  "main": "app.py",
+  "scripts": {
+    "start": "streamlit run app.py",
+    "dev": "streamlit run app.py --server.runOnSave true"
+  },
+  "keywords": ["streamlit", "python", "legal", "compliance"],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {},
+  "devDependencies": {}
+}
