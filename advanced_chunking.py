@@ -220,13 +220,8 @@ class LegalSemanticChunker:
                 legal_blocks.append({
                     'number': groups[0].strip() if groups[0] else '',
                     'title': groups[-2].strip() if len(groups) > 2 else groups[1].strip() if len(groups) > 1 else '',
-                        'version': chunk.get('version', ''),
-                        'jurisdiction': detect_jurisdiction(chunk['text']),
-                        'law_type': detect_law_type(chunk['text']),
-                        'industry_specific': detect_industry_specific(chunk['text']),
-                        'federal_vs_state': classify_federal_state(chunk['text']),
-                        'complexity_level': assess_content_complexity(chunk['text'])
-                    'version': groups[1].strip() if len(groups) > 3 and groups[1] else ''
+                     'content': self._clean_legal_text(groups[-1]),
+                     'version': groups[1].strip() if len(groups) > 3 and groups[1] else ''
                 })
         
         # If no structured content found, try to extract meaningful text blocks
