@@ -261,8 +261,13 @@ def main():
                     # Display the AI response
                     if response and response.strip():
                         st.markdown(response)
+                        # Add assistant response to chat history
+                        st.session_state.messages.append({"role": "assistant", "content": response})
                     else:
-                        st.error("No response generated. Please try again.")
+                        error_msg = "No response generated. Please try again."
+                        st.error(error_msg)
+                        # Add error to chat history
+                        st.session_state.messages.append({"role": "assistant", "content": error_msg})
                     
                     # Show sources
                     with st.expander("📚 Sources Referenced"):
@@ -278,8 +283,6 @@ def main():
                 else:
                     response = "I couldn't find relevant legal information in the database for your query. Please try rephrasing your question or contact legal counsel for assistance."
                     st.markdown(response)
-        
-        # Add assistant response to chat history
 
 if __name__ == "__main__":
     main()
