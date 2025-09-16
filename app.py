@@ -132,48 +132,11 @@ def render_professional_login():
 
 def render_metrics_dashboard(collection):
     """Render professional metrics dashboard"""
-    try:
-        collection_info = collection.get_collection("legal_regulations")
+            <h1 style="margin: 0; text-align: center;">AI Compliance Assistant</h1>
         total_chunks = collection_info.points_count
         
         st.markdown('<div class="dashboard-grid">', unsafe_allow_html=True)
-        
-        col1, col2, col3, col4 = st.columns(4)
-        
         with col1:
-            st.markdown('''
-            <div class="metric-card hover-lift">
-                <i class="fas fa-database" style="font-size: 2rem; color: var(--secondary-accent); margin-bottom: 0.5rem;"></i>
-                <h3 style="margin: 0; color: var(--text-primary);">''' + f"{total_chunks:,}" + '''</h3>
-                <p style="margin: 0; color: var(--text-muted);">Legal Provisions</p>
-            </div>
-            ''', unsafe_allow_html=True)
-        
-        with col2:
-            st.markdown('''
-            <div class="metric-card hover-lift">
-                <i class="fas fa-map-marked-alt" style="font-size: 2rem; color: var(--success-green); margin-bottom: 0.5rem;"></i>
-                <h3 style="margin: 0; color: var(--text-primary);">4</h3>
-                <p style="margin: 0; color: var(--text-muted);">Jurisdictions</p>
-            </div>
-            ''', unsafe_allow_html=True)
-        
-        with col3:
-            st.markdown('''
-            <div class="metric-card hover-lift">
-                <i class="fas fa-infinity" style="font-size: 2rem; color: var(--warning-amber); margin-bottom: 0.5rem;"></i>
-                <h3 style="margin: 0; color: var(--text-primary);">Unlimited</h3>
-                <p style="margin: 0; color: var(--text-muted);">Context Analysis</p>
-            </div>
-            ''', unsafe_allow_html=True)
-        
-        with col4:
-            st.markdown('''
-            <div class="metric-card hover-lift">
-                <i class="fas fa-brain" style="font-size: 2rem; color: var(--primary-navy); margin-bottom: 0.5rem;"></i>
-                <h3 style="margin: 0; color: var(--text-primary);">GPT-5</h3>
-                <p style="margin: 0; color: var(--text-muted);">AI Model</p>
-            </div>
             ''', unsafe_allow_html=True)
         
         st.markdown('</div>', unsafe_allow_html=True)
