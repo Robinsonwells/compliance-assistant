@@ -170,7 +170,7 @@ def generate_legal_response(query: str, search_results: list, openai_client):
         response = openai_client.chat.completions.create(
             model="gpt-5",
             messages=messages,
-            max_tokens=1500,
+            max_completion_tokens=1500,
             temperature=0.1
         )
         
