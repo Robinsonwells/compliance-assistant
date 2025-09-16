@@ -425,7 +425,7 @@ def get_comprehensive_legal_context(results, query):
     for jurisdiction, docs in context_by_jurisdiction.items():
         if docs:
             context_parts.append(f"\n=== {jurisdiction} LEGAL PROVISIONS ===")
-            for i, (doc, meta, dist) in enumerate(docs[:20]):  # Limit per jurisdiction for readability
+            for i, (doc, meta, dist) in enumerate(docs):  # Use all relevant chunks
                 context_parts.append(f"\n[{jurisdiction}-{i+1}] {doc}")
     
     comprehensive_context = "\n".join(context_parts)
