@@ -160,11 +160,22 @@ def generate_legal_response(query: str, search_results: list, openai_client):
             for i, result in enumerate(search_results[:3])  # Use top 3 results
         ])
         
+        # Debug information
+        print(f"DEBUG: Processing query with {len(search_results)} sources")
+        print(f"DEBUG: Context length: {len(context)} characters")
+        
         # Create messages for OpenAI
         messages = [
             {"role": "system", "content": ENHANCED_LEGAL_COMPLIANCE_SYSTEM_PROMPT},
             {"role": "user", "content": f"QUERY: {query}\n\nAVAILABLE LEGAL CONTEXT:\n{context}"}
         ]
+        
+        # Validate context length (GPT-5 has token limits)
+        total_content_length = len(ENHANCED_LEGAL_COMPLIANCE_SYSTEM_PROMPT) + len(f"QUERY: {query}\n\nAVAILABLE LEGAL CONTEXT:\n{context}")
+        if total_content_length > 100000:  # Conservative limit
+            print(f"WARNING: Content length {total_content_length} may exceed model limits")
+        
+        print("DEBUG: Making OpenAI API call...")
         
         # Call OpenAI API
         response = openai_client.chat.completions.create(
@@ -173,11 +184,40 @@ def generate_legal_response(query: str, search_results: list, openai_client):
             max_completion_tokens=1500
         )
         
-        return response.choices[0].message.content
+        # Extract and validate response
+        if response and response.choices and len(response.choices) > 0:
+            content = response.choices[0].message.content
+            print(f"DEBUG: Received response of length: {len(content) if content else 0}")
+            
+            if content and content.strip():
+                return {
+                    "success": True,
+                    "content": content,
+                    "error": None
+                }
+            else:
+                print("DEBUG: Empty response content from OpenAI")
+                return {
+                    "success": False,
+                    "content": None,
+                    "error": "Empty response from OpenAI API"
+                }
+        else:
+            print("DEBUG: Invalid response structure from OpenAI")
+            return {
+                "success": False,
+                "content": None,
+                "error": "Invalid response structure from OpenAI API"
+            }
     
     except Exception as e:
-        st.error(f"AI response generation error: {e}")
-        return "I apologize, but I'm unable to generate a response at this time. Please try again later."
+        error_msg = f"AI response generation error: {e}"
+        print(f"DEBUG: Exception in generate_legal_response: {error_msg}")
+        return {
+            "success": False,
+            "content": None,
+            "error": error_msg
+        }
 
 def main():
     """Main application logic"""
@@ -254,7 +294,6 @@ def main():
                 # Search legal database
                 search_results = search_legal_database(prompt, qdrant_client, embedding_model)
                 
-                if search_results:
                     # Generate AI response
                     response = generate_legal_response(prompt, search_results, openai_client)
                     
