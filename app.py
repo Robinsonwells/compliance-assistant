@@ -257,7 +257,12 @@ def main():
                 if search_results:
                     # Generate AI response
                     response = generate_legal_response(prompt, search_results, openai_client)
-                    st.markdown(response)
+                    
+                    # Display the AI response
+                    if response and response.strip():
+                        st.markdown(response)
+                    else:
+                        st.error("No response generated. Please try again.")
                     
                     # Show sources
                     with st.expander("📚 Sources Referenced"):
@@ -275,7 +280,6 @@ def main():
                     st.markdown(response)
         
         # Add assistant response to chat history
-        st.session_state.messages.append({"role": "assistant", "content": response})
 
 if __name__ == "__main__":
     main()
