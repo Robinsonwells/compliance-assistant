@@ -542,6 +542,179 @@ textarea:focus {
   }
 }
 
+/* ===== STREAMLIT CORE CONTAINER OVERRIDES ===== */
+
+/* Main App Container */
+[data-testid="stAppViewContainer"] {
+  background-color: var(--bg-primary) !important;
+  color: var(--text-primary) !important;
+}
+
+/* Main Content Area */
+[data-testid="stMain"] {
+  background-color: var(--bg-primary) !important;
+  color: var(--text-primary) !important;
+}
+
+/* Block Containers */
+[data-testid="stVerticalBlock"] {
+  background-color: transparent !important;
+}
+
+[data-testid="stHorizontalBlock"] {
+  background-color: transparent !important;
+}
+
+/* Column Containers */
+[data-testid="column"] {
+  background-color: transparent !important;
+}
+
+/* Form Containers */
+[data-testid="stForm"] {
+  background-color: var(--bg-secondary) !important;
+  border: 1px solid var(--border-light) !important;
+  border-radius: 12px !important;
+  padding: 1.5rem !important;
+  box-shadow: 0 2px 8px var(--shadow-light) !important;
+}
+
+/* Form Border */
+.stForm {
+  border: 1px solid var(--border-light) !important;
+  background-color: var(--bg-secondary) !important;
+  border-radius: 12px !important;
+}
+
+/* Expander Details */
+[data-testid="stExpanderDetails"] {
+  background-color: var(--bg-secondary) !important;
+  border: 1px solid var(--border-light) !important;
+  border-top: none !important;
+  color: var(--text-primary) !important;
+}
+
+/* Container Elements */
+.element-container {
+  background-color: transparent !important;
+}
+
+/* Generic Div Overrides */
+.stApp > div {
+  background-color: var(--bg-primary) !important;
+}
+
+/* Widget Containers */
+[data-testid="stWidgetLabel"] {
+  color: var(--text-secondary) !important;
+}
+
+/* Metric Containers */
+[data-testid="metric-container"] {
+  background-color: var(--bg-secondary) !important;
+  border: 1px solid var(--border-light) !important;
+  border-radius: 8px !important;
+  padding: 1rem !important;
+}
+
+/* Alert Containers */
+[data-testid="stAlert"] {
+  border-radius: 8px !important;
+}
+
+/* Code Blocks */
+[data-testid="stCodeBlock"] {
+  background-color: var(--bg-tertiary) !important;
+  border: 1px solid var(--border-light) !important;
+  color: var(--text-primary) !important;
+}
+
+/* JSON Display */
+[data-testid="stJson"] {
+  background-color: var(--bg-tertiary) !important;
+  border: 1px solid var(--border-light) !important;
+  color: var(--text-primary) !important;
+}
+
+/* Dataframe */
+[data-testid="stDataFrame"] {
+  background-color: var(--bg-secondary) !important;
+  border: 1px solid var(--border-light) !important;
+}
+
+/* Header */
+[data-testid="stHeader"] {
+  background-color: var(--bg-primary) !important;
+}
+
+/* Toolbar */
+[data-testid="stToolbar"] {
+  background-color: var(--bg-secondary) !important;
+}
+
+/* ===== ADMIN PANEL SPECIFIC OVERRIDES ===== */
+
+/* Admin Panel Forms */
+.stForm > div {
+  background-color: var(--bg-secondary) !important;
+}
+
+/* Admin Panel Containers */
+.stContainer {
+  background-color: transparent !important;
+}
+
+/* Admin Panel Expanders */
+.streamlit-expanderContent {
+  background-color: var(--bg-secondary) !important;
+  border: 1px solid var(--border-light) !important;
+  border-top: none !important;
+}
+
+/* Admin Panel Dividers */
+.stContainer > div > hr {
+  border-color: var(--border-light) !important;
+}
+
+/* Admin Panel Text Areas in Expanders */
+.streamlit-expanderContent .stTextArea > div > div > textarea {
+  background-color: var(--bg-tertiary) !important;
+  border: 1px solid var(--border-light) !important;
+  color: var(--text-primary) !important;
+}
+
+/* Admin Panel JSON Display */
+.streamlit-expanderContent [data-testid="stJson"] {
+  background-color: var(--bg-tertiary) !important;
+  border: 1px solid var(--border-light) !important;
+}
+
+/* ===== FORCE DARK THEME ON ALL ELEMENTS ===== */
+
+/* Catch-all for any remaining white backgrounds */
+div[style*="background-color: white"],
+div[style*="background-color: #ffffff"],
+div[style*="background-color: #fff"] {
+  background-color: var(--bg-secondary) !important;
+}
+
+/* Catch-all for any remaining light borders */
+div[style*="border-color: #e0e0e0"],
+div[style*="border-color: #ddd"],
+div[style*="border-color: #ccc"] {
+  border-color: var(--border-light) !important;
+}
+
+/* Force dark theme on all text */
+* {
+  color: inherit !important;
+}
+
+/* Ensure all backgrounds inherit dark theme */
+*:not([data-testid="stChatInput"]):not(input):not(textarea):not(select) {
+  background-color: inherit;
+}
+
 /* Scrollbar styling for dark theme */
 ::-webkit-scrollbar {
   width: 8px;
