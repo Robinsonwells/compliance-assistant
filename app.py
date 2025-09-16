@@ -409,19 +409,14 @@ def get_comprehensive_legal_context(results, query):
     
     # Categorize results by jurisdiction
     for doc, meta, dist in results:
-        source_file = meta.get('source_file', '').lower()
-        doc_lower = doc.lower()
+        # Use the jurisdiction metadata directly from chunk processing
+        jurisdiction = meta.get('jurisdiction', 'Multi-State')
         
-        # Determine jurisdiction
-        if any(ny_term in source_file or ny_term in doc_lower for ny_term in ['ny', 'new york']):
-            context_by_jurisdiction['NY'].append((doc, meta, dist))
-        elif any(nj_term in source_file or nj_term in doc_lower for nj_term in ['nj', 'new jersey']):
-            context_by_jurisdiction['NJ'].append((doc, meta, dist))
-        elif any(ct_term in source_file or ct_term in doc_lower for ct_term in ['ct', 'connecticut']):
-            context_by_jurisdiction['CT'].append((doc, meta, dist))
-        elif any(fed_term in source_file or fed_term in doc_lower for fed_term in ['federal', 'usc', 'cfr']):
-            context_by_jurisdiction['Federal'].append((doc, meta, dist))
+        # Map jurisdiction to our display categories
+        if jurisdiction in ['NY', 'NJ', 'CT', 'Federal']:
+            context_by_jurisdiction[jurisdiction].append((doc, meta, dist))
         else:
+            # Default to Multi-State for any unrecognized jurisdictions
             context_by_jurisdiction['Multi-State'].append((doc, meta, dist))
     
     # Build comprehensive context string
@@ -725,23 +720,19 @@ def display_comprehensive_sources(results, context_metadata):
     # Group by jurisdiction for display
     jurisdictions = ['NY', 'NJ', 'CT', 'Federal', 'Multi-State']
     for jurisdiction in jurisdictions:
-        # ✅ IMPROVED: Better jurisdiction detection
+        # ✅ FIXED: Use jurisdiction metadata directly
         jurisdiction_results = []
         for r in results:
             doc, meta, dist = r
-            source_file = meta.get('source_file', '').lower()
-            doc_lower = doc.lower()
+            
+            # Use the jurisdiction metadata directly from chunk processing
+            chunk_jurisdiction = meta.get('jurisdiction', 'Multi-State')
             
             # Check if this result belongs to current jurisdiction
-            if jurisdiction == 'NY' and any(term in source_file or term in doc_lower for term in ['ny', 'new york']):
+            if chunk_jurisdiction == jurisdiction:
                 jurisdiction_results.append(r)
-            elif jurisdiction == 'NJ' and any(term in source_file or term in doc_lower for term in ['nj', 'new jersey']):
-                jurisdiction_results.append(r)
-            elif jurisdiction == 'CT' and any(term in source_file or term in doc_lower for term in ['ct', 'connecticut']):
-                jurisdiction_results.append(r)
-            elif jurisdiction == 'Federal' and any(term in source_file or term in doc_lower for term in ['federal', 'usc', 'cfr', 'flsa']):
-                jurisdiction_results.append(r)
-            elif jurisdiction == 'Multi-State' and not any(state in source_file or state in doc_lower for state in ['ny', 'nj', 'ct', 'new york', 'new jersey', 'connecticut', 'federal']):
+            elif jurisdiction == 'Multi-State' and chunk_jurisdiction not in ['NY', 'NJ', 'CT', 'Federal']:
+                # Include any unrecognized jurisdictions in Multi-State
                 jurisdiction_results.append(r)
         
         if jurisdiction_results:
