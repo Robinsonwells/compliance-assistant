@@ -23,6 +23,225 @@ from advanced_chunking import LegalSemanticChunker, extract_pdf_text, extract_do
 from system_prompts import ENHANCED_LEGAL_COMPLIANCE_SYSTEM_PROMPT, format_complex_scenario_response
 from typing import Dict, List, Optional
 
+# Load environment variables
+load_dotenv()
+
+def load_custom_css():
+    """Load custom CSS for professional UI design"""
+    try:
+        with open('styles/style.css', 'r') as f:
+            css = f.read()
+        st.markdown(f'<style>{css}</style>', unsafe_allow_html=True)
+    except FileNotFoundError:
+        st.warning("Custom CSS file not found. Using default styling.")
+    
+    # Load Font Awesome for icons
+    st.markdown('''
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    ''', unsafe_allow_html=True)
+
+def init_theme():
+    """Initialize theme system"""
+    if 'theme' not in st.session_state:
+        st.session_state.theme = 'light'
+
+def toggle_theme():
+    """Toggle between light and dark themes"""
+    st.session_state.theme = 'dark' if st.session_state.theme == 'light' else 'light'
+
+def apply_theme():
+    """Apply the current theme to the app"""
+    theme_class = 'dark-theme' if st.session_state.theme == 'dark' else ''
+    
+    st.markdown(f'''
+    <script>
+        document.body.className = '{theme_class}';
+        document.documentElement.className = '{theme_class}';
+    </script>
+    ''', unsafe_allow_html=True)
+    
+    # Apply theme-specific styling
+    if st.session_state.theme == 'dark':
+        st.markdown('''
+        <style>
+            .stApp {
+                background-color: var(--gray-900);
+                color: var(--gray-100);
+            }
+            .stApp > div {
+                background-color: var(--gray-900);
+            }
+        </style>
+        ''', unsafe_allow_html=True)
+
+def render_theme_toggle():
+    """Render theme toggle button in sidebar"""
+    with st.sidebar:
+        st.markdown("### 🎨 Appearance")
+        
+        col1, col2 = st.columns(2)
+        with col1:
+            if st.button("☀️ Light", key="light_theme", 
+                        type="primary" if st.session_state.theme == 'light' else "secondary"):
+                st.session_state.theme = 'light'
+                st.rerun()
+        
+        with col2:
+            if st.button("🌙 Dark", key="dark_theme",
+                        type="primary" if st.session_state.theme == 'dark' else "secondary"):
+                st.session_state.theme = 'dark'
+                st.rerun()
+
+def render_professional_header():
+    """Render professional header with branding"""
+    st.markdown('''
+    <div class="dashboard-header fade-in">
+        <div style="display: flex; align-items: center; justify-content: space-between;">
+            <div style="display: flex; align-items: center; gap: 1rem;">
+                <div class="brand-logo">
+                    <i class="fas fa-balance-scale"></i>
+                </div>
+                <div>
+                    <h1 style="margin: 0; color: white; font-size: 2rem;">Legal Compliance Assistant</h1>
+                    <p style="margin: 0; color: rgba(255,255,255,0.8); font-size: 1.1rem;">
+                        Powered by GPT-5 with Unlimited Context Analysis
+                    </p>
+                </div>
+            </div>
+            <div class="status-indicator status-active">
+                <i class="fas fa-check-circle"></i>
+                <span>System Active</span>
+            </div>
+        </div>
+    </div>
+    ''', unsafe_allow_html=True)
+
+def render_professional_login():
+    """Render professional login interface"""
+    st.markdown('''
+    <div class="login-card fade-in">
+        <div class="brand-logo">
+            <i class="fas fa-balance-scale"></i>
+        </div>
+        <h2 style="color: var(--primary-navy); margin-bottom: 0.5rem;">Legal Compliance Assistant</h2>
+        <p style="color: var(--text-muted); margin-bottom: 2rem;">
+            Professional AI-Powered Legal Analysis Platform
+        </p>
+    </div>
+    ''', unsafe_allow_html=True)
+
+def render_metrics_dashboard(collection):
+    """Render professional metrics dashboard"""
+    try:
+        collection_info = collection.get_collection("legal_regulations")
+        total_chunks = collection_info.points_count
+        
+        st.markdown('<div class="dashboard-grid">', unsafe_allow_html=True)
+        
+        col1, col2, col3, col4 = st.columns(4)
+        
+        with col1:
+            st.markdown('''
+            <div class="metric-card hover-lift">
+                <i class="fas fa-database" style="font-size: 2rem; color: var(--secondary-accent); margin-bottom: 0.5rem;"></i>
+                <h3 style="margin: 0; color: var(--text-primary);">''' + f"{total_chunks:,}" + '''</h3>
+                <p style="margin: 0; color: var(--text-muted);">Legal Provisions</p>
+            </div>
+            ''', unsafe_allow_html=True)
+        
+        with col2:
+            st.markdown('''
+            <div class="metric-card hover-lift">
+                <i class="fas fa-map-marked-alt" style="font-size: 2rem; color: var(--success-green); margin-bottom: 0.5rem;"></i>
+                <h3 style="margin: 0; color: var(--text-primary);">4</h3>
+                <p style="margin: 0; color: var(--text-muted);">Jurisdictions</p>
+            </div>
+            ''', unsafe_allow_html=True)
+        
+        with col3:
+            st.markdown('''
+            <div class="metric-card hover-lift">
+                <i class="fas fa-infinity" style="font-size: 2rem; color: var(--warning-amber); margin-bottom: 0.5rem;"></i>
+                <h3 style="margin: 0; color: var(--text-primary);">Unlimited</h3>
+                <p style="margin: 0; color: var(--text-muted);">Context Analysis</p>
+            </div>
+            ''', unsafe_allow_html=True)
+        
+        with col4:
+            st.markdown('''
+            <div class="metric-card hover-lift">
+                <i class="fas fa-brain" style="font-size: 2rem; color: var(--primary-navy); margin-bottom: 0.5rem;"></i>
+                <h3 style="margin: 0; color: var(--text-primary);">GPT-5</h3>
+                <p style="margin: 0; color: var(--text-muted);">AI Model</p>
+            </div>
+            ''', unsafe_allow_html=True)
+        
+        st.markdown('</div>', unsafe_allow_html=True)
+        
+    except Exception as e:
+        st.markdown('''
+        <div class="professional-card">
+            <div class="status-indicator status-error">
+                <i class="fas fa-exclamation-triangle"></i>
+                <span>Database Connection Error</span>
+            </div>
+        </div>
+        ''', unsafe_allow_html=True)
+
+def render_professional_sidebar(user_manager):
+    """Render professional sidebar with enhanced information"""
+    with st.sidebar:
+        # Theme toggle
+        render_theme_toggle()
+        
+        st.markdown("---")
+        
+        # Session info
+        st.markdown("### 👤 Session Information")
+        if 'login_time' in st.session_state:
+            duration = datetime.now() - st.session_state.login_time
+            hrs, rem = divmod(int(duration.total_seconds()), 3600)
+            mins, _ = divmod(rem, 60)
+            
+            st.markdown(f'''
+            <div class="professional-card">
+                <div style="display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.5rem;">
+                    <i class="fas fa-clock" style="color: var(--success-green);"></i>
+                    <strong>Session Active</strong>
+                </div>
+                <p style="margin: 0; color: var(--text-muted);">Duration: {hrs}h {mins}m</p>
+            </div>
+            ''', unsafe_allow_html=True)
+        
+        st.markdown("---")
+        
+        # AI Model info
+        st.markdown("### 🧠 AI Configuration")
+        st.markdown('''
+        <div class="professional-card">
+            <div class="status-indicator status-active" style="margin-bottom: 1rem;">
+                <i class="fas fa-robot"></i>
+                <span>GPT-5 Active</span>
+            </div>
+            <div style="font-size: 0.9rem; color: var(--text-muted);">
+                <p><i class="fas fa-check"></i> Deterministic Mode</p>
+                <p><i class="fas fa-check"></i> High Reasoning</p>
+                <p><i class="fas fa-check"></i> 16K Max Tokens</p>
+                <p><i class="fas fa-check"></i> Zero Hallucination</p>
+            </div>
+        </div>
+        ''', unsafe_allow_html=True)
+        
+        st.markdown("---")
+        
+        # Logout button
+        if st.button("🚪 Logout", key="logout_btn", type="secondary", use_container_width=True):
+            st.session_state.authenticated = False
+            st.session_state.access_code = None
+            st.success("👋 Logged out successfully")
+            time.sleep(1)
+            st.rerun()
+
 def assess_query_complexity(query):
     """Warn users about complex scenarios"""
     complexity_indicators = [
@@ -33,8 +252,18 @@ def assess_query_complexity(query):
     is_complex = any(indicator in query.lower() for indicator in complexity_indicators)
     
     if is_complex:
-        st.warning("🚨 **COMPLEX MULTI-JURISDICTIONAL QUERY DETECTED**")
-        st.info("⚖️ This analysis will consider federal baseline laws and multiple state requirements. Response may take longer for comprehensive analysis.")
+        st.markdown('''
+        <div class="professional-card" style="border-left: 4px solid var(--warning-amber);">
+            <div class="status-indicator status-warning" style="margin-bottom: 1rem;">
+                <i class="fas fa-exclamation-triangle"></i>
+                <span>Complex Multi-Jurisdictional Query Detected</span>
+            </div>
+            <p style="margin: 0; color: var(--text-secondary);">
+                <i class="fas fa-info-circle"></i> This analysis will consider federal baseline laws and multiple state requirements. 
+                Response may take longer for comprehensive analysis.
+            </p>
+        </div>
+        ''', unsafe_allow_html=True)
         
     return is_complex
 
@@ -42,29 +271,76 @@ def display_sources_by_complexity(results, context_metadata):
     """Better source organization for complex queries"""
     
     if context_metadata['total_sources'] > 20:
-        st.markdown("### 📚 **COMPREHENSIVE SOURCE ANALYSIS**")
+        st.markdown('''
+        <div class="professional-card">
+            <h3 style="color: var(--primary-navy); margin-bottom: 1rem;">
+                <i class="fas fa-books"></i> Comprehensive Source Analysis
+            </h3>
+        </div>
+        ''', unsafe_allow_html=True)
         
         # Show federal vs state breakdown
         col1, col2, col3, col4 = st.columns(4)
         with col1:
-            st.metric("Federal Sources", context_metadata.get('federal_sources', 0))
+            st.markdown(f'''
+            <div class="metric-card">
+                <h4 style="color: var(--primary-navy);">{context_metadata.get('federal_sources', 0)}</h4>
+                <p style="color: var(--text-muted);">Federal Sources</p>
+            </div>
+            ''', unsafe_allow_html=True)
         with col2:
-            st.metric("NY Sources", context_metadata.get('ny_sources', 0))
+            st.markdown(f'''
+            <div class="metric-card">
+                <h4 style="color: var(--primary-navy);">{context_metadata.get('ny_sources', 0)}</h4>
+                <p style="color: var(--text-muted);">NY Sources</p>
+            </div>
+            ''', unsafe_allow_html=True)
         with col3:
-            st.metric("NJ Sources", context_metadata.get('nj_sources', 0))
+            st.markdown(f'''
+            <div class="metric-card">
+                <h4 style="color: var(--primary-navy);">{context_metadata.get('nj_sources', 0)}</h4>
+                <p style="color: var(--text-muted);">NJ Sources</p>
+            </div>
+            ''', unsafe_allow_html=True)
         with col4:
-            st.metric("CT Sources", context_metadata.get('ct_sources', 0))
+            st.markdown(f'''
+            <div class="metric-card">
+                <h4 style="color: var(--primary-navy);">{context_metadata.get('ct_sources', 0)}</h4>
+                <p style="color: var(--text-muted);">CT Sources</p>
+            </div>
+            ''', unsafe_allow_html=True)
         
         # Warn about gaps
         if context_metadata.get('federal_sources', 0) == 0:
-            st.error("⚠️ **FEDERAL LAW GAP**: No federal sources found. Add federal regulations to knowledge base for complete analysis.")
+            st.markdown('''
+            <div class="professional-card" style="border-left: 4px solid var(--error-red);">
+                <div class="status-indicator status-error">
+                    <i class="fas fa-exclamation-circle"></i>
+                    <span>Federal Law Gap Detected</span>
+                </div>
+                <p style="margin: 0.5rem 0 0 0; color: var(--text-secondary);">
+                    No federal sources found. Add federal regulations to knowledge base for complete analysis.
+                </p>
+            </div>
+            ''', unsafe_allow_html=True)
     else:
-        st.markdown("### 📚 **SOURCE ANALYSIS**")
+        st.markdown('''
+        <div class="professional-card">
+            <h3 style="color: var(--primary-navy); margin-bottom: 1rem;">
+                <i class="fas fa-book"></i> Source Analysis
+            </h3>
+        </div>
+        ''', unsafe_allow_html=True)
         
         # Show basic breakdown
         col1, col2 = st.columns(2)
         with col1:
-            st.metric("Total Sources", context_metadata['total_sources'])
+            st.markdown(f'''
+            <div class="metric-card">
+                <h4 style="color: var(--primary-navy);">{context_metadata['total_sources']}</h4>
+                <p style="color: var(--text-muted);">Total Sources</p>
+            </div>
+            ''', unsafe_allow_html=True)
         with col2:
             jurisdictions_found = []
             if context_metadata.get('ny_sources', 0) > 0:
@@ -75,7 +351,12 @@ def display_sources_by_complexity(results, context_metadata):
                 jurisdictions_found.append('CT')
             if context_metadata.get('federal_sources', 0) > 0:
                 jurisdictions_found.append('Federal')
-            st.metric("Jurisdictions", ', '.join(jurisdictions_found) if jurisdictions_found else 'Mixed')
+            st.markdown(f'''
+            <div class="metric-card">
+                <h4 style="color: var(--primary-navy);">{', '.join(jurisdictions_found) if jurisdictions_found else 'Mixed'}</h4>
+                <p style="color: var(--text-muted);">Jurisdictions</p>
+            </div>
+            ''', unsafe_allow_html=True)
 
 def detect_knowledge_gaps(query, context_metadata):
     """Detect and warn about knowledge gaps"""
@@ -294,22 +575,44 @@ def check_authentication():
             return True, gpt5_handler, user_manager, chunker, collection, embedding_model
         else:
             st.session_state.authenticated = False
-            st.error("🕐 Your session has expired. Please log in again.")
+            st.markdown('''
+            <div class="professional-card" style="border-left: 4px solid var(--warning-amber);">
+                <div class="status-indicator status-warning">
+                    <i class="fas fa-clock"></i>
+                    <span>Session Expired</span>
+                </div>
+                <p style="margin: 0.5rem 0 0 0; color: var(--text-secondary);">
+                    Your session has expired. Please log in again.
+                </p>
+            </div>
+            ''', unsafe_allow_html=True)
             time.sleep(2)
             st.rerun()
     
-    st.markdown("# 🔐 Legal Compliance Assistant")
-    st.markdown("**Professional AI-Powered Legal Analysis**")
-    st.markdown("---")
+    # Render professional login interface
+    render_professional_login()
+    
     with st.form("login_form"):
-        st.markdown("### Enter Your Access Code")
+        st.markdown('''
+        <h3 style="color: var(--primary-navy); text-align: center; margin-bottom: 1.5rem;">
+            <i class="fas fa-key"></i> Enter Your Access Code
+        </h3>
+        ''', unsafe_allow_html=True)
+        
         access_code = st.text_input(
             "Access Code",
             type="password",
             placeholder="Enter your access code...",
-            help="Contact your administrator for access"
+            help="Contact your administrator for access",
+            label_visibility="collapsed"
         )
-        submit_button = st.form_submit_button("🚀 Access Assistant")
+        
+        submit_button = st.form_submit_button(
+            "🚀 Access Assistant", 
+            type="primary",
+            use_container_width=True
+        )
+        
         if submit_button and access_code:
             if user_manager.validate_access_code(access_code):
                 session_id = get_session_id()
@@ -318,16 +621,42 @@ def check_authentication():
                 st.session_state.authenticated = True
                 st.session_state.access_code = access_code
                 st.session_state.login_time = datetime.now()
-                st.success("✅ Access granted! Loading assistant...")
+                st.markdown('''
+                <div class="professional-card" style="border-left: 4px solid var(--success-green);">
+                    <div class="status-indicator status-active">
+                        <i class="fas fa-check-circle"></i>
+                        <span>Access Granted</span>
+                    </div>
+                    <p style="margin: 0.5rem 0 0 0; color: var(--text-secondary);">
+                        Loading assistant...
+                    </p>
+                </div>
+                ''', unsafe_allow_html=True)
                 time.sleep(1)
                 st.rerun()
             else:
-                st.error("❌ Invalid or expired access code")
+                st.markdown('''
+                <div class="professional-card" style="border-left: 4px solid var(--error-red);">
+                    <div class="status-indicator status-error">
+                        <i class="fas fa-times-circle"></i>
+                        <span>Access Denied</span>
+                    </div>
+                    <p style="margin: 0.5rem 0 0 0; color: var(--text-secondary);">
+                        Invalid or expired access code
+                    </p>
+                </div>
+                ''', unsafe_allow_html=True)
                 time.sleep(2)
-    with st.expander("ℹ️ Session Information"):
-        st.write("• Sessions expire after 24 hours of inactivity")
-        st.write("• Your session renews with each interaction")
-        st.write("• Access can be revoked by administrator")
+    
+    with st.expander("ℹ️ Session Information", expanded=False):
+        st.markdown('''
+        <div style="color: var(--text-secondary); font-size: 0.9rem;">
+            <p><i class="fas fa-clock"></i> Sessions expire after 24 hours of inactivity</p>
+            <p><i class="fas fa-sync"></i> Your session renews with each interaction</p>
+            <p><i class="fas fa-user-shield"></i> Access can be revoked by administrator</p>
+        </div>
+        ''', unsafe_allow_html=True)
+    
     return False, None, None, None, None, None
 
 def search_knowledge_base_unlimited(qdrant_client, embedding_model, query, max_results=None):
@@ -511,6 +840,19 @@ def process_uploaded_file(uploaded_file, chunker, qdrant_client, embedding_model
         return False, f"Error processing file: {e}"
 
 def main_app():
+    # Set page config for professional appearance
+    st.set_page_config(
+        page_title="Legal Compliance Assistant",
+        page_icon="⚖️",
+        layout="wide",
+        initial_sidebar_state="expanded"
+    )
+    
+    # Initialize theme and load custom CSS
+    init_theme()
+    load_custom_css()
+    apply_theme()
+    
     authenticated, gpt5_handler, user_manager, chunker, collection, embedding_model = check_authentication()
     if not authenticated:
         st.stop()
@@ -519,21 +861,14 @@ def main_app():
     REASONING_EFFORT = "high"
     MAX_TOKENS = 16000
     
-    # Header and logout
-    col1, col2 = st.columns([6,1])
-    with col1:
-        st.markdown("# ⚖️ Elite Legal Compliance Assistant")
-        st.markdown("*Powered by GPT-5 with **UNLIMITED CONTEXT** + **ZERO HALLUCINATION** mode*")
-        st.success("🧠 **DETERMINISTIC MODE**: Maximum accuracy, comprehensive analysis")
-    with col2:
-        if st.button("🚪 Logout", type="secondary"):
-            st.session_state.authenticated = False
-            st.session_state.access_code = None
-            st.success("👋 Logged out successfully")
-            time.sleep(1)
-            st.rerun()
+    # Render professional header
+    render_professional_header()
     
-    st.markdown("---")
+    # Render metrics dashboard
+    render_metrics_dashboard(collection)
+    
+    # Render professional sidebar
+    render_professional_sidebar(user_manager)
     
     # Initialize GPT-5 handler
     if 'gpt5_handler' not in st.session_state:
@@ -542,54 +877,58 @@ def main_app():
     if "messages" not in st.session_state:
         st.session_state.messages = [{
             "role": "assistant",
-            "content": "Hello! I'm your **unlimited context** legal compliance assistant using GPT-5 in **deterministic mode** for zero hallucination. I have access to comprehensive legal databases across NY, NJ, and CT with no limits on context retrieval. My responses prioritize factual accuracy and comprehensive multi-jurisdictional analysis."
+            "content": """Hello! I'm your **unlimited context** legal compliance assistant using GPT-5 in **deterministic mode** for zero hallucination. 
+            
+I have access to comprehensive legal databases across NY, NJ, and CT with no limits on context retrieval. My responses prioritize factual accuracy and comprehensive multi-jurisdictional analysis.
+
+**Key Features:**
+- 🧠 GPT-5 with maximum reasoning capability
+- 📊 Unlimited context analysis (no chunk limits)
+- ⚖️ Multi-jurisdictional legal expertise
+- 🎯 Zero hallucination mode for maximum accuracy
+
+How can I assist you with your legal compliance questions today?"""
         }]
     
-    with st.sidebar:
-        st.markdown("### 👤 Session Info")
-        if 'login_time' in st.session_state:
-            duration = datetime.now() - st.session_state.login_time
-            hrs, rem = divmod(int(duration.total_seconds()), 3600)
-            mins, _ = divmod(rem, 60)
-            st.write(f"**Active:** {hrs}h {mins}m")
-        
-        st.markdown("### 🧠 **ZERO HALLUCINATION** GPT-5")
-        
-        st.success("✅ **GPT-5 DETERMINISTIC** - Locked")
-        st.success("🎯 **Temperature Equivalent**: Minimum (Deterministic)")
-        st.success(f"🧠 **Reasoning**: {REASONING_EFFORT.upper()} (Maximum)")
-        st.success("📊 **Context**: UNLIMITED (All relevant sources)")
-        st.success("⚡ **API**: Responses API (Optimized)")
-        st.success(f"📝 **Max Tokens**: {MAX_TOKENS:,} (Extended)")
-        
-        st.info("🔒 **Anti-Hallucination**: GPT-5 deterministic mode active")
-        st.warning("⏱️ **Processing Time**: 30-90 seconds for comprehensive analysis")
-        
-        st.markdown("### 📚 Knowledge Base")
-        try:
-            collection_info = collection.get_collection("legal_regulations")
-            cnt = collection_info.points_count
-            st.write(f"**Legal Provisions:** {cnt:,}")
-            st.write("**Jurisdictions:** NY, NJ, CT, Federal")
-            st.write("**Context Limit:** UNLIMITED")
-        except Exception as e:
-            st.write(f"**Status:** Error - {e}")
+    # Chat interface container
+    st.markdown('<div class="professional-card">', unsafe_allow_html=True)
+    st.markdown("### 💬 Legal Analysis Chat")
     
     # Display messages with enhanced metadata
     for msg in st.session_state.messages:
         with st.chat_message(msg["role"]):
             st.markdown(msg["content"])
             if msg["role"] == "assistant" and "metadata" in msg:
-                with st.expander("🔍 **Comprehensive Analysis Metrics**", expanded=False):
+                with st.expander("🔍 Analysis Metrics", expanded=False):
                     col1, col2, col3, col4 = st.columns(4)
                     with col1:
-                        st.metric("Sources Used", msg["metadata"].get("total_sources", "N/A"))
+                        st.markdown(f'''
+                        <div class="metric-card">
+                            <h4>{msg["metadata"].get("total_sources", "N/A")}</h4>
+                            <p>Sources Used</p>
+                        </div>
+                        ''', unsafe_allow_html=True)
                     with col2:
-                        st.metric("Reasoning", msg["metadata"].get("reasoning_effort", "HIGH").upper())
+                        st.markdown(f'''
+                        <div class="metric-card">
+                            <h4>{msg["metadata"].get("reasoning_effort", "HIGH").upper()}</h4>
+                            <p>Reasoning</p>
+                        </div>
+                        ''', unsafe_allow_html=True)
                     with col3:
-                        st.metric("Tokens", f"{msg['metadata'].get('total_tokens', 0):,}")
+                        st.markdown(f'''
+                        <div class="metric-card">
+                            <h4>{msg['metadata'].get('total_tokens', 0):,}</h4>
+                            <p>Tokens</p>
+                        </div>
+                        ''', unsafe_allow_html=True)
                     with col4:
-                        st.metric("Jurisdictions", msg["metadata"].get("jurisdictions_covered", "Multiple"))
+                        st.markdown(f'''
+                        <div class="metric-card">
+                            <h4>{msg["metadata"].get("jurisdictions_covered", "Multiple")}</h4>
+                            <p>Jurisdictions</p>
+                        </div>
+                        ''', unsafe_allow_html=True)
                 
                 # Display comprehensive sources if available in metadata
                 if "sources_results" in msg["metadata"] and "sources_context_metadata" in msg["metadata"]:
@@ -598,30 +937,67 @@ def main_app():
                         msg["metadata"]["sources_context_metadata"]
                     )
     
+    st.markdown('</div>', unsafe_allow_html=True)
+    
     # Chat input with unlimited context emphasis
-    if prompt := st.chat_input("Ask comprehensive legal questions - I'll analyze ALL relevant sources across jurisdictions..."):
+    if prompt := st.chat_input("💬 Ask comprehensive legal questions - I'll analyze ALL relevant sources across jurisdictions..."):
         st.session_state.messages.append({"role":"user","content":prompt})
         st.chat_message("user").markdown(prompt)
         
         with st.chat_message("assistant"):
-            prog = st.empty()
-            bar = st.progress(0)
+            # Professional loading interface
+            progress_container = st.empty()
+            status_container = st.empty()
             
             try:
                 # Assess query complexity and show warnings
                 complexity = assess_query_complexity(prompt)
                 
-                prog.text("🔍 **UNLIMITED SEARCH**: Retrieving ALL relevant legal sources...")
-                bar.progress(10)
+                with progress_container.container():
+                    st.markdown('''
+                    <div class="professional-card loading-pulse">
+                        <div style="display: flex; align-items: center; gap: 1rem;">
+                            <i class="fas fa-search fa-spin" style="color: var(--secondary-accent);"></i>
+                            <div>
+                                <h4 style="margin: 0; color: var(--primary-navy);">Unlimited Search Active</h4>
+                                <p style="margin: 0; color: var(--text-muted);">Retrieving ALL relevant legal sources...</p>
+                            </div>
+                        </div>
+                    </div>
+                    ''', unsafe_allow_html=True)
+                
+                progress_bar = st.progress(10)
                 
                 # ✅ GET UNLIMITED CONTEXT with error handling
                 results = search_knowledge_base_unlimited(collection, embedding_model, prompt)
                 if not results:
-                    st.warning("⚠️ No relevant legal sources found. Consider adding more documents to the knowledge base.")
+                    st.markdown('''
+                    <div class="professional-card" style="border-left: 4px solid var(--warning-amber);">
+                        <div class="status-indicator status-warning">
+                            <i class="fas fa-exclamation-triangle"></i>
+                            <span>No Sources Found</span>
+                        </div>
+                        <p style="margin: 0.5rem 0 0 0; color: var(--text-secondary);">
+                            No relevant legal sources found. Consider adding more documents to the knowledge base.
+                        </p>
+                    </div>
+                    ''', unsafe_allow_html=True)
                     return
                 
-                prog.text(f"📊 **FOUND {len(results)} SOURCES**: Organizing by jurisdiction...")
-                bar.progress(30)
+                with progress_container.container():
+                    st.markdown(f'''
+                    <div class="professional-card">
+                        <div style="display: flex; align-items: center; gap: 1rem;">
+                            <i class="fas fa-database" style="color: var(--success-green);"></i>
+                            <div>
+                                <h4 style="margin: 0; color: var(--primary-navy);">Found {len(results)} Sources</h4>
+                                <p style="margin: 0; color: var(--text-muted);">Organizing by jurisdiction...</p>
+                            </div>
+                        </div>
+                    </div>
+                    ''', unsafe_allow_html=True)
+                
+                progress_bar.progress(30)
                 
                 # Create comprehensive context
                 comprehensive_context, context_metadata = get_comprehensive_legal_context(results, prompt)
@@ -629,12 +1005,33 @@ def main_app():
                 # Detect and display knowledge gaps
                 gaps = detect_knowledge_gaps(prompt, context_metadata)
                 if gaps:
-                    st.warning("📋 **KNOWLEDGE BASE LIMITATIONS:**")
-                    for gap in gaps:
-                        st.write(f"• {gap}")
+                    gap_list = "".join([f"<li>{gap}</li>" for gap in gaps])
+                    st.markdown(f'''
+                    <div class="professional-card" style="border-left: 4px solid var(--warning-amber);">
+                        <div class="status-indicator status-warning" style="margin-bottom: 1rem;">
+                            <i class="fas fa-info-circle"></i>
+                            <span>Knowledge Base Limitations</span>
+                        </div>
+                        <ul style="margin: 0; color: var(--text-secondary);">
+                            {gap_list}
+                        </ul>
+                    </div>
+                    ''', unsafe_allow_html=True)
                 
-                prog.text("🧠 **DETERMINISTIC ANALYSIS**: GPT-5 processing comprehensive context...")
-                bar.progress(60)
+                with progress_container.container():
+                    st.markdown('''
+                    <div class="professional-card">
+                        <div style="display: flex; align-items: center; gap: 1rem;">
+                            <i class="fas fa-brain fa-pulse" style="color: var(--primary-navy);"></i>
+                            <div>
+                                <h4 style="margin: 0; color: var(--primary-navy);">Deterministic Analysis</h4>
+                                <p style="margin: 0; color: var(--text-muted);">GPT-5 processing comprehensive context...</p>
+                            </div>
+                        </div>
+                    </div>
+                    ''', unsafe_allow_html=True)
+                
+                progress_bar.progress(60)
                 
                 # ✅ ANTI-HALLUCINATION SYSTEM PROMPT
                 anti_hallucination_prompt = f"""{ENHANCED_LEGAL_COMPLIANCE_SYSTEM_PROMPT}
@@ -657,8 +1054,20 @@ def main_app():
 
 {comprehensive_context}"""
                 
-                prog.text("🚀 **GENERATING**: Comprehensive, fact-based analysis...")
-                bar.progress(80)
+                with progress_container.container():
+                    st.markdown('''
+                    <div class="professional-card">
+                        <div style="display: flex; align-items: center; gap: 1rem;">
+                            <i class="fas fa-cogs fa-spin" style="color: var(--secondary-accent);"></i>
+                            <div>
+                                <h4 style="margin: 0; color: var(--primary-navy);">Generating Analysis</h4>
+                                <p style="margin: 0; color: var(--text-muted);">Comprehensive, fact-based analysis...</p>
+                            </div>
+                        </div>
+                    </div>
+                    ''', unsafe_allow_html=True)
+                
+                progress_bar.progress(80)
                 
                 # ✅ FIXED: Use Responses API with proper error handling
                 response_result = gpt5_handler.create_responses_api(
@@ -668,16 +1077,55 @@ def main_app():
                     max_tokens=MAX_TOKENS
                 )
                 
-                bar.progress(100)
-                prog.text("✅ **COMPREHENSIVE ANALYSIS COMPLETE!**")
+                progress_bar.progress(100)
+                
+                with progress_container.container():
+                    st.markdown('''
+                    <div class="professional-card" style="border-left: 4px solid var(--success-green);">
+                        <div class="status-indicator status-active">
+                            <i class="fas fa-check-circle"></i>
+                            <span>Analysis Complete</span>
+                        </div>
+                        <p style="margin: 0.5rem 0 0 0; color: var(--text-secondary);">
+                            Comprehensive analysis ready
+                        </p>
+                    </div>
+                    ''', unsafe_allow_html=True)
                 
                 if response_result["success"]:
                     ai_response = response_result["content"]
                     
                     # Add comprehensive quality indicators
-                    st.success(f"🎯 **ZERO HALLUCINATION RESPONSE** - Analyzed {len(results)} legal sources")
+                    st.markdown(f'''
+                    <div class="professional-card" style="border-left: 4px solid var(--success-green);">
+                        <div class="status-indicator status-active" style="margin-bottom: 1rem;">
+                            <i class="fas fa-bullseye"></i>
+                            <span>Zero Hallucination Response</span>
+                        </div>
+                        <p style="margin: 0; color: var(--text-secondary);">
+                            Analyzed {len(results)} legal sources with maximum accuracy
+                        </p>
+                    </div>
+                    ''', unsafe_allow_html=True)
+                    
                     if context_metadata['total_sources'] > 30:
-                        st.info(f"📊 **COMPREHENSIVE COVERAGE**: {context_metadata['total_sources']} sources across {sum(1 for k, v in context_metadata.items() if k.endswith('_sources') and v > 0)} jurisdictions")
+                        jurisdictions_count = sum(1 for k, v in context_metadata.items() if k.endswith('_sources') and v > 0)
+                        st.markdown(f'''
+                        <div class="professional-card" style="border-left: 4px solid var(--secondary-accent);">
+                            <div style="display: flex; align-items: center; gap: 1rem;">
+                                <i class="fas fa-chart-bar" style="color: var(--secondary-accent);"></i>
+                                <div>
+                                    <h4 style="margin: 0; color: var(--primary-navy);">Comprehensive Coverage</h4>
+                                    <p style="margin: 0; color: var(--text-secondary);">
+                                        {context_metadata['total_sources']} sources across {jurisdictions_count} jurisdictions
+                                    </p>
+                                </div>
+                            </div>
+                        </div>
+                        ''', unsafe_allow_html=True)
+                    
+                    # Clear progress indicators
+                    progress_container.empty()
                     
                     st.markdown(ai_response)
                     
@@ -701,12 +1149,34 @@ def main_app():
                     
                 else:
                     error_message = f"I apologize, but I encountered an error with comprehensive analysis: {response_result.get('error', 'Unknown error')}"
-                    st.error(error_message)
+                    st.markdown(f'''
+                    <div class="professional-card" style="border-left: 4px solid var(--error-red);">
+                        <div class="status-indicator status-error">
+                            <i class="fas fa-exclamation-circle"></i>
+                            <span>Analysis Error</span>
+                        </div>
+                        <p style="margin: 0.5rem 0 0 0; color: var(--text-secondary);">
+                            {response_result.get('error', 'Unknown error')}
+                        </p>
+                    </div>
+                    ''', unsafe_allow_html=True)
                     st.session_state.messages.append({"role":"assistant","content":error_message})
                     
             except Exception as e:
-                st.error(f"❌ **SYSTEM ERROR**: {str(e)}")
-                st.info("Please try again or contact support if the error persists.")
+                st.markdown(f'''
+                <div class="professional-card" style="border-left: 4px solid var(--error-red);">
+                    <div class="status-indicator status-error">
+                        <i class="fas fa-times-circle"></i>
+                        <span>System Error</span>
+                    </div>
+                    <p style="margin: 0.5rem 0 0 0; color: var(--text-secondary);">
+                        {str(e)}
+                    </p>
+                    <p style="margin: 0.5rem 0 0 0; color: var(--text-muted); font-size: 0.9rem;">
+                        Please try again or contact support if the error persists.
+                    </p>
+                </div>
+                ''', unsafe_allow_html=True)
                 
                 # Log error for debugging
                 error_message = f"System error during analysis: {str(e)}"
@@ -714,8 +1184,17 @@ def main_app():
 
 def display_comprehensive_sources(results, context_metadata):
     """Display sources organized by jurisdiction with better formatting"""
-    st.markdown("### 📚 **ALL SOURCES ANALYZED**")
-    st.info(f"🔍 **Comprehensive Review**: {len(results)} legal sources examined across jurisdictions")
+    st.markdown(f'''
+    <div class="professional-card">
+        <h3 style="color: var(--primary-navy); margin-bottom: 1rem;">
+            <i class="fas fa-books"></i> All Sources Analyzed
+        </h3>
+        <div class="status-indicator status-active">
+            <i class="fas fa-search"></i>
+            <span>Comprehensive Review: {len(results)} legal sources examined</span>
+        </div>
+    </div>
+    ''', unsafe_allow_html=True)
     
     # Group by jurisdiction for display
     jurisdictions = ['NY', 'NJ', 'CT', 'Federal', 'Multi-State']
@@ -741,19 +1220,21 @@ def display_comprehensive_sources(results, context_metadata):
                     # ✅ FIXED: Unique key generation to prevent conflicts
                     unique_key = f"{jurisdiction}_{i}_{hash(doc[:50]) % 10000}"
                     
-                    col1, col2 = st.columns([3, 1])
-                    with col1:
-                        st.text_area(
-                            f"{jurisdiction}-{i+1}", 
-                            doc, 
-                            height=100, 
-                            key=unique_key,
-                            help=f"Source: {meta.get('source_file', 'Unknown')}"
-                        )
-                    with col2:
-                        st.metric("Relevance", f"{dist:.3f}")
-                        if 'chunk_id' in meta:
-                            st.caption(f"Chunk: {meta['chunk_id']}")
+                    st.markdown(f'''
+                    <div class="professional-card" style="margin-bottom: 1rem;">
+                        <div style="display: flex; justify-content: between; align-items: center; margin-bottom: 0.5rem;">
+                            <h5 style="margin: 0; color: var(--primary-navy);">{jurisdiction}-{i+1}</h5>
+                            <span style="color: var(--text-muted); font-size: 0.9rem;">Relevance: {dist:.3f}</span>
+                        </div>
+                        <div style="background: var(--bg-secondary); padding: 1rem; border-radius: 6px; margin-bottom: 0.5rem;">
+                            <p style="margin: 0; font-size: 0.9rem; line-height: 1.4;">{doc[:300]}{"..." if len(doc) > 300 else ""}</p>
+                        </div>
+                        <div style="font-size: 0.8rem; color: var(--text-muted);">
+                            <span><i class="fas fa-file"></i> {meta.get('source_file', 'Unknown')}</span>
+                            {f' | <i class="fas fa-tag"></i> {meta["chunk_id"]}' if 'chunk_id' in meta else ''}
+                        </div>
+                    </div>
+                    ''', unsafe_allow_html=True)
 
 if __name__ == "__main__":
     main_app()
