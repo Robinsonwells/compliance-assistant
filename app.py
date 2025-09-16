@@ -6,7 +6,7 @@ from user_management import UserManager
 from sentence_transformers import SentenceTransformer
 from qdrant_client import QdrantClient
 from qdrant_client.models import Filter, FieldCondition, MatchValue
-import openai
+from openai import OpenAI
 from system_prompts import ENHANCED_LEGAL_COMPLIANCE_SYSTEM_PROMPT
 import uuid
 from datetime import datetime
@@ -60,9 +60,9 @@ def init_systems():
         if not openai_api_key:
             raise ValueError("OPENAI_API_KEY environment variable must be set")
         
-        openai.api_key = openai_api_key
+        openai_client = OpenAI(api_key=openai_api_key)
         
-        return user_manager, embedding_model, qdrant_client, openai_api_key
+        return user_manager, embedding_model, qdrant_client, openai_client
         
     except Exception as e:
         st.error(f"System initialization error: {e}")
@@ -151,7 +151,7 @@ def search_legal_database(query: str, qdrant_client, embedding_model, top_k: int
         st.error(f"Database search error: {e}")
         return []
 
-def generate_legal_response(query: str, search_results: list, openai_api_key: str):
+def generate_legal_response(query: str, search_results: list, openai_client):
     """Generate legal response using OpenAI with search results"""
     try:
         # Prepare context from search results
@@ -167,8 +167,8 @@ def generate_legal_response(query: str, search_results: list, openai_api_key: st
         ]
         
         # Call OpenAI API
-        response = openai.ChatCompletion.create(
-            model="gpt-4",
+        response = openai_client.chat.completions.create(
+            model="gpt-5",
             messages=messages,
             max_tokens=1500,
             temperature=0.1
@@ -183,7 +183,7 @@ def generate_legal_response(query: str, search_results: list, openai_api_key: st
 def main():
     """Main application logic"""
     # Initialize systems
-    user_manager, embedding_model, qdrant_client, openai_api_key = init_systems()
+    user_manager, embedding_model, qdrant_client, openai_client = init_systems()
     
     # Authenticate user
     if not authenticate_user():
@@ -257,7 +257,7 @@ def main():
                 
                 if search_results:
                     # Generate AI response
-                    response = generate_legal_response(prompt, search_results, openai_api_key)
+                    response = generate_legal_response(prompt, search_results, openai_client)
                     st.markdown(response)
                     
                     # Show sources
