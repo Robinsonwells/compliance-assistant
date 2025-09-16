@@ -11,6 +11,14 @@ from qdrant_client.models import Distance, VectorParams, PointStruct, Filter, Fi
 from advanced_chunking import LegalSemanticChunker, extract_pdf_text, extract_docx_text
 import time
 
+# Load custom CSS
+def load_css():
+    try:
+        with open("styles/style.css", "r") as f:
+            st.markdown(f"<style>{f.read()}</style>", unsafe_allow_html=True)
+    except FileNotFoundError:
+        st.warning("Custom CSS file not found. Using default styling.")
+
 def delete_file_chunks(qdrant_client, source_file: str) -> tuple[bool, str]:
     """Delete all chunks associated with a specific source file"""
     try:
@@ -58,6 +66,9 @@ load_dotenv()
 ADMIN_PASSWORD = os.getenv("ADMIN_PASSWORD", "admin-secure-2024")
 
 st.set_page_config(page_title="Admin Panel", page_icon="👨‍💼", layout="wide")
+
+# Load CSS immediately after page config
+load_css()
 
 def init_admin_systems():
     user_manager = UserManager()
@@ -108,14 +119,36 @@ def admin_login():
     if 'admin_authenticated' not in st.session_state:
         st.session_state.admin_authenticated = False
     if not st.session_state.admin_authenticated:
-        st.title("🔑 Admin Login")
-        pwd = st.text_input("Admin Password", type="password")
-        if st.button("Login"):
-            if pwd == ADMIN_PASSWORD:
-                st.session_state.admin_authenticated = True
-                st.rerun()
-            else:
-                st.error("Invalid password")
+        st.markdown("""
+            <div class="login-card">
+                <div class="brand-logo">👨‍💼</div>
+                <h1 style="margin: 0; text-align: center;">Admin Control Panel</h1>
+                <p style="text-align: center; color: var(--text-muted); margin-bottom: 2rem;">
+                    Administrative Access Required
+                </p>
+            </div>
+        """, unsafe_allow_html=True)
+        
+        with st.form("admin_login_form"):
+            pwd = st.text_input(
+                "Admin Password", 
+                type="password",
+                placeholder="Enter admin password"
+            )
+            
+            col1, col2, col3 = st.columns([1, 2, 1])
+            with col2:
+                submit_button = st.form_submit_button("🔐 Access Admin Panel", use_container_width=True)
+            
+            if submit_button and pwd:
+                if pwd == ADMIN_PASSWORD:
+                    st.session_state.admin_authenticated = True
+                    st.rerun()
+                else:
+                    st.error("Invalid password")
+            elif submit_button:
+                st.error("Please enter the admin password")
+        
         return False
     return True
 
@@ -196,8 +229,16 @@ def main():
     if not admin_login():
         st.stop()
 
-    st.title("👨‍💼 Admin Control Panel")
-    _, logout_col = st.columns([6, 1])
+    st.markdown("""
+        <div class="dashboard-header">
+            <h1 style="margin: 0; color: white;">👨‍💼 Admin Control Panel</h1>
+            <p style="margin: 0.5rem 0 0 0; color: rgba(255,255,255,0.9);">
+                System Administration & Knowledge Base Management
+            </p>
+        </div>
+    """, unsafe_allow_html=True)
+    
+    _, logout_col = st.columns([5, 1])
     with logout_col:
         if st.button("🚪 Logout"):
             st.session_state.admin_authenticated = False
@@ -207,10 +248,10 @@ def main():
     tab1, tab2 = st.tabs(["👥 Users", "📚 Knowledge Base"])
 
     with tab1:
-        st.header("User Management")
+        st.markdown("### 👥 User Management")
         left, right = st.columns(2)
         with left:
-            st.subheader("➕ New Access Code")
+            st.markdown("#### ➕ Create New Access Code")
             with st.form("add_u"):
                 name = st.text_input("Client/Company *")
                 email = st.text_input("Email (optional)")
@@ -224,7 +265,7 @@ def main():
                     else:
                         st.error("Name required")
         with right:
-            st.subheader("👥 Manage Users")
+            st.markdown("#### 👥 Active Users")
             users = um.get_all_users()
             if users:
                 for u in users:
@@ -254,7 +295,7 @@ def main():
                 st.info("No users created yet")
 
     with tab2:
-        st.header("Knowledge Base")
+        st.markdown("### 📚 Knowledge Base Management")
         try:
             collection_info = coll.get_collection("legal_regulations")
             total = collection_info.points_count
@@ -266,7 +307,7 @@ def main():
             st.warning("DB init error")
 
         st.markdown("---")
-        st.subheader("📄 Upload Documents")
+        st.markdown("#### 📄 Document Upload")
         uploads = st.file_uploader("Upload documents", accept_multiple_files=True, type=['pdf','docx','txt'])
         if uploads and st.button("Process"):
             for f in uploads:
@@ -278,7 +319,7 @@ def main():
                     st.error(msg)
 
         st.markdown("---")
-        st.subheader("🗂️ Browse Files & Chunks")
+        st.markdown("#### 🗂️ Browse Files & Chunks")
         try:
             # Get ALL points using pagination to extract accurate file information
             all_points = []
