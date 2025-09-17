@@ -23,7 +23,7 @@ def delete_file_chunks(qdrant_client, source_file: str) -> tuple[bool, str]:
     """Delete all chunks associated with a specific source file"""
     try:
         # First, get all points with this source file to count them
-        scroll_result = client.scroll(
+        scroll_result = qdrant_client.scroll(
             collection_name="legal_regulations",
             scroll_filter=Filter(
                 must=[
@@ -45,7 +45,7 @@ def delete_file_chunks(qdrant_client, source_file: str) -> tuple[bool, str]:
             return False, "No chunks found for this file"
         
         # Delete all points with this source file
-        client.delete(
+        qdrant_client.delete(
             collection_name="legal_regulations",
             points_selector=Filter(
                 must=[
@@ -312,7 +312,7 @@ def main():
         if uploads and st.button("Process"):
             for f in uploads:
                 st.write(f"Processing {f.name}")
-                ok,msg = process_uploaded_file(f,chunker,coll,embedding_model)
+                ok, msg = process_uploaded_file(f, chunker, coll, embedding_model)
                 if ok:
                     st.success(msg)
                 else:
@@ -352,7 +352,7 @@ def main():
                     with st.expander(f"📄 {fn} ({cnt} chunks)", expanded=False):
                         chunks_to_show = st.selectbox(
                             "Chunks to display:",
-                            [10,25,50,100],
+                            [10, 25, 50, 100],
                             index=1,
                             key=f"chunks_{fn}"
                         )
@@ -389,16 +389,19 @@ def main():
                                 st.error(f"Error browsing chunks for {fn}: {e}")
 
                         if st.button(f"🗑️ Delete {fn}", key=f"del_{fn}"):
-                            st.session_state[f"confirm_del_{fn}"]=True
+                            st.session_state[f"confirm_del_{fn}"] = True
                         if st.session_state.get(f"confirm_del_{fn}"):
                             if st.button("✅ Confirm Delete", key=f"confirm_{fn}"):
-                                ok,msg=delete_file_chunks(coll, fn)
-                                if ok: st.success(msg)
-                                else: st.error(msg)
-                                st.session_state[f"confirm_del_{fn}"]=False
-                                time.sleep(1); st.rerun()
+                                ok, msg = delete_file_chunks(coll, fn)
+                                if ok:
+                                    st.success(msg)
+                                else:
+                                    st.error(msg)
+                                st.session_state[f"confirm_del_{fn}"] = False
+                                time.sleep(1)
+                                st.rerun()
                             if st.button("❌ Cancel", key=f"cancel_{fn}"):
-                                st.session_state[f"confirm_del_{fn}"]=False
+                                st.session_state[f"confirm_del_{fn}"] = False
                                 st.rerun()
             else:
                 st.info("No files uploaded yet")

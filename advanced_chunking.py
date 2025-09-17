@@ -331,6 +331,29 @@ class LegalSemanticChunker:
                     return result
         
 
+    def _detect_legal_subsections(self, text: str) -> List[str]:
+        """Detect natural legal subsection boundaries"""
+        
+        # Look for common legal subsection markers
+        patterns = [
+            r'(?=\n\s*\([a-z]\))',  # (a), (b), (c) - with lookahead
+            r'(?=\n\s*\(\d+\))',    # (1), (2), (3) - with lookahead
+            r'(?=\n\s*\([ivx]+\))', # (i), (ii), (iii) - with lookahead
+            r'(?=\n\s*\d+\.\s)',    # 1. 2. 3. - with lookahead
+        ]
+        
+        # Try to split by subsection markers first
+        for pattern in patterns:
+            if re.search(pattern, text):
+                splits = re.split(pattern, text)
+                # Filter out empty splits and return non-empty subsections
+                result = [split.strip() for split in splits if split.strip()]
+                if len(result) > 1:
+                    return result
+        
+        # If no subsection markers found, return the original text
+        return [text]
+
     def _split_oversized_subsection(self, text: str, max_chunk_size: int) -> List[str]:
         """Split an oversized subsection into smaller chunks while preserving semantic meaning"""
         if len(text) <= max_chunk_size:
