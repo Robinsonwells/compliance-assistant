@@ -305,24 +305,39 @@ def main():
         # Generate and display assistant response
         with st.chat_message("assistant"):
             with st.spinner("Searching legal database..."):
-                        st.success("✅ GPT-5 legal analysis generated successfully")
                 search_results = search_legal_database(prompt, qdrant_client, embedding_model)
                 
+                if search_results:
                     # Generate AI response
                     st.info(f"🔍 Found {len(search_results)} relevant sources - Processing with GPT-5...")
                     
-                    # Display the AI response
-                    if response and response.strip():
+                    response = generate_legal_response(prompt, search_results, openai_client)
+                    
+                    if response["success"]:
+                        ai_response = response["content"]
+                        if ai_response and ai_response.strip():
+                            st.success("✅ GPT-5 legal analysis generated successfully")
+                            st.markdown(ai_response)
+                            # Add assistant response to chat history
+                            st.session_state.messages.append({"role": "assistant", "content": ai_response})
+                        else:
                             error_msg = "Empty response from GPT-5. Please try again."
-                        # Add assistant response to chat history
+                            st.error(error_msg)
+                            st.session_state.messages.append({"role": "assistant", "content": error_msg})
+                    else:
+                        error_msg = response.get("error", "Unknown GPT-5 API error")
+                        st.error(f"🚨 AI Response Generation Failed: {error_msg}")
+                        st.session_state.messages.append({"role": "assistant", "content": f"Error: {error_msg}"})
+                        
+                        # Show debugging information
+                        with st.expander("🔧 Debug Information"):
+                            st.write(f"**Sources found:** {len(search_results)}")
                             st.write(f"**Model:** gpt-5 (Responses API)")
                             st.write(f"**Reasoning effort:** medium")
                             st.write(f"**Verbosity:** high")
-                    else:
-                        st.write(f"**GPT-5 API Error:** {error_msg}")
-                        st.error(error_msg)
-                        # Add error to chat history
-                        st.info("💡 Please try rephrasing your question. If this persists, the GPT-5 API may be experiencing issues.")
+                            st.write(f"**Error details:** {error_msg}")
+                            if response.get("response_id"):
+                                st.write(f"**Response ID:** {response['response_id']}")
                     
                     # Show sources
                     with st.expander("📚 Sources Referenced"):
@@ -338,6 +353,7 @@ def main():
                 else:
                     response = "I couldn't find relevant legal information in the database for your query. Please try rephrasing your question with more specific terms or contact legal counsel for assistance."
                     st.markdown(response)
+                    st.session_state.messages.append({"role": "assistant", "content": response})
 
 if __name__ == "__main__":
     main()
