@@ -260,7 +260,7 @@ def main():
     # Main application interface
     st.markdown("""
         <div class="dashboard-header">
-            <h1 style="margin: 0; color: white;">🏛️ AI Legal Compliance Assistant</h1>
+            <h1 style="margin: 0; color: white;">AI Legal Compliance Assistant</h1>
             <p style="margin: 0.5rem 0 0 0; color: rgba(255,255,255,0.9);">
                 Professional Employment Organization Legal Research Tool
             </p>
@@ -330,7 +330,7 @@ def main():
                     if response["success"]:
                         ai_response = response["content"]
                         if ai_response and ai_response.strip():
-                            st.success("✅ GPT-5 MAXIMUM QUALITY legal analysis generated successfully")
+                            st.success("GPT-5 MAXIMUM QUALITY legal analysis generated successfully")
                             st.markdown(ai_response)
                             # Add assistant response to chat history
                             st.session_state.messages.append({"role": "assistant", "content": ai_response})
@@ -340,11 +340,11 @@ def main():
                             st.session_state.messages.append({"role": "assistant", "content": error_msg})
                     else:
                         error_msg = response.get("error", "Unknown GPT-5 API error")
-                        st.error(f"🚨 AI Response Generation Failed: {error_msg}")
+                        st.error(f"AI Response Generation Failed: {error_msg}")
                         st.session_state.messages.append({"role": "assistant", "content": f"Error: {error_msg}"})
                         
                         # Show debugging information
-                        with st.expander("🔧 Debug Information"):
+                        with st.expander("Debug Information"):
                             st.write(f"**Sources found:** {len(search_results)}")
                             st.write(f"**Model:** gpt-5 (Responses API) - MAXIMUM QUALITY MODE")
                             st.write(f"**Reasoning effort:** HIGH")
@@ -356,7 +356,7 @@ def main():
                                 st.write(f"**Response ID:** {response['response_id']}")
                     
                     # Show sources
-                    with st.expander("📚 Sources Referenced"):
+                    with st.expander("Sources Referenced"):
                         for i, result in enumerate(search_results, 1):  # Show ALL sources
                             st.markdown(f"**Source {i}:** {result['citation']} ({result['jurisdiction']})")
                             st.markdown(f"*Relevance Score: {result['score']:.3f}*")
