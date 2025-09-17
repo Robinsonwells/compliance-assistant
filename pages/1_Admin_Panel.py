@@ -120,6 +120,11 @@ def init_admin_systems():
 def admin_login():
     if 'admin_authenticated' not in st.session_state:
         st.session_state.admin_authenticated = False
+    
+    # Ensure admin_session_id is initialized
+    if 'admin_session_id' not in st.session_state:
+        st.session_state.admin_session_id = None
+    
     if not st.session_state.admin_authenticated:
         st.markdown("""
             <div class="login-card">
@@ -146,8 +151,7 @@ def admin_login():
                 if pwd == ADMIN_PASSWORD:
                     st.session_state.admin_authenticated = True
                     # Create admin session
-                    if 'admin_session_id' not in st.session_state:
-                        st.session_state.admin_session_id = str(uuid.uuid4())
+                    st.session_state.admin_session_id = str(uuid.uuid4())
                     
                     # Create session in database
                     user_manager, _, _, _ = init_admin_systems()
@@ -234,6 +238,15 @@ def process_uploaded_file(uploaded_file, chunker, qdrant_client, embedding_model
         return False, f"Error processing file: {e}"
 
 def main():
+    # Initialize session state variables early
+    if 'admin_authenticated' not in st.session_state:
+        st.session_state.admin_authenticated = False
+    if 'admin_session_id' not in st.session_state:
+        st.session_state.admin_session_id = None
+    if 'processing_active' not in st.session_state:
+        st.session_state.processing_active = False
+    
+    # Handle authentication first
     if not admin_login():
         st.stop()
         
@@ -246,19 +259,21 @@ def main():
         </div>
     """, unsafe_allow_html=True)
     
-    # Check if we have an admin session ID
-    if 'admin_session_id' not in st.session_state:
-        st.session_state.admin_session_id = str(uuid.uuid4())
-    
     # Validate admin session with extended timeout (48 hours)
     user_manager, _, _, _ = init_admin_systems()
     
-    if not user_manager.is_session_valid(st.session_state.admin_session_id, hours_timeout=48):
+    # Only validate session if we have a valid session ID
+    if (st.session_state.admin_session_id and 
+        not user_manager.is_session_valid(st.session_state.admin_session_id, hours_timeout=48)):
         st.error("Your admin session has expired. Please log in again.")
         st.session_state.admin_authenticated = False
+        st.session_state.admin_session_id = None
         st.rerun()
     
+    # Initialize systems once after authentication
     um, chunker, coll, embedding_model = init_admin_systems()
+    
+    # Create tabs
     tab1, tab2 = st.tabs(["👥 Users", "📚 Knowledge Base"])
     
     with tab1:
@@ -449,9 +464,22 @@ def main():
         else:
             st.info("📝 No processing jobs found. Upload files above to start batch processing.")
         
+            st.markdown(f"**Session:** {st.session_state.admin_session_id[:8] if st.session_state.admin_session_id else 'None'}...")
         # Auto-refresh for active jobs
         if active_jobs:
-            time.sleep(3)  # Wait 3 seconds
+            # Use a more controlled refresh mechanism
+            if st.button("🔄 Refresh Status", key="refresh_jobs"):
+                st.session_state.admin_session_id = None
+                st.session_state.processing_active = False
+                # Clear any other admin-related session state
+                keys_to_clear = [k for k in st.session_state.keys() if k.startswith('admin_') or k.startswith('current_job_')]
+                for key in keys_to_clear:
+                    del st.session_state[key]
+                st.rerun()
+            
+            # Auto-refresh every 5 seconds for active jobs
+            st.markdown("*Auto-refreshing every 5 seconds for active jobs...*")
+            time.sleep(5)
             st.rerun()
         
         st.markdown("---")
