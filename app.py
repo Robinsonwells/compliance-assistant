@@ -152,7 +152,7 @@ def search_legal_database(query: str, qdrant_client, embedding_model, top_k: int
         return []
 
 def generate_legal_response(query: str, search_results: list, openai_client):
-    """Generate legal response using OpenAI with search results"""
+    """Generate legal response using OpenAI GPT-5 Responses API with search results"""
     try:
         # Prepare context from search results
         context = "\n\n".join([
@@ -164,54 +164,63 @@ def generate_legal_response(query: str, search_results: list, openai_client):
         print(f"DEBUG: Processing query with {len(search_results)} sources")
         print(f"DEBUG: Context length: {len(context)} characters")
         
-        # Create messages for OpenAI
-        messages = [
-            {"role": "system", "content": ENHANCED_LEGAL_COMPLIANCE_SYSTEM_PROMPT},
-            {"role": "user", "content": f"QUERY: {query}\n\nAVAILABLE LEGAL CONTEXT:\n{context}"}
-        ]
+        # Prepare input for GPT-5 Responses API
+        input_content = f"""SYSTEM INSTRUCTIONS:
+{ENHANCED_LEGAL_COMPLIANCE_SYSTEM_PROMPT}
+
+USER QUERY: {query}
+
+AVAILABLE LEGAL CONTEXT:
+{context}"""
         
-        # Validate context length (GPT-5 has token limits)
-        total_content_length = len(ENHANCED_LEGAL_COMPLIANCE_SYSTEM_PROMPT) + len(f"QUERY: {query}\n\nAVAILABLE LEGAL CONTEXT:\n{context}")
+        # Validate context length
+        total_content_length = len(input_content)
         if total_content_length > 100000:  # Conservative limit
             print(f"WARNING: Content length {total_content_length} may exceed model limits")
         
-        print("DEBUG: Making OpenAI API call...")
+        print("DEBUG: Making OpenAI GPT-5 Responses API call...")
         
-        # Call OpenAI API
-        response = openai_client.chat.completions.create(
+        # Call OpenAI GPT-5 Responses API
+        response = openai_client.responses.create(
             model="gpt-5",
-            messages=messages,
-            max_completion_tokens=1500
+            input=input_content,
+            reasoning={
+                "effort": "medium"  # Use medium reasoning for legal analysis
+            },
+            text={
+                "verbosity": "high"  # Use high verbosity for detailed legal explanations
+            }
         )
         
         # Extract and validate response
-        if response and response.choices and len(response.choices) > 0:
-            content = response.choices[0].message.content
+        if response and hasattr(response, 'output_text'):
+            content = response.output_text
             print(f"DEBUG: Received response of length: {len(content) if content else 0}")
             
             if content and content.strip():
                 return {
                     "success": True,
                     "content": content,
-                    "error": None
+                    "error": None,
+                    "response_id": getattr(response, 'id', None)  # Store response ID for multi-turn conversations
                 }
             else:
-                print("DEBUG: Empty response content from OpenAI")
+                print("DEBUG: Empty response content from GPT-5")
                 return {
                     "success": False,
                     "content": None,
-                    "error": "Empty response from OpenAI API"
+                    "error": "Empty response from GPT-5 Responses API"
                 }
         else:
-            print("DEBUG: Invalid response structure from OpenAI")
+            print("DEBUG: Invalid response structure from GPT-5")
             return {
                 "success": False,
                 "content": None,
-                "error": "Invalid response structure from OpenAI API"
+                "error": "Invalid response structure from GPT-5 Responses API"
             }
     
     except Exception as e:
-        error_msg = f"AI response generation error: {e}"
+        error_msg = f"GPT-5 API error: {e}"
         print(f"DEBUG: Exception in generate_legal_response: {error_msg}")
         return {
             "success": False,
@@ -251,6 +260,10 @@ def main():
     with st.sidebar:
         st.markdown("### 📋 Quick Reference")
         st.markdown("""
+        **AI Model:** GPT-5 (Responses API)
+        - **Reasoning:** Medium effort for thorough legal analysis
+        - **Verbosity:** High for detailed explanations
+        
         **Supported Jurisdictions:**
         - New York (NY)
         - New Jersey (NJ) 
@@ -261,6 +274,7 @@ def main():
         - "Minimum wage requirements in NY"
         - "Overtime rules for healthcare workers"
         - "Multi-state payroll compliance"
+        - "On-call pay differences between CT, NY, and NJ"
         """)
         
         if st.button("🚪 Logout"):
@@ -291,22 +305,24 @@ def main():
         # Generate and display assistant response
         with st.chat_message("assistant"):
             with st.spinner("Searching legal database..."):
-                # Search legal database
+                        st.success("✅ GPT-5 legal analysis generated successfully")
                 search_results = search_legal_database(prompt, qdrant_client, embedding_model)
                 
                     # Generate AI response
-                    response = generate_legal_response(prompt, search_results, openai_client)
+                    st.info(f"🔍 Found {len(search_results)} relevant sources - Processing with GPT-5...")
                     
                     # Display the AI response
                     if response and response.strip():
-                        st.markdown(response)
+                            error_msg = "Empty response from GPT-5. Please try again."
                         # Add assistant response to chat history
-                        st.session_state.messages.append({"role": "assistant", "content": response})
+                            st.write(f"**Model:** gpt-5 (Responses API)")
+                            st.write(f"**Reasoning effort:** medium")
+                            st.write(f"**Verbosity:** high")
                     else:
-                        error_msg = "No response generated. Please try again."
+                        st.write(f"**GPT-5 API Error:** {error_msg}")
                         st.error(error_msg)
                         # Add error to chat history
-                        st.session_state.messages.append({"role": "assistant", "content": error_msg})
+                        st.info("💡 Please try rephrasing your question. If this persists, the GPT-5 API may be experiencing issues.")
                     
                     # Show sources
                     with st.expander("📚 Sources Referenced"):
@@ -320,7 +336,7 @@ def main():
                                 key=f"source_{i}_{len(st.session_state.messages)}"
                             )
                 else:
-                    response = "I couldn't find relevant legal information in the database for your query. Please try rephrasing your question or contact legal counsel for assistance."
+                    response = "I couldn't find relevant legal information in the database for your query. Please try rephrasing your question with more specific terms or contact legal counsel for assistance."
                     st.markdown(response)
 
 if __name__ == "__main__":
