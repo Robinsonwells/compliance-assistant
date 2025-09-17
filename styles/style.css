@@ -280,6 +280,40 @@ p, .stMarkdown {
   box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.2);
 }
 
+/* Additional Chat Input Selectors for Better Coverage */
+.stChatInput textarea {
+  background-color: var(--bg-tertiary) !important;
+  border: 2px solid var(--border-light) !important;
+  color: var(--text-primary) !important;
+  border-radius: 8px !important;
+}
+
+.stChatInput textarea:focus {
+  border-color: var(--secondary-accent) !important;
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.2) !important;
+  background-color: var(--bg-secondary) !important;
+}
+
+/* Chat Input Container */
+[data-testid="stChatInput"] {
+  background-color: var(--bg-secondary) !important;
+}
+
+[data-testid="stChatInput"] > div {
+  background-color: var(--bg-secondary) !important;
+}
+
+[data-testid="stChatInput"] textarea {
+  background-color: var(--bg-tertiary) !important;
+  color: var(--text-primary) !important;
+  border: 2px solid var(--border-light) !important;
+}
+
+[data-testid="stChatInput"] textarea:focus {
+  background-color: var(--bg-secondary) !important;
+  border-color: var(--secondary-accent) !important;
+}
+
 /* Sidebar */
 .css-1d391kg {
   background-color: var(--bg-secondary);
@@ -698,6 +732,12 @@ div[style*="background-color: #fff"] {
   background-color: var(--bg-secondary) !important;
 }
 
+/* Force background on transparent elements */
+div[style*="background-color: transparent"],
+textarea[style*="background-color: transparent"] {
+  background-color: var(--bg-tertiary) !important;
+}
+
 /* Catch-all for any remaining light borders */
 div[style*="border-color: #e0e0e0"],
 div[style*="border-color: #ddd"],
@@ -713,6 +753,18 @@ div[style*="border-color: #ccc"] {
 /* Ensure all backgrounds inherit dark theme */
 *:not([data-testid="stChatInput"]):not(input):not(textarea):not(select) {
   background-color: inherit;
+}
+
+/* Force dark backgrounds on all input elements */
+input, textarea, select {
+  background-color: var(--bg-tertiary) !important;
+  color: var(--text-primary) !important;
+  border: 2px solid var(--border-light) !important;
+}
+
+input:focus, textarea:focus, select:focus {
+  background-color: var(--bg-secondary) !important;
+  border-color: var(--secondary-accent) !important;
 }
 
 /* Scrollbar styling for dark theme */
