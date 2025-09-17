@@ -10,6 +10,9 @@ from openai import OpenAI
 from system_prompts import ENHANCED_LEGAL_COMPLIANCE_SYSTEM_PROMPT
 import uuid
 from datetime import datetime
+import json
+import re
+from typing import List, Dict, Any, Tuple
 
 # Load environment variables
 load_dotenv()
@@ -119,21 +122,440 @@ def authenticate_user():
     
     return True
 
-def search_legal_database(query: str, qdrant_client, embedding_model, top_k: int = 5):
-    """Search the legal database using semantic similarity"""
+def extract_legal_entities(query: str) -> Dict[str, List[str]]:
+    """Extract legal entities from query for enhanced search"""
+    entities = {
+        'jurisdictions': [],
+        'topics': [],
+        'legal_concepts': []
+    }
+    
+    query_lower = query.lower()
+    
+    # Extract jurisdictions
+    jurisdiction_patterns = {
+        'NY': ['new york', 'ny', 'nycrr'],
+        'NJ': ['new jersey', 'nj', 'njac'],
+        'CT': ['connecticut', 'ct', 'conn'],
+        'Federal': ['federal', 'flsa', 'fmla', 'usc', 'cfr']
+    }
+    
+    for jurisdiction, patterns in jurisdiction_patterns.items():
+        if any(pattern in query_lower for pattern in patterns):
+            entities['jurisdictions'].append(jurisdiction)
+    
+    # Extract legal topics
+    topic_patterns = [
+        'minimum wage', 'overtime', 'break', 'meal period', 'sick leave',
+        'family leave', 'vacation', 'holiday', 'wage', 'hour', 'employment',
+        'discrimination', 'harassment', 'safety', 'workers compensation'
+    ]
+    
+    for topic in topic_patterns:
+        if topic in query_lower:
+            entities['topics'].append(topic)
+    
+    # Extract legal concepts
+    concept_patterns = [
+        'requirement', 'violation', 'penalty', 'compliance', 'exemption',
+        'definition', 'procedure', 'application', 'enforcement'
+    ]
+    
+    for concept in concept_patterns:
+        if concept in query_lower:
+            entities['legal_concepts'].append(concept)
+    
+    return entities
+
+def analyze_query_complexity(query: str, openai_client) -> Dict[str, Any]:
+    """Analyze query complexity to determine search strategy"""
     try:
-        # Generate query embedding
-        query_embedding = embedding_model.encode([query])[0].tolist()
+        complexity_prompt = f"""
+        Analyze this legal compliance query for complexity and scope:
+        Query: "{query}"
         
-        # Search Qdrant
+        Respond with JSON only:
+        {{
+            "complexity": "simple|moderate|complex|comprehensive",
+            "jurisdictions": ["list of jurisdictions mentioned"],
+            "topics": ["list of legal topics"],
+            "requires_comprehensive_search": true|false,
+            "estimated_sources_needed": 25,
+            "search_strategy": "standard|multi_jurisdictional|comprehensive",
+            "explanation": "brief explanation of complexity assessment"
+        }}
+        """
+        
+        response = openai_client.chat.completions.create(
+            model="gpt-4o-mini",  # Use faster model for analysis
+            messages=[{
+                "role": "system",
+                "content": "You are a legal research expert. Analyze queries precisely and respond only with valid JSON."
+            }, {
+                "role": "user", 
+                "content": complexity_prompt
+            }],
+            max_completion_tokens=300,
+            temperature=0.1
+        )
+        
+        return json.loads(response.choices[0].message.content)
+    
+    except Exception as e:
+        print(f"Query complexity analysis failed: {e}")
+        # Fallback to simple analysis
+        return {
+            "complexity": "moderate",
+            "jurisdictions": [],
+            "topics": [],
+            "requires_comprehensive_search": True,
+            "estimated_sources_needed": 100,
+            "search_strategy": "comprehensive",
+            "explanation": "Fallback analysis due to parsing error"
+        }
+
+def intelligent_wide_retrieval(query: str, qdrant_client, embedding_model, complexity_analysis: Dict) -> List:
+    """Cast wide net using multiple search strategies based on complexity"""
+    try:
+        all_candidates = {}  # Use dict to avoid duplicates
+        entities = extract_legal_entities(query)
+        
+        # Determine search parameters based on complexity
+        if complexity_analysis["complexity"] == "simple":
+            base_limit = 100
+            score_threshold = 0.4
+        elif complexity_analysis["complexity"] == "moderate":
+            base_limit = 300
+            score_threshold = 0.35
+        elif complexity_analysis["complexity"] == "complex":
+            base_limit = 600
+            score_threshold = 0.3
+        else:  # comprehensive
+            base_limit = 1000
+            score_threshold = 0.25
+        
+        print(f"Wide retrieval: {complexity_analysis['complexity']} query, searching {base_limit} candidates")
+        
+        # Strategy 1: Direct semantic search
+        query_embedding = embedding_model.encode([query])[0].tolist()
+        semantic_results = qdrant_client.search(
+            collection_name="legal_regulations",
+            query_vector=query_embedding,
+            limit=base_limit,
+            score_threshold=score_threshold
+        )
+        
+        for result in semantic_results:
+            all_candidates[result.id] = result
+        
+        # Strategy 2: Entity-based expansion for complex queries
+        if complexity_analysis["complexity"] in ["complex", "comprehensive"]:
+            # Search by jurisdictions
+            for jurisdiction in entities['jurisdictions']:
+                jurisdiction_embedding = embedding_model.encode([f"{jurisdiction} legal requirements"])[0].tolist()
+                jurisdiction_results = qdrant_client.search(
+                    collection_name="legal_regulations",
+                    query_vector=jurisdiction_embedding,
+                    limit=200,
+                    score_threshold=0.3
+                )
+                for result in jurisdiction_results:
+                    all_candidates[result.id] = result
+            
+            # Search by topics
+            for topic in entities['topics']:
+                topic_query = f"{topic} legal requirements"
+                topic_embedding = embedding_model.encode([topic_query])[0].tolist()
+                topic_results = qdrant_client.search(
+                    collection_name="legal_regulations",
+                    query_vector=topic_embedding,
+                    limit=150,
+                    score_threshold=0.3
+                )
+                for result in topic_results:
+                    all_candidates[result.id] = result
+        
+        # Strategy 3: Related provision discovery for comprehensive queries
+        if complexity_analysis["complexity"] == "comprehensive" and len(semantic_results) > 0:
+            for result in semantic_results[:20]:  # Top 20 semantic matches
+                citation = result.payload.get('citation', '')
+                jurisdiction = result.payload.get('jurisdiction', '')
+                
+                if jurisdiction:
+                    # Find other provisions from same jurisdiction
+                    related_results = qdrant_client.scroll(
+                        collection_name="legal_regulations",
+                        scroll_filter=Filter(
+                            must=[FieldCondition(
+                                key="jurisdiction",
+                                match=MatchValue(value=jurisdiction)
+                            )]
+                        ),
+                        limit=100
+                    )
+                    
+                    for related in related_results[0]:
+                        if related.payload.get('text', '').lower().find(query.lower().split()[0]) != -1:
+                            all_candidates[related.id] = related
+        
+        final_candidates = list(all_candidates.values())
+        print(f"Wide retrieval found {len(final_candidates)} candidate chunks")
+        return final_candidates
+        
+    except Exception as e:
+        print(f"Wide retrieval failed: {e}")
+        # Fallback to basic search
+        query_embedding = embedding_model.encode([query])[0].tolist()
+        return qdrant_client.search(
+            collection_name="legal_regulations",
+            query_vector=query_embedding,
+            limit=200,
+            score_threshold=0.3
+        )
+
+def ai_relevance_filter(query: str, candidates: List, openai_client) -> List:
+    """Let GPT-5 determine what's actually relevant"""
+    try:
+        relevant_chunks = []
+        batch_size = 50  # Process in smaller batches for better accuracy
+        
+        print(f"AI relevance filtering {len(candidates)} candidates in batches of {batch_size}")
+        
+        for i in range(0, len(candidates), batch_size):
+            batch = candidates[i:i+batch_size]
+            
+            # Create relevance assessment prompt
+            relevance_prompt = f"""
+LEGAL QUERY: {query}
+
+TASK: For each source below, determine relevance level. Be precise and conservative.
+
+RELEVANCE LEVELS:
+- ESSENTIAL: Directly answers the query or provides critical legal requirements
+- IMPORTANT: Provides valuable related information or context
+- SUPPLEMENTARY: Tangentially related but potentially useful
+- IRRELEVANT: Not related to the query
+
+Respond with ONLY the relevance level for each source (one per line):
+
+"""
+            
+            # Add sources to prompt
+            for j, chunk in enumerate(batch):
+                text_preview = chunk.payload.get('text', '')[:400]
+                relevance_prompt += f"""
+SOURCE {j+1}:
+Citation: {chunk.payload.get('citation', 'N/A')}
+Jurisdiction: {chunk.payload.get('jurisdiction', 'N/A')}
+Section: {chunk.payload.get('section_number', 'N/A')} - {chunk.payload.get('section_title', 'N/A')}
+Text Preview: {text_preview}...
+
+"""
+            
+            # Get AI relevance decisions
+            relevance_response = openai_client.chat.completions.create(
+                model="gpt-4o-mini",  # Use faster model for filtering
+                messages=[{
+                    "role": "system",
+                    "content": "You are a legal research expert. Assess relevance precisely. Respond only with relevance levels, one per line."
+                }, {
+                    "role": "user",
+                    "content": relevance_prompt
+                }],
+                max_completion_tokens=len(batch) * 15,
+                temperature=0.1
+            )
+            
+            # Parse relevance decisions
+            decisions = relevance_response.choices[0].message.content.strip().split('\n')
+            
+            # Include ESSENTIAL and IMPORTANT chunks
+            for j, decision in enumerate(decisions):
+                if j < len(batch):  # Safety check
+                    decision_clean = decision.strip().upper()
+                    if any(level in decision_clean for level in ['ESSENTIAL', 'IMPORTANT']):
+                        chunk_with_relevance = batch[j]
+                        # Add relevance metadata
+                        if hasattr(chunk_with_relevance, 'payload'):
+                            chunk_with_relevance.payload['ai_relevance'] = decision_clean
+                        else:
+                            chunk_with_relevance.ai_relevance = decision_clean
+                        relevant_chunks.append(chunk_with_relevance)
+        
+        essential_count = len([c for c in relevant_chunks if 'ESSENTIAL' in str(getattr(c, 'ai_relevance', getattr(c.payload, 'ai_relevance', '')))])
+        important_count = len([c for c in relevant_chunks if 'IMPORTANT' in str(getattr(c, 'ai_relevance', getattr(c.payload, 'ai_relevance', '')))])
+        
+        print(f"AI filtered to {len(relevant_chunks)} relevant chunks ({essential_count} essential, {important_count} important)")
+        return relevant_chunks
+        
+    except Exception as e:
+        print(f"AI relevance filtering failed: {e}")
+        # Fallback: return top candidates by score
+        return sorted(candidates, key=lambda x: x.score, reverse=True)[:100]
+
+def build_adaptive_context(query: str, relevant_chunks: List) -> str:
+    """Build context that adapts to the number of relevant sources found"""
+    try:
+        # Categorize chunks by AI-determined relevance
+        essential_chunks = []
+        important_chunks = []
+        
+        for chunk in relevant_chunks:
+            relevance = getattr(chunk, 'ai_relevance', getattr(chunk.payload, 'ai_relevance', ''))
+            if 'ESSENTIAL' in str(relevance):
+                essential_chunks.append(chunk)
+            elif 'IMPORTANT' in str(relevance):
+                important_chunks.append(chunk)
+        
+        print(f"Context building: {len(essential_chunks)} essential, {len(important_chunks)} important chunks")
+        
+        context_parts = []
+        
+        # Always include all essential chunks (full text)
+        if essential_chunks:
+            context_parts.append("=== ESSENTIAL LEGAL PROVISIONS ===")
+            context_parts.append(f"The following {len(essential_chunks)} sources directly address your query and MUST be quoted and analyzed:")
+            context_parts.append("")
+            
+            for i, chunk in enumerate(essential_chunks, 1):
+                context_parts.append(f"""ESSENTIAL SOURCE {i}:
+Citation: {chunk.payload.get('citation', 'N/A')}
+Jurisdiction: {chunk.payload.get('jurisdiction', 'N/A')}
+Section: {chunk.payload.get('section_number', 'N/A')} - {chunk.payload.get('section_title', 'N/A')}
+Full Legal Text: "{chunk.payload.get('text', '')}"
+""")
+        
+        # Include important chunks (full text if manageable, otherwise structured)
+        if important_chunks:
+            context_parts.append("\n=== IMPORTANT RELATED PROVISIONS ===")
+            context_parts.append(f"The following {len(important_chunks)} sources provide important context and should be referenced where relevant:")
+            context_parts.append("")
+            
+            if len(important_chunks) <= 30:
+                # Include full text for manageable number
+                for i, chunk in enumerate(important_chunks, 1):
+                    context_parts.append(f"""IMPORTANT SOURCE {i}:
+Citation: {chunk.payload.get('citation', 'N/A')}
+Jurisdiction: {chunk.payload.get('jurisdiction', 'N/A')}
+Legal Text: "{chunk.payload.get('text', '')}"
+""")
+            else:
+                # Provide structured summary for large number
+                context_parts.append(f"[{len(important_chunks)} Important Sources - Structured Summary]")
+                context_parts.append("")
+                
+                # Group by jurisdiction
+                by_jurisdiction = {}
+                for chunk in important_chunks:
+                    jurisdiction = chunk.payload.get('jurisdiction', 'Unknown')
+                    if jurisdiction not in by_jurisdiction:
+                        by_jurisdiction[jurisdiction] = []
+                    by_jurisdiction[jurisdiction].append(chunk)
+                
+                for jurisdiction, chunks in by_jurisdiction.items():
+                    context_parts.append(f"**{jurisdiction} Provisions ({len(chunks)} sources):**")
+                    for chunk in chunks[:10]:  # Limit per jurisdiction
+                        context_parts.append(f"- {chunk.payload.get('citation', 'N/A')}: {chunk.payload.get('text', '')[:200]}...")
+                    if len(chunks) > 10:
+                        context_parts.append(f"- ... and {len(chunks) - 10} additional {jurisdiction} sources")
+                    context_parts.append("")
+        
+        final_context = "\n".join(context_parts)
+        
+        # Check context length and provide summary if too large
+        if len(final_context) > 800000:  # 800K character limit
+            print("Context too large, creating executive summary")
+            context_parts = []
+            
+            # Essential sources (always include)
+            if essential_chunks:
+                context_parts.append("=== ESSENTIAL LEGAL PROVISIONS (FULL TEXT) ===")
+                for i, chunk in enumerate(essential_chunks[:20], 1):  # Limit to top 20 essential
+                    context_parts.append(f"""ESSENTIAL SOURCE {i}:
+Citation: {chunk.payload.get('citation', 'N/A')}
+Text: "{chunk.payload.get('text', '')}"
+""")
+            
+            # Important sources (summary only)
+            if important_chunks:
+                context_parts.append("\n=== IMPORTANT SOURCES (SUMMARY) ===")
+                context_parts.append("Key Citations and Provisions:")
+                for chunk in important_chunks[:50]:  # Top 50 important
+                    context_parts.append(f"- {chunk.payload.get('citation', 'N/A')} ({chunk.payload.get('jurisdiction', 'N/A')}): {chunk.payload.get('text', '')[:150]}...")
+            
+            final_context = "\n".join(context_parts)
+        
+        return final_context
+        
+    except Exception as e:
+        print(f"Context building failed: {e}")
+        # Fallback to simple concatenation
+        context_parts = []
+        for i, chunk in enumerate(relevant_chunks[:50], 1):
+            context_parts.append(f"""SOURCE {i}:
+Citation: {chunk.payload.get('citation', 'N/A')}
+Text: "{chunk.payload.get('text', '')}"
+""")
+        return "\n\n".join(context_parts)
+
+def search_legal_database(query: str, qdrant_client, embedding_model, openai_client, adaptive: bool = True):
+    """Enhanced search with AI-driven relevance and adaptive context"""
+    try:
+        if adaptive:
+            # Step 1: Analyze query complexity
+            complexity_analysis = analyze_query_complexity(query, openai_client)
+            print(f"Query complexity: {complexity_analysis['complexity']} - {complexity_analysis['explanation']}")
+            
+            # Step 2: Intelligent wide retrieval
+            candidates = intelligent_wide_retrieval(query, qdrant_client, embedding_model, complexity_analysis)
+            
+            # Step 3: AI relevance filtering
+            relevant_chunks = ai_relevance_filter(query, candidates, openai_client)
+            
+            # Step 4: Build adaptive context
+            adaptive_context = build_adaptive_context(query, relevant_chunks)
+            
+            return {
+                'relevant_chunks': relevant_chunks,
+                'adaptive_context': adaptive_context,
+                'complexity_analysis': complexity_analysis,
+                'total_candidates': len(candidates),
+                'total_relevant': len(relevant_chunks)
+            }
+        else:
+            # Fallback to original method
+            query_embedding = embedding_model.encode([query])[0].tolist()
+            search_results = qdrant_client.search(
+                collection_name="legal_regulations",
+                query_vector=query_embedding,
+                limit=50,
+                with_payload=True
+            )
+            
+            formatted_results = []
+            for result in search_results:
+                formatted_results.append({
+                    'text': result.payload.get('text', ''),
+                    'citation': result.payload.get('citation', ''),
+                    'section_number': result.payload.get('section_number', ''),
+                    'section_title': result.payload.get('section_title', ''),
+                    'jurisdiction': result.payload.get('jurisdiction', ''),
+                    'score': result.score
+                })
+            
+            return formatted_results
+            
+    except Exception as e:
+        print(f"Enhanced search failed: {e}")
+        # Ultimate fallback
+        query_embedding = embedding_model.encode([query])[0].tolist()
         search_results = qdrant_client.search(
             collection_name="legal_regulations",
             query_vector=query_embedding,
-            limit=top_k,
+            limit=50,
             with_payload=True
         )
         
-        # Format results
         formatted_results = []
         for result in search_results:
             formatted_results.append({
@@ -146,26 +568,48 @@ def search_legal_database(query: str, qdrant_client, embedding_model, top_k: int
             })
         
         return formatted_results
-    
-    except Exception as e:
-        st.error(f"Database search error: {e}")
-        return []
 
-def generate_legal_response(query: str, search_results: list, openai_client):
-    """Generate legal response using OpenAI GPT-5 Responses API with search results"""
+def generate_legal_response(query: str, search_data, openai_client):
+    """Generate legal response using adaptive context and comprehensive sources"""
     try:
-        # Prepare comprehensive context from ALL search results for maximum quality
-        context = "\n\n".join([
-            f"LEGAL TEXT {i+1}:\n\"{result['text']}\"\n(Source: {result['citation']})\n(Jurisdiction: {result['jurisdiction']})\n(Section: {result['section_number']} - {result['section_title']})\n(Relevance Score: {result['score']:.4f})"
-            for i, result in enumerate(search_results)  # Use ALL results, not just top 3
-        ])
-        
-        # Debug information
-        print(f"DEBUG: Processing query with {len(search_results)} sources (MAXIMUM QUALITY MODE)")
-        print(f"DEBUG: Context length: {len(context)} characters")
-        
-        # Prepare input for GPT-5 Responses API
-        input_content = f"""{ENHANCED_LEGAL_COMPLIANCE_SYSTEM_PROMPT}
+        # Handle both new adaptive format and legacy format
+        if isinstance(search_data, dict) and 'adaptive_context' in search_data:
+            # New adaptive format
+            context = search_data['adaptive_context']
+            relevant_chunks = search_data['relevant_chunks']
+            complexity_analysis = search_data['complexity_analysis']
+            
+            print(f"Generating response with adaptive context: {len(relevant_chunks)} sources, {complexity_analysis['complexity']} complexity")
+            
+            # Enhanced system prompt for adaptive context
+            enhanced_prompt = f"""{ENHANCED_LEGAL_COMPLIANCE_SYSTEM_PROMPT}
+
+QUERY COMPLEXITY ANALYSIS:
+- Complexity Level: {complexity_analysis['complexity']}
+- Jurisdictions: {', '.join(complexity_analysis.get('jurisdictions', []))}
+- Topics: {', '.join(complexity_analysis.get('topics', []))}
+- Search Strategy: {complexity_analysis.get('search_strategy', 'comprehensive')}
+
+ADAPTIVE CONTEXT INSTRUCTIONS:
+- ESSENTIAL sources MUST be quoted verbatim and analyzed in detail
+- IMPORTANT sources should be referenced where relevant to provide context
+- You have access to {len(relevant_chunks)} AI-filtered relevant sources
+- Provide comprehensive analysis appropriate for {complexity_analysis['complexity']} complexity level
+
+USER QUERY: {query}
+
+LEGAL CONTEXT:
+{context}"""
+            
+        else:
+            # Legacy format compatibility
+            search_results = search_data if isinstance(search_data, list) else []
+            context = "\n\n".join([
+                f"LEGAL TEXT {i+1}:\n\"{result['text']}\"\n(Source: {result['citation']})\n(Jurisdiction: {result['jurisdiction']})\n(Section: {result['section_number']} - {result['section_title']})\n(Relevance Score: {result['score']:.4f})"
+                for i, result in enumerate(search_results)
+            ])
+            
+            enhanced_prompt = f"""{ENHANCED_LEGAL_COMPLIANCE_SYSTEM_PROMPT}
 
 USER QUERY: {query}
 
@@ -173,35 +617,28 @@ AVAILABLE LEGAL CONTEXT:
 {context}"""
         
         # Validate context length
-        total_content_length = len(input_content)
-        if total_content_length > 500000:  # Much higher limit for maximum quality
-            print(f"WARNING: Content length {total_content_length} may exceed model limits")
-            # Truncate only if absolutely necessary, keeping the most relevant sources
-            if len(search_results) > 10:
-                # Keep top 10 most relevant sources if context is too large
-                top_results = search_results[:10]
-                context = "\n\n".join([
-                    f"LEGAL TEXT {i+1}:\n\"{result['text']}\"\n(Source: {result['citation']})\n(Jurisdiction: {result['jurisdiction']})\n(Section: {result['section_number']} - {result['section_title']})\n(Relevance Score: {result['score']:.4f})"
-                    for i, result in enumerate(top_results)
-                ])
-                input_content = f"""{ENHANCED_LEGAL_COMPLIANCE_SYSTEM_PROMPT}
-
-USER QUERY: {query}
-
-AVAILABLE LEGAL CONTEXT:
-{context}"""
-                print(f"DEBUG: Truncated to top 10 sources, new length: {len(input_content)} characters")
+        total_content_length = len(enhanced_prompt)
+        print(f"Total context length: {total_content_length} characters")
         
-        print("DEBUG: Making OpenAI GPT-5 Responses API call with MAXIMUM QUALITY SETTINGS...")
+        if total_content_length > 1200000:  # 1.2M character limit for safety
+            print(f"WARNING: Context length {total_content_length} exceeds safe limits")
+            # This should rarely happen with adaptive context, but provide fallback
+            return {
+                "success": False,
+                "content": None,
+                "error": "Context too large even after adaptive filtering. Please refine your query."
+            }
+        
+        print("Making OpenAI GPT-5 Responses API call with adaptive context...")
         
         # Call OpenAI GPT-5 Responses API
         response = openai_client.responses.create(
             model="gpt-5",
-            input=[{"role": "user", "content": input_content}],
+            input=[{"role": "user", "content": enhanced_prompt}],
             reasoning={
                 "effort": "high"  # Use HIGH reasoning for maximum thoroughness
             },
-            max_output_tokens=16384  # Maximum output tokens for comprehensive responses
+            max_output_tokens=65536  # Increased output tokens for comprehensive responses
         )
         
         # Extract and validate response
@@ -217,7 +654,7 @@ AVAILABLE LEGAL CONTEXT:
                     if content:
                         break
             
-            print(f"DEBUG: Received MAXIMUM QUALITY response of length: {len(content) if content else 0}")
+            print(f"Received comprehensive response of length: {len(content) if content else 0}")
             
             if content and content.strip():
                 return {
@@ -227,14 +664,14 @@ AVAILABLE LEGAL CONTEXT:
                     "response_id": getattr(response, 'id', None)  # Store response ID for multi-turn conversations
                 }
             else:
-                print("DEBUG: Empty response content from GPT-5")
+                print("Empty response content from GPT-5")
                 return {
                     "success": False,
                     "content": None,
                     "error": "Empty response from GPT-5 Responses API"
                 }
         else:
-            print("DEBUG: Invalid response structure from GPT-5")
+            print("Invalid response structure from GPT-5")
             return {
                 "success": False,
                 "content": None,
@@ -243,7 +680,7 @@ AVAILABLE LEGAL CONTEXT:
     
     except Exception as e:
         error_msg = f"GPT-5 API error: {e}"
-        print(f"DEBUG: Exception in generate_legal_response: {error_msg}")
+        print(f"Exception in generate_legal_response: {error_msg}")
         return {
             "success": False,
             "content": None,
@@ -281,9 +718,10 @@ def main():
     # Sidebar
     with st.sidebar:
         st.markdown("### 📋 Quick Reference")
-        st.markdown("**AI Model:** GPT-5 (Responses API) - MAXIMUM QUALITY MODE")
+        st.markdown("**AI Model:** GPT-5 (Responses API) with AI-Driven Relevance")
         st.markdown("**Supported Jurisdictions:** NY, NJ, CT, Federal")
         st.markdown("**Query Examples:** Minimum wage, overtime rules, multi-state compliance")
+        st.markdown("**Search Strategy:** Adaptive context based on query complexity")
         
         if st.button("🚪 Logout"):
             st.session_state.authenticated = False
@@ -313,18 +751,24 @@ def main():
         # Generate and display assistant response
         with st.chat_message("assistant"):
             with st.spinner("Searching legal database..."):
-                search_results = search_legal_database(prompt, qdrant_client, embedding_model, top_k=15)  # Maximum sources
+                # Use enhanced search with AI-driven relevance
+                search_data = search_legal_database(prompt, qdrant_client, embedding_model, openai_client, adaptive=True)
                 
-                if search_results:
+                if search_data:
                     # Generate AI response
-                    st.info(f"Found {len(search_results)} relevant sources - Processing with GPT-5 MAXIMUM QUALITY MODE")
+                    if isinstance(search_data, dict) and 'total_relevant' in search_data:
+                        st.info(f"AI-filtered {search_data['total_relevant']} relevant sources from {search_data['total_candidates']} candidates - Processing with GPT-5 Adaptive Context")
+                        relevant_chunks = search_data['relevant_chunks']
+                    else:
+                        st.info(f"Found {len(search_data)} sources - Processing with GPT-5")
+                        relevant_chunks = search_data
                     
-                    response = generate_legal_response(prompt, search_results, openai_client)
+                    response = generate_legal_response(prompt, search_data, openai_client)
                     
                     if response["success"]:
                         ai_response = response["content"]
                         if ai_response and ai_response.strip():
-                            st.success("GPT-5 MAXIMUM QUALITY legal analysis generated successfully")
+                            st.success("GPT-5 comprehensive legal analysis generated successfully")
                             st.markdown(ai_response)
                             # Add assistant response to chat history
                             st.session_state.messages.append({"role": "assistant", "content": ai_response})
@@ -339,10 +783,16 @@ def main():
                         
                         # Show debugging information
                         with st.expander("Debug Information"):
-                            st.write(f"**Sources found:** {len(search_results)}")
-                            st.write("**Model:** gpt-5 (Responses API) - MAXIMUM QUALITY MODE")
+                            if isinstance(search_data, dict):
+                                st.write(f"**Total candidates:** {search_data.get('total_candidates', 'N/A')}")
+                                st.write(f"**AI-filtered relevant:** {search_data.get('total_relevant', 'N/A')}")
+                                st.write(f"**Query complexity:** {search_data.get('complexity_analysis', {}).get('complexity', 'N/A')}")
+                                st.write(f"**Search strategy:** {search_data.get('complexity_analysis', {}).get('search_strategy', 'N/A')}")
+                            else:
+                                st.write(f"**Sources found:** {len(search_data) if isinstance(search_data, list) else 'N/A'}")
+                            st.write("**Model:** gpt-5 (Responses API) with AI-Driven Relevance")
                             st.write(f"**Reasoning effort:** HIGH")
-                            st.write("**Max output tokens:** 16384")
+                            st.write("**Max output tokens:** 65536")
                             st.write(f"**Context length:** {len(prompt)} characters")
                             st.write(f"**Error details:** {error_msg}")
                             if response.get("response_id"):
@@ -350,16 +800,31 @@ def main():
                     
                     # Show sources
                     with st.expander("Sources Referenced"):
-                        for i, result in enumerate(search_results, 1):  # Show ALL sources
-                            st.markdown(f"**Source {i}:** {result['citation']} ({result['jurisdiction']})")
-                            st.markdown(f"*Relevance Score: {result['score']:.3f}*")
-                            st.markdown(f"*Section: {result['section_number']} - {result['section_title']}*")
-                            st.text_area(
-                                f"Legal Text {i}",
-                                result['text'][:1000] + "..." if len(result['text']) > 1000 else result['text'],
-                                height=150,  # Taller text areas
-                                key=f"source_{i}_{len(st.session_state.messages)}"
-                            )
+                        if isinstance(search_data, dict) and 'relevant_chunks' in search_data:
+                            for i, chunk in enumerate(search_data['relevant_chunks'], 1):
+                                relevance = getattr(chunk, 'ai_relevance', getattr(chunk.payload, 'ai_relevance', 'N/A'))
+                                st.markdown(f"**Source {i}:** {chunk.payload.get('citation', 'N/A')} ({chunk.payload.get('jurisdiction', 'N/A')})")
+                                st.markdown(f"*AI Relevance: {relevance}*")
+                                st.markdown(f"*Similarity Score: {chunk.score:.3f}*")
+                                st.markdown(f"*Section: {chunk.payload.get('section_number', 'N/A')} - {chunk.payload.get('section_title', 'N/A')}*")
+                                st.text_area(
+                                    f"Legal Text {i}",
+                                    chunk.payload.get('text', '')[:1000] + "..." if len(chunk.payload.get('text', '')) > 1000 else chunk.payload.get('text', ''),
+                                    height=150,
+                                    key=f"source_{i}_{len(st.session_state.messages)}"
+                                )
+                        else:
+                            # Legacy format
+                            for i, result in enumerate(search_data if isinstance(search_data, list) else [], 1):
+                                st.markdown(f"**Source {i}:** {result.get('citation', 'N/A')} ({result.get('jurisdiction', 'N/A')})")
+                                st.markdown(f"*Relevance Score: {result.get('score', 0):.3f}*")
+                                st.markdown(f"*Section: {result.get('section_number', 'N/A')} - {result.get('section_title', 'N/A')}*")
+                                st.text_area(
+                                    f"Legal Text {i}",
+                                    result.get('text', '')[:1000] + "..." if len(result.get('text', '')) > 1000 else result.get('text', ''),
+                                    height=150,  # Taller text areas
+                                    key=f"source_{i}_{len(st.session_state.messages)}"
+                                )
                 else:
                     response = "I couldn't find relevant legal information in the database for your query. Please try rephrasing your question with more specific terms or contact legal counsel for assistance."
                     st.markdown(response)
