@@ -275,8 +275,8 @@ def main():
         - **Reasoning:** HIGH effort for maximum thoroughness
         - **Verbosity:** HIGH for maximum detail
         - **Sources:** Up to 15 legal sources per query
-        - **Output Tokens:** Up to 16,384 tokens for comprehensive responses
-        - **Context:** Up to 500K characters of legal context
+        - **Output Tokens:** Up to 16384 tokens for comprehensive responses
+        - **Context:** Up to 500000 characters of legal context
         
         **Supported Jurisdictions:**
         - New York (NY)
@@ -323,7 +323,7 @@ def main():
                 
                 if search_results:
                     # Generate AI response
-                    st.info(f"🔍 Found {len(search_results)} relevant sources - Processing with GPT-5 MAXIMUM QUALITY MODE...")
+                    st.info(f"Found {len(search_results)} relevant sources - Processing with GPT-5 MAXIMUM QUALITY MODE")
                     
                     response = generate_legal_response(prompt, search_results, openai_client)
                     
@@ -346,10 +346,10 @@ def main():
                         # Show debugging information
                         with st.expander("Debug Information"):
                             st.write(f"**Sources found:** {len(search_results)}")
-                            st.write(f"**Model:** gpt-5 (Responses API) - MAXIMUM QUALITY MODE")
+                            st.write("**Model:** gpt-5 (Responses API) - MAXIMUM QUALITY MODE")
                             st.write(f"**Reasoning effort:** HIGH")
                             st.write(f"**Verbosity:** HIGH")
-                            st.write(f"**Max output tokens:** 16,384")
+                            st.write("**Max output tokens:** 16384")
                             st.write(f"**Context length:** {len(prompt)} characters")
                             st.write(f"**Error details:** {error_msg}")
                             if response.get("response_id"):
@@ -363,7 +363,7 @@ def main():
                             st.markdown(f"*Section: {result['section_number']} - {result['section_title']}*")
                             st.text_area(
                                 f"Legal Text {i}",
-                                result['text'][:1000] + "..." if len(result['text']) > 1000 else result['text'],  # Show more text
+                                result['text'][:1000] + "..." if len(result['text']) > 1000 else result['text'],
                                 height=150,  # Taller text areas
                                 key=f"source_{i}_{len(st.session_state.messages)}"
                             )
