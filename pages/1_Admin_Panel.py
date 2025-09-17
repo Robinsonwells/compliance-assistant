@@ -13,6 +13,12 @@ import time
 from background_processor import get_background_processor
 from datetime import timedelta
 
+# Load environment variables
+load_dotenv()
+ADMIN_PASSWORD = os.getenv("ADMIN_PASSWORD", "admin-secure-2024")
+
+st.set_page_config(page_title="Admin Panel", page_icon="👨‍💼", layout="wide")
+
 # Load custom CSS
 def load_css():
     try:
@@ -20,6 +26,9 @@ def load_css():
             st.markdown(f"<style>{f.read()}</style>", unsafe_allow_html=True)
     except FileNotFoundError:
         st.warning("Custom CSS file not found. Using default styling.")
+
+# Load CSS immediately after page config
+load_css()
 
 def delete_file_chunks(qdrant_client, source_file: str) -> tuple[bool, str]:
     """Delete all chunks associated with a specific source file"""
@@ -62,15 +71,6 @@ def delete_file_chunks(qdrant_client, source_file: str) -> tuple[bool, str]:
         return True, f"Deleted {count} chunks"
     except Exception as e:
         return False, str(e)
-
-# Load environment variables
-load_dotenv()
-ADMIN_PASSWORD = os.getenv("ADMIN_PASSWORD", "admin-secure-2024")
-
-st.set_page_config(page_title="Admin Panel", page_icon="👨‍💼", layout="wide")
-
-# Load CSS immediately after page config
-load_css()
 
 def init_admin_systems():
     user_manager = UserManager()
@@ -172,22 +172,22 @@ def process_uploaded_file(uploaded_file, chunker, qdrant_client, embedding_model
             text = uploaded_file.read().decode("utf-8")
         else:
             return False, f"Unsupported file type: {t}"
-
+            
         if text.startswith("Error"):
             return False, text
-
+            
         st.write(f"📊 File size: {len(text)} characters")
         st.write("🔍 First 500 characters:")
         st.text(text[:500])
         st.write(
             f"🏷️ XML detection: {'XML' if text.strip().startswith('<?xml') or '<code type=' in text else 'Plain text'}"
         )
-
+        
         chunks = chunker.legal_aware_chunking(text, max_chunk_size=1200)
         st.write(f"📦 Chunks created: {len(chunks)}")
         if not chunks:
             return False, "No chunks were created - check file format"
-
+        
         # Collect all chunk texts for batch embedding generation
         chunk_texts = [ch['text'] for ch in chunks]
         
@@ -218,7 +218,7 @@ def process_uploaded_file(uploaded_file, chunker, qdrant_client, embedding_model
                 payload=payload
             )
             points.append(point)
-
+        
         # Upload points to Qdrant in batches
         st.write("📤 Uploading vectors to Qdrant...")
         batch_size = 100
@@ -230,14 +230,13 @@ def process_uploaded_file(uploaded_file, chunker, qdrant_client, embedding_model
             )
         
         return True, f"Processed {len(chunks)} chunks from {uploaded_file.name}"
-
     except Exception as e:
         return False, f"Error processing file: {e}"
 
 def main():
     if not admin_login():
         st.stop()
-
+        
     st.markdown("""
         <div class="dashboard-header">
             <h1 style="margin: 0; color: white;">👨‍💼 Admin Control Panel</h1>
@@ -245,24 +244,27 @@ def main():
                 System Administration & Knowledge Base Management
             </p>
         </div>
-        # Check if we have an admin session ID
-        if 'admin_session_id' not in st.session_state:
-            st.session_state.admin_session_id = str(uuid.uuid4())
-        
-        # Validate admin session with extended timeout (48 hours)
-        user_manager, _, _, _ = init_admin_systems()
-        
-        if not user_manager.is_session_valid(st.session_state.admin_session_id, hours_timeout=48):
-            st.error("Your admin session has expired. Please log in again.")
-            st.session_state.admin_authenticated = False
-            st.rerun()
-
+    """, unsafe_allow_html=True)
+    
+    # Check if we have an admin session ID
+    if 'admin_session_id' not in st.session_state:
+        st.session_state.admin_session_id = str(uuid.uuid4())
+    
+    # Validate admin session with extended timeout (48 hours)
+    user_manager, _, _, _ = init_admin_systems()
+    
+    if not user_manager.is_session_valid(st.session_state.admin_session_id, hours_timeout=48):
+        st.error("Your admin session has expired. Please log in again.")
+        st.session_state.admin_authenticated = False
+        st.rerun()
+    
     um, chunker, coll, embedding_model = init_admin_systems()
     tab1, tab2 = st.tabs(["👥 Users", "📚 Knowledge Base"])
-
+    
     with tab1:
         st.markdown("### 👥 User Management")
         left, right = st.columns(2)
+        
         with left:
             st.markdown("#### ➕ Create New Access Code")
             with st.form("add_u"):
@@ -277,6 +279,7 @@ def main():
                         st.warning("Save this code now!")
                     else:
                         st.error("Name required")
+        
         with right:
             st.markdown("#### 👥 Active Users")
             users = um.get_all_users()
@@ -306,7 +309,7 @@ def main():
                     st.divider()
             else:
                 st.info("No users created yet")
-
+    
     with tab2:
         st.markdown("### 📚 Knowledge Base Management")
         try:
@@ -318,7 +321,7 @@ def main():
             m3.metric("Status", "Active" if total > 0 else "Empty")
         except:
             st.warning("DB init error")
-
+        
         st.markdown("---")
         st.markdown("#### 📄 Batch Document Upload")
         
@@ -450,7 +453,7 @@ def main():
         if active_jobs:
             time.sleep(3)  # Wait 3 seconds
             st.rerun()
-
+        
         st.markdown("---")
         st.markdown("#### 🗂️ Browse Files & Chunks")
         try:
@@ -478,7 +481,7 @@ def main():
             for point in all_points:
                 sf = point.payload.get('source_file', 'Unknown')
                 files[sf] = files.get(sf, 0) + 1
-
+            
             if files:
                 st.write(f"📊 **Total Files:** {len(files)} | **Total Chunks:** {sum(files.values())}")
                 for fn, cnt in files.items():
@@ -520,9 +523,10 @@ def main():
                                     st.warning("No chunks to display")
                             except Exception as e:
                                 st.error(f"Error browsing chunks for {fn}: {e}")
-
+                        
                         if st.button(f"🗑️ Delete {fn}", key=f"del_{fn}"):
                             st.session_state[f"confirm_del_{fn}"] = True
+                        
                         if st.session_state.get(f"confirm_del_{fn}"):
                             if st.button("✅ Confirm Delete", key=f"confirm_{fn}"):
                                 ok, msg = delete_file_chunks(coll, fn)
