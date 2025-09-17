@@ -154,14 +154,14 @@ def search_legal_database(query: str, qdrant_client, embedding_model, top_k: int
 def generate_legal_response(query: str, search_results: list, openai_client):
     """Generate legal response using OpenAI GPT-5 Responses API with search results"""
     try:
-        # Prepare context from search results
+        # Prepare comprehensive context from ALL search results for maximum quality
         context = "\n\n".join([
-            f"LEGAL TEXT {i+1}:\n\"{result['text']}\"\n(Source: {result['citation']})"
-            for i, result in enumerate(search_results[:3])  # Use top 3 results
+            f"LEGAL TEXT {i+1}:\n\"{result['text']}\"\n(Source: {result['citation']})\n(Jurisdiction: {result['jurisdiction']})\n(Section: {result['section_number']} - {result['section_title']})\n(Relevance Score: {result['score']:.4f})"
+            for i, result in enumerate(search_results)  # Use ALL results, not just top 3
         ])
         
         # Debug information
-        print(f"DEBUG: Processing query with {len(search_results)} sources")
+        print(f"DEBUG: Processing query with {len(search_results)} sources (MAXIMUM QUALITY MODE)")
         print(f"DEBUG: Context length: {len(context)} characters")
         
         # Prepare input for GPT-5 Responses API
@@ -175,27 +175,38 @@ AVAILABLE LEGAL CONTEXT:
         
         # Validate context length
         total_content_length = len(input_content)
-        if total_content_length > 100000:  # Conservative limit
+        if total_content_length > 500000:  # Much higher limit for maximum quality
             print(f"WARNING: Content length {total_content_length} may exceed model limits")
+            # Truncate only if absolutely necessary, keeping the most relevant sources
+            if len(search_results) > 10:
+                # Keep top 10 most relevant sources if context is too large
+                top_results = search_results[:10]
+                context = "\n\n".join([
+                    f"LEGAL TEXT {i+1}:\n\"{result['text']}\"\n(Source: {result['citation']})\n(Jurisdiction: {result['jurisdiction']})\n(Section: {result['section_number']} - {result['section_title']})\n(Relevance Score: {result['score']:.4f})"
+                    for i, result in enumerate(top_results)
+                ])
+                input_content = f"""SYSTEM INSTRUCTIONS:
+                print(f"DEBUG: Truncated to top 10 sources, new length: {len(input_content)} characters")
         
-        print("DEBUG: Making OpenAI GPT-5 Responses API call...")
+        print("DEBUG: Making OpenAI GPT-5 Responses API call with MAXIMUM QUALITY SETTINGS...")
         
         # Call OpenAI GPT-5 Responses API
         response = openai_client.responses.create(
             model="gpt-5",
             input=input_content,
             reasoning={
-                "effort": "high"  # Use high reasoning for legal analysis
+                "effort": "high"  # Use HIGH reasoning for maximum thoroughness
             },
             text={
-                "verbosity": "high"  # Use high verbosity for detailed legal explanations
-            }
+                "verbosity": "high"  # Use high verbosity for maximum detail
+            },
+            max_completion_tokens=16384  # Maximum output tokens for comprehensive responses
         )
         
         # Extract and validate response
         if response and hasattr(response, 'output_text'):
             content = response.output_text
-            print(f"DEBUG: Received response of length: {len(content) if content else 0}")
+            print(f"DEBUG: Received MAXIMUM QUALITY response of length: {len(content) if content else 0}")
             
             if content and content.strip():
                 return {
@@ -260,9 +271,12 @@ def main():
     with st.sidebar:
         st.markdown("### 📋 Quick Reference")
         st.markdown("""
-        **AI Model:** GPT-5 (Responses API)
-        - **Reasoning:** Medium effort for thorough legal analysis
-        - **Verbosity:** High for detailed explanations
+        **AI Model:** GPT-5 (Responses API) - MAXIMUM QUALITY MODE
+        - **Reasoning:** HIGH effort for maximum thoroughness
+        - **Verbosity:** HIGH for maximum detail
+        - **Sources:** Up to 15 legal sources per query
+        - **Output Tokens:** Up to 16,384 tokens for comprehensive responses
+        - **Context:** Up to 500K characters of legal context
         
         **Supported Jurisdictions:**
         - New York (NY)
@@ -305,18 +319,18 @@ def main():
         # Generate and display assistant response
         with st.chat_message("assistant"):
             with st.spinner("Searching legal database..."):
-                search_results = search_legal_database(prompt, qdrant_client, embedding_model)
+                search_results = search_legal_database(prompt, qdrant_client, embedding_model, top_k=15)  # Maximum sources
                 
                 if search_results:
                     # Generate AI response
-                    st.info(f"🔍 Found {len(search_results)} relevant sources - Processing with GPT-5...")
+                    st.info(f"🔍 Found {len(search_results)} relevant sources - Processing with GPT-5 MAXIMUM QUALITY MODE...")
                     
                     response = generate_legal_response(prompt, search_results, openai_client)
                     
                     if response["success"]:
                         ai_response = response["content"]
                         if ai_response and ai_response.strip():
-                            st.success("✅ GPT-5 legal analysis generated successfully")
+                            st.success("✅ GPT-5 MAXIMUM QUALITY legal analysis generated successfully")
                             st.markdown(ai_response)
                             # Add assistant response to chat history
                             st.session_state.messages.append({"role": "assistant", "content": ai_response})
@@ -332,22 +346,25 @@ def main():
                         # Show debugging information
                         with st.expander("🔧 Debug Information"):
                             st.write(f"**Sources found:** {len(search_results)}")
-                            st.write(f"**Model:** gpt-5 (Responses API)")
-                            st.write(f"**Reasoning effort:** medium")
-                            st.write(f"**Verbosity:** high")
+                            st.write(f"**Model:** gpt-5 (Responses API) - MAXIMUM QUALITY MODE")
+                            st.write(f"**Reasoning effort:** HIGH")
+                            st.write(f"**Verbosity:** HIGH")
+                            st.write(f"**Max output tokens:** 16,384")
+                            st.write(f"**Context length:** {len(prompt)} characters")
                             st.write(f"**Error details:** {error_msg}")
                             if response.get("response_id"):
                                 st.write(f"**Response ID:** {response['response_id']}")
                     
                     # Show sources
                     with st.expander("📚 Sources Referenced"):
-                        for i, result in enumerate(search_results[:3], 1):
-                            st.markdown(f"**Source {i}:** {result['citation']}")
+                        for i, result in enumerate(search_results, 1):  # Show ALL sources
+                            st.markdown(f"**Source {i}:** {result['citation']} ({result['jurisdiction']})")
                             st.markdown(f"*Relevance Score: {result['score']:.3f}*")
+                            st.markdown(f"*Section: {result['section_number']} - {result['section_title']}*")
                             st.text_area(
                                 f"Legal Text {i}",
-                                result['text'][:500] + "..." if len(result['text']) > 500 else result['text'],
-                                height=100,
+                                result['text'][:1000] + "..." if len(result['text']) > 1000 else result['text'],  # Show more text
+                                height=150,  # Taller text areas
                                 key=f"source_{i}_{len(st.session_state.messages)}"
                             )
                 else:
