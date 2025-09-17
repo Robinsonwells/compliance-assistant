@@ -165,8 +165,7 @@ def generate_legal_response(query: str, search_results: list, openai_client):
         print(f"DEBUG: Context length: {len(context)} characters")
         
         # Prepare input for GPT-5 Responses API
-        input_content = f"""SYSTEM INSTRUCTIONS:
-{ENHANCED_LEGAL_COMPLIANCE_SYSTEM_PROMPT}
+        input_content = f"""{ENHANCED_LEGAL_COMPLIANCE_SYSTEM_PROMPT}
 
 USER QUERY: {query}
 
@@ -185,7 +184,12 @@ AVAILABLE LEGAL CONTEXT:
                     f"LEGAL TEXT {i+1}:\n\"{result['text']}\"\n(Source: {result['citation']})\n(Jurisdiction: {result['jurisdiction']})\n(Section: {result['section_number']} - {result['section_title']})\n(Relevance Score: {result['score']:.4f})"
                     for i, result in enumerate(top_results)
                 ])
-                input_content = f"""SYSTEM INSTRUCTIONS:
+                input_content = f"""{ENHANCED_LEGAL_COMPLIANCE_SYSTEM_PROMPT}
+
+USER QUERY: {query}
+
+AVAILABLE LEGAL CONTEXT:
+{context}"""
                 print(f"DEBUG: Truncated to top 10 sources, new length: {len(input_content)} characters")
         
         print("DEBUG: Making OpenAI GPT-5 Responses API call with MAXIMUM QUALITY SETTINGS...")
@@ -193,19 +197,26 @@ AVAILABLE LEGAL CONTEXT:
         # Call OpenAI GPT-5 Responses API
         response = openai_client.responses.create(
             model="gpt-5",
-            input=input_content,
+            input=[{"role": "user", "content": input_content}],
             reasoning={
                 "effort": "high"  # Use HIGH reasoning for maximum thoroughness
             },
-            text={
-                "verbosity": "high"  # Use high verbosity for maximum detail
-            },
-            max_completion_tokens=16384  # Maximum output tokens for comprehensive responses
+            max_output_tokens=16384  # Maximum output tokens for comprehensive responses
         )
         
         # Extract and validate response
-        if response and hasattr(response, 'output_text'):
-            content = response.output_text
+        if response and hasattr(response, 'output') and response.output:
+            # Extract content from the response structure
+            content = None
+            for output_item in response.output:
+                if hasattr(output_item, 'content') and output_item.content:
+                    for content_item in output_item.content:
+                        if hasattr(content_item, 'text'):
+                            content = content_item.text
+                            break
+                    if content:
+                        break
+            
             print(f"DEBUG: Received MAXIMUM QUALITY response of length: {len(content) if content else 0}")
             
             if content and content.strip():
@@ -331,7 +342,6 @@ def main():
                             st.write(f"**Sources found:** {len(search_results)}")
                             st.write("**Model:** gpt-5 (Responses API) - MAXIMUM QUALITY MODE")
                             st.write(f"**Reasoning effort:** HIGH")
-                            st.write(f"**Verbosity:** HIGH")
                             st.write("**Max output tokens:** 16384")
                             st.write(f"**Context length:** {len(prompt)} characters")
                             st.write(f"**Error details:** {error_msg}")
