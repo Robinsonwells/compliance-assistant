@@ -185,7 +185,7 @@ AVAILABLE LEGAL CONTEXT:
             model="gpt-5",
             input=input_content,
             reasoning={
-                "effort": "high"  # Use medium reasoning for legal analysis
+                "effort": "high"  # Use high reasoning for legal analysis
             },
             text={
                 "verbosity": "high"  # Use high verbosity for detailed legal explanations
