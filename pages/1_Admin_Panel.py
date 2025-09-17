@@ -76,8 +76,8 @@ def init_admin_systems():
     user_manager = UserManager()
     chunker = LegalSemanticChunker(os.getenv("OPENAI_API_KEY"))
     
-    # Initialize local embedding model
-    embedding_model = SentenceTransformer('all-MiniLM-L6-v2')
+    # Initialize local embedding model with retry logic
+    embedding_model = init_embedding_model_with_retry()
     
     # Initialize Qdrant client
     qdrant_url = os.getenv("QDRANT_URL")
@@ -117,6 +117,58 @@ def init_admin_systems():
     collection = client
     return user_manager, chunker, collection, embedding_model
 
+@st.cache_resource
+def init_embedding_model_with_retry():
+    """Initialize embedding model with retry logic and local caching"""
+    import time
+    import os
+    from sentence_transformers import SentenceTransformer
+    
+    model_name = 'all-MiniLM-L6-v2'
+    max_retries = 3
+    base_delay = 15  # Longer delay for admin panel
+    
+    # Try to use local cache first
+    cache_dir = os.path.expanduser("~/.cache/torch/sentence_transformers")
+    
+    for attempt in range(max_retries):
+        try:
+            st.info(f"Loading embedding model (attempt {attempt + 1}/{max_retries})")
+            
+            # Try loading with local files only first
+            if attempt > 0:
+                try:
+                    model = SentenceTransformer(model_name, cache_folder=cache_dir, local_files_only=True)
+                    st.success("Successfully loaded model from local cache")
+                    return model
+                except Exception as cache_error:
+                    st.warning(f"Local cache failed: {cache_error}")
+            
+            # Try downloading with exponential backoff
+            delay = base_delay * (2 ** attempt)
+            if attempt > 0:
+                st.warning(f"Rate limit hit. Waiting {delay} seconds before retry...")
+                time.sleep(delay)
+            
+            model = SentenceTransformer(model_name, cache_folder=cache_dir)
+            st.success("Successfully loaded embedding model")
+            return model
+            
+        except Exception as e:
+            st.error(f"Attempt {attempt + 1} failed: {e}")
+            if attempt == max_retries - 1:
+                # Last attempt failed, try alternative model or raise error
+                st.warning("All attempts failed, trying alternative approach...")
+                try:
+                    # Try a different model as fallback
+                    fallback_model = SentenceTransformer('paraphrase-MiniLM-L6-v2', cache_folder=cache_dir)
+                    st.success("Successfully loaded fallback embedding model")
+                    return fallback_model
+                except Exception as fallback_error:
+                    st.error(f"Fallback model also failed: {fallback_error}")
+                    raise Exception(f"Failed to load embedding model after {max_retries} attempts. Last error: {e}")
+    
+    raise Exception("Unexpected error in model initialization")
 def admin_login():
     if 'admin_authenticated' not in st.session_state:
         st.session_state.admin_authenticated = False
