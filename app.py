@@ -270,8 +270,7 @@ def main():
     # Sidebar
     with st.sidebar:
         st.markdown("### 📋 Quick Reference")
-        st.markdown("""
-**AI Model:** GPT-5 (Responses API) - MAXIMUM QUALITY MODE
+        st.markdown("""**AI Model:** GPT-5 (Responses API) - MAXIMUM QUALITY MODE
 - **Reasoning:** HIGH effort for maximum thoroughness
 - **Verbosity:** HIGH for maximum detail
 - **Sources:** Up to 15 legal sources per query
@@ -289,7 +288,7 @@ def main():
 - "Overtime rules for healthcare workers"
 - "Multi-state payroll compliance"
 - "On-call pay differences between CT, NY, and NJ"
-        """)
+""")
         
         if st.button("🚪 Logout"):
             st.session_state.authenticated = False
