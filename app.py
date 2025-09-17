@@ -290,6 +290,7 @@ def main():
         - "Multi-state payroll compliance"
         - "On-call pay differences between CT, NY, and NJ"
         """)
+        """)
         
         if st.button("🚪 Logout"):
             st.session_state.authenticated = False
