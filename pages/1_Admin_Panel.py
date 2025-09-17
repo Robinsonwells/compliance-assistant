@@ -229,7 +229,19 @@ def main():
                 System Administration & Knowledge Base Management
             </p>
         </div>
-        # Check if we have an admin session ID
+    """, unsafe_allow_html=True)
+    
+    # Check if we have an admin session ID
+    if 'admin_session_id' not in st.session_state:
+        st.session_state.admin_session_id = str(uuid.uuid4())
+    
+    # Validate admin session with extended timeout (48 hours)
+    user_manager, _, _, _ = init_admin_systems()
+    
+    if not user_manager.is_session_valid(st.session_state.admin_session_id, hours_timeout=48):
+        st.error("Your admin session has expired. Please log in again.")
+        st.session_state.admin_authenticated = False
+        st.rerun()
         if 'admin_session_id' not in st.session_state:
             st.session_state.admin_session_id = str(uuid.uuid4())
         
