@@ -260,7 +260,7 @@ def main():
     # Main application interface
     st.markdown("""
         <div class="dashboard-header">
-            <h1 style="margin: 0; color: white;">⚖️ AI Legal Compliance Assistant</h1>
+            <h1 style="margin: 0; color: white;">🏛️ AI Legal Compliance Assistant</h1>
             <p style="margin: 0.5rem 0 0 0; color: rgba(255,255,255,0.9);">
                 Professional Employment Organization Legal Research Tool
             </p>
