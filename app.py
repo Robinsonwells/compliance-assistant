@@ -270,25 +270,9 @@ def main():
     # Sidebar
     with st.sidebar:
         st.markdown("### 📋 Quick Reference")
-        st.markdown("""**AI Model:** GPT-5 (Responses API) - MAXIMUM QUALITY MODE
-- **Reasoning:** HIGH effort for maximum thoroughness
-- **Verbosity:** HIGH for maximum detail
-- **Sources:** Up to 15 legal sources per query
-- **Output Tokens:** Up to 16384 tokens for comprehensive responses
-- **Context:** Up to 500000 characters of legal context
-
-**Supported Jurisdictions:**
-- New York (NY)
-- New Jersey (NJ) 
-- Connecticut (CT)
-- Federal Regulations
-
-**Query Examples:**
-- "Minimum wage requirements in NY"
-- "Overtime rules for healthcare workers"
-- "Multi-state payroll compliance"
-- "On-call pay differences between CT, NY, and NJ"
-""")
+        st.markdown("**AI Model:** GPT-5 (Responses API) - MAXIMUM QUALITY MODE")
+        st.markdown("**Supported Jurisdictions:** NY, NJ, CT, Federal")
+        st.markdown("**Query Examples:** Minimum wage, overtime rules, multi-state compliance")
         
         if st.button("🚪 Logout"):
             st.session_state.authenticated = False
