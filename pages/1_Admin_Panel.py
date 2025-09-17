@@ -10,6 +10,8 @@ from qdrant_client import QdrantClient
 from qdrant_client.models import Distance, VectorParams, PointStruct, Filter, FieldCondition, MatchValue
 from advanced_chunking import LegalSemanticChunker, extract_pdf_text, extract_docx_text
 import time
+from background_processor import get_background_processor
+from datetime import timedelta
 
 # Load custom CSS
 def load_css():
@@ -143,6 +145,13 @@ def admin_login():
             if submit_button and pwd:
                 if pwd == ADMIN_PASSWORD:
                     st.session_state.admin_authenticated = True
+                    # Create admin session
+                    if 'admin_session_id' not in st.session_state:
+                        st.session_state.admin_session_id = str(uuid.uuid4())
+                    
+                    # Create session in database
+                    user_manager, _, _, _ = init_admin_systems()
+                    user_manager.create_session("ADMIN", st.session_state.admin_session_id)
                     st.rerun()
                 else:
                     st.error("Invalid password")
@@ -236,11 +245,15 @@ def main():
                 System Administration & Knowledge Base Management
             </p>
         </div>
-    """, unsafe_allow_html=True)
-    
-    _, logout_col = st.columns([5, 1])
-    with logout_col:
-        if st.button("🚪 Logout"):
+        # Check if we have an admin session ID
+        if 'admin_session_id' not in st.session_state:
+            st.session_state.admin_session_id = str(uuid.uuid4())
+        
+        # Validate admin session with extended timeout (48 hours)
+        user_manager, _, _, _ = init_admin_systems()
+        
+        if not user_manager.is_session_valid(st.session_state.admin_session_id, hours_timeout=48):
+            st.error("Your admin session has expired. Please log in again.")
             st.session_state.admin_authenticated = False
             st.rerun()
 

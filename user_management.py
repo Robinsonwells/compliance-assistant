@@ -109,6 +109,20 @@ class UserManager:
             print(f"Error updating session activity: {e}")
             return False
     
+    def extend_session_activity(self, session_id):
+        """Extend session activity for long-running operations"""
+        try:
+            extended_time = datetime.now().isoformat()
+            result = self.supabase.table('user_sessions').update({
+                'last_activity': extended_time,
+                'extended_for_processing': True
+            }).eq('session_id', session_id).eq('is_active', True).execute()
+            
+            return result.data is not None
+        except Exception as e:
+            print(f"Error extending session activity: {e}")
+            return False
+    
     def deactivate_user(self, access_code):
         """Deactivate user and all their sessions"""
         try:
