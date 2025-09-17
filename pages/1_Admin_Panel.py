@@ -320,16 +320,136 @@ def main():
             st.warning("DB init error")
 
         st.markdown("---")
-        st.markdown("#### 📄 Document Upload")
-        uploads = st.file_uploader("Upload documents", accept_multiple_files=True, type=['pdf','docx','txt'])
-        if uploads and st.button("Process"):
-            for f in uploads:
-                st.write(f"Processing {f.name}")
-                ok, msg = process_uploaded_file(f, chunker, coll, embedding_model)
-                if ok:
-                    st.success(msg)
-                else:
-                    st.error(msg)
+        st.markdown("#### 📄 Batch Document Upload")
+        
+        # File uploader for multiple files
+        uploaded_files = st.file_uploader(
+            "Upload multiple documents for batch processing",
+            accept_multiple_files=True,
+            type=['pdf', 'docx', 'txt'],
+            help="Select multiple files to process them all in the background"
+        )
+        
+        if uploaded_files:
+            st.markdown("##### 📊 Selected Files:")
+            total_size = 0
+            for i, f in enumerate(uploaded_files, 1):
+                size_mb = f.size / (1024 * 1024)
+                total_size += size_mb
+                st.write(f"{i}. **{f.name}** ({size_mb:.2f} MB, {f.type})")
+            
+            st.info(f"Total: {len(uploaded_files)} files, {total_size:.2f} MB")
+            
+            col1, col2 = st.columns(2)
+            
+            with col1:
+                if st.button("🚀 Start Batch Processing", use_container_width=True, type="primary"):
+                    processor = get_background_processor()
+                    
+                    # Prepare file data for background processing
+                    files_data = []
+                    for uploaded_file in uploaded_files:
+                        file_data = {
+                            'name': uploaded_file.name,
+                            'type': uploaded_file.type,
+                            'size': uploaded_file.size,
+                            'content': uploaded_file.read()  # Read content into memory
+                        }
+                        files_data.append(file_data)
+                    
+                    # Submit batch job
+                    job_id = processor.submit_batch_job(
+                        files_data,
+                        chunker,
+                        coll,
+                        embedding_model,
+                        um,
+                        st.session_state.get('admin_session_id')
+                    )
+                    
+                    st.session_state.current_job_id = job_id
+                    st.success(f"✅ Batch job started! Job ID: `{job_id}`")
+                    st.info("🚶‍♂️ You can now navigate away. The processing will continue in the background. Check 'Job Status' below to monitor progress.")
+                    
+                    # Clear uploaded files
+                    st.rerun()
+            
+            with col2:
+                if st.button("🔄 Refresh Status", use_container_width=True):
+                    st.rerun()
+        
+        # Job Status Section
+        st.markdown("---")
+        st.markdown("#### 📊 Processing Jobs Status")
+        
+        processor = get_background_processor()
+        all_jobs = processor.get_all_jobs()
+        active_jobs = processor.get_active_jobs()
+        
+        if active_jobs:
+            st.info(f"🔄 {len(active_jobs)} active job(s) running in background")
+        
+        if all_jobs:
+            # Show last 10 jobs
+            recent_jobs = all_jobs[:10]
+            
+            for job in recent_jobs:
+                status_colors = {
+                    'queued': '🟡',
+                    'processing': '🔄',
+                    'completed': '✅',
+                    'failed': '❌'
+                }
+                
+                status_icon = status_colors.get(job.status, '⚪')
+                
+                with st.container():
+                    col1, col2, col3 = st.columns([2, 1, 1])
+                    
+                    with col1:
+                        st.markdown(f"**{status_icon} Job {job.job_id[:12]}...** ({job.status.title()})")
+                        if job.current_file:
+                            st.caption(f"Current: {job.current_file}")
+                    
+                    with col2:
+                        st.metric("Progress", f"{job.progress}/{job.total_files}")
+                        if job.processed_chunks > 0:
+                            st.caption(f"{job.processed_chunks} chunks")
+                    
+                    with col3:
+                        duration = ""
+                        if job.end_time:
+                            duration = job.end_time - job.start_time
+                        elif job.status == 'processing':
+                            duration = datetime.now() - job.start_time
+                        
+                        st.caption(f"Started: {job.start_time.strftime('%H:%M:%S')}")
+                        if duration:
+                            total_seconds = int(duration.total_seconds())
+                            minutes, seconds = divmod(total_seconds, 60)
+                            st.caption(f"Duration: {minutes}m {seconds}s")
+                    
+                    # Progress bar for active jobs
+                    if job.status == 'processing' and job.total_files > 0:
+                        progress_pct = job.progress / job.total_files
+                        st.progress(progress_pct)
+                    
+                    # Error message for failed jobs
+                    if job.status == 'failed' and job.error_message:
+                        st.error(f"Error: {job.error_message}")
+                    
+                    # Success message for completed jobs
+                    if job.status == 'completed':
+                        st.success(f"✅ Completed all {job.total_files} files ({job.processed_chunks} chunks)")
+                    
+                    st.divider()
+        else:
+            st.info("📝 No processing jobs found. Upload files above to start batch processing.")
+        
+        # Auto-refresh for active jobs
+        if active_jobs:
+            time.sleep(3)  # Wait 3 seconds
+            st.rerun()
 
         st.markdown("---")
         st.markdown("#### 🗂️ Browse Files & Chunks")
