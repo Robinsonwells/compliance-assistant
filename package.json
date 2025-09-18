@@ -5,7 +5,7 @@
   "main": "app.py",
   "scripts": {
     "start": "streamlit run app.py",
-    "dev": "python -m streamlit run app.py --server.runOnSave true"
+    "dev": "echo 'This project is deployed via Streamlit Cloud. No local dev server needed.'"
   },
   "keywords": ["streamlit", "python", "legal", "compliance"],
   "author": "",
