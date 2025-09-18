@@ -77,15 +77,33 @@ def natural_sort_key(s):
             result.append(part)
     return result
 
+def parse_hierarchical_number(num_str: str) -> tuple:
+    """Parse hierarchical numbers like '1.0.1' into comparable tuples like (1, 0, 1)"""
+    if not num_str or not isinstance(num_str, str):
+        return (0,)
+    
+    # Split by dots and convert each part to integer
+    parts = []
+    for part in num_str.split('.'):
+        # Extract numeric part from strings like "1a" or "1-2"
+        numeric_match = re.match(r'(\d+)', part.strip())
+        if numeric_match:
+            parts.append(int(numeric_match.group(1)))
+        else:
+            # Non-numeric parts get converted to 0
+            parts.append(0)
+    
+    return tuple(parts) if parts else (0,)
+
 def sort_chunks_by_document_order(chunks):
     """Sort chunks by their document order using section_number and subsection_index"""
     def chunk_sort_key(chunk):
         section_number = chunk.payload.get('section_number', '0')
         subsection_index = chunk.payload.get('subsection_index', '0')
         
-        # Create a composite key for sorting
-        section_key = natural_sort_key(section_number)
-        subsection_key = natural_sort_key(subsection_index)
+        # Parse hierarchical numbers for proper sorting
+        section_key = parse_hierarchical_number(section_number)
+        subsection_key = parse_hierarchical_number(subsection_index)
         
         return (section_key, subsection_key)
     
