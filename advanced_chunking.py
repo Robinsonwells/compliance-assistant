@@ -17,13 +17,21 @@ def robust_xml_parse(text: str) -> List[Dict]:
         # Clean up the XML text first
         xml_text = text.strip()
         
-        # Handle undefined XML entities before parsing
+        # Handle common HTML/legal entities before parsing
         xml_text = xml_text.replace('&sect;', '§')
-        xml_text = xml_text.replace('&amp;', '&')
-        xml_text = xml_text.replace('&lt;', '<')
-        xml_text = xml_text.replace('&gt;', '>')
-        xml_text = xml_text.replace('&quot;', '"')
-        xml_text = xml_text.replace('&apos;', "'")
+        xml_text = xml_text.replace('&nbsp;', ' ')
+        xml_text = xml_text.replace('&mdash;', '—')
+        xml_text = xml_text.replace('&ndash;', '–')
+        xml_text = xml_text.replace('&ldquo;', '"')
+        xml_text = xml_text.replace('&rdquo;', '"')
+        xml_text = xml_text.replace('&lsquo;', "'")
+        xml_text = xml_text.replace('&rsquo;', "'")
+        xml_text = xml_text.replace('&hellip;', '…')
+        
+        # Escape unescaped ampersands that are not part of valid XML entities
+        # This regex matches & that are NOT followed by valid entity patterns
+        import re
+        xml_text = re.sub(r'&(?!(?:amp|lt|gt|quot|apos|#\d+|#x[0-9a-fA-F]+);)', '&amp;', xml_text)
         
         # If it doesn't start with XML declaration, add a root wrapper
         if not xml_text.startswith('<?xml') and not xml_text.startswith('<root'):
@@ -65,14 +73,16 @@ def robust_xml_parse(text: str) -> List[Dict]:
         
         # If we found sections, return them
         if legal_blocks:
+            print(f"Successfully parsed {len(legal_blocks)} sections using enhanced XML parser")
             return legal_blocks
             
     except ET.ParseError as e:
-        print(f"XML parsing failed: {e}")
+        print(f"Enhanced XML parsing failed: {e}")
     except Exception as e:
-        print(f"Unexpected error in XML parsing: {e}")
+        print(f"Unexpected error in enhanced XML parsing: {e}")
     
     # Return empty list if XML parsing failed
+    print("Enhanced XML parsing failed, will fall back to regex patterns")
     return []
 
 def detect_jurisdiction(text: str) -> str:
