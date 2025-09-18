@@ -77,34 +77,6 @@ def natural_sort_key(s):
             result.append(part)
     return result
 
-def parse_hierarchical_number(num_str: str) -> tuple:
-    """Parse hierarchical numbers like '8 AAC 05.030' or '1.0.1' into comparable tuples"""
-    if not num_str or not isinstance(num_str, str):
-        return (0,)
-    
-    # Extract the numeric hierarchical part from complex section numbers
-    # Handle formats like "8 AAC 05.030", "12 NYCRR 142-2.1", etc.
-    hierarchical_match = re.search(r'(\d+(?:\.\d+)*)', num_str)
-    if hierarchical_match:
-        hierarchical_part = hierarchical_match.group(1)
-    else:
-        # If no hierarchical pattern found, try to extract any numbers
-        numbers = re.findall(r'\d+', num_str)
-        if numbers:
-            hierarchical_part = '.'.join(numbers)
-        else:
-            return (0,)
-    
-    # Split by dots and convert each part to integer
-    parts = []
-    for part in hierarchical_part.split('.'):
-        try:
-            parts.append(int(part.strip()))
-        except ValueError:
-            # Non-numeric parts get converted to 0
-            parts.append(0)
-    
-    return tuple(parts) if parts else (0,)
 
 def sort_chunks_by_document_order(chunks):
     """Sort chunks by their document order using section_number and subsection_index"""
@@ -112,9 +84,9 @@ def sort_chunks_by_document_order(chunks):
         section_number = chunk.payload.get('section_number', '0')
         subsection_index = chunk.payload.get('subsection_index', '0')
         
-        # Parse hierarchical numbers for proper sorting
-        section_key = parse_hierarchical_number(section_number)
-        subsection_key = parse_hierarchical_number(subsection_index)
+        # Use natural sorting for proper alphanumeric ordering
+        section_key = natural_sort_key(section_number)
+        subsection_key = natural_sort_key(subsection_index)
         
         return (section_key, subsection_key)
     
