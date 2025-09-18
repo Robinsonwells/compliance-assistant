@@ -5,6 +5,7 @@ from datetime import datetime
 from dotenv import load_dotenv
 import os
 import uuid
+import hashlib
 from sentence_transformers import SentenceTransformer
 from qdrant_client import QdrantClient
 from qdrant_client.models import Distance, VectorParams, PointStruct, Filter, FieldCondition, MatchValue
@@ -112,6 +113,18 @@ def init_admin_systems():
         if "already exists" not in str(e).lower():
             print(f"Warning: Could not create payload index: {e}")
     
+    # Ensure payload index for content_hash field exists
+    try:
+        client.create_payload_index(
+            collection_name=collection_name,
+            field_name="content_hash",
+            field_schema="keyword"
+        )
+    except Exception as e:
+        # Index might already exist, which is fine
+        if "already exists" not in str(e).lower():
+            print(f"Warning: Could not create content_hash payload index: {e}")
+    
     collection = client
     return user_manager, chunker, collection, embedding_model
 
@@ -152,39 +165,100 @@ def admin_login():
         return False
     return True
 
-def process_uploaded_file(uploaded_file, chunker, qdrant_client, embedding_model):
+def process_uploaded_file(uploaded_file, chunker, qdrant_client, embedding_model, progress_bar=None, status_text=None):
+    """Process uploaded file with progress tracking and idempotency"""
     try:
+        # Read file content once and calculate hash for idempotency
+        file_content = uploaded_file.read()
+        content_hash = hashlib.md5(file_content).hexdigest()
+        
+        # Reset file pointer for text extraction
+        uploaded_file.seek(0)
+        
+        if status_text:
+            status_text.info(f"🔍 Checking if {uploaded_file.name} has already been processed...")
+        
+        # Check if this exact file content has already been processed
+        try:
+            existing_check = qdrant_client.scroll(
+                collection_name="legal_regulations",
+                scroll_filter=Filter(
+                    must=[
+                        FieldCondition(
+                            key="source_file",
+                            match=MatchValue(value=uploaded_file.name)
+                        ),
+                        FieldCondition(
+                            key="content_hash",
+                            match=MatchValue(value=content_hash)
+                        )
+                    ]
+                ),
+                limit=1,
+                with_payload=False,
+                with_vectors=False
+            )
+            
+            if existing_check[0]:  # If any points found
+                if status_text:
+                    status_text.warning(f"⏭️ Skipping {uploaded_file.name} - identical content already processed")
+                return True, f"Skipped {uploaded_file.name} - already processed with same content", content_hash
+        except Exception as e:
+            # If check fails, continue with processing
+            if status_text:
+                status_text.warning(f"Could not check for duplicates: {e}")
+        
+        if progress_bar:
+            progress_bar.progress(10)
+        if status_text:
+            status_text.info(f"📄 Extracting text from {uploaded_file.name}...")
+        
         t = uploaded_file.type
         if t == "application/pdf":
             text = extract_pdf_text(uploaded_file)
         elif t == "application/vnd.openxmlformats-officedocument.wordprocessingml.document":
             text = extract_docx_text(uploaded_file)
         elif t == "text/plain":
-            text = uploaded_file.read().decode("utf-8")
+            text = file_content.decode("utf-8")
         else:
-            return False, f"Unsupported file type: {t}"
+            return False, f"Unsupported file type: {t}", content_hash
 
         if text.startswith("Error"):
-            return False, text
+            return False, text, content_hash
 
-        st.write(f"📊 File size: {len(text)} characters")
-        st.write("🔍 First 500 characters:")
-        st.text(text[:500])
-        st.write(
-            f"🏷️ XML detection: {'XML' if text.strip().startswith('<?xml') or '<code type=' in text else 'Plain text'}"
-        )
+        if progress_bar:
+            progress_bar.progress(25)
+        if status_text:
+            status_text.info(f"📊 Extracted {len(text)} characters from {uploaded_file.name}")
+            status_text.info(f"🏷️ Format: {'XML' if text.strip().startswith('<?xml') or '<code type=' in text else 'Plain text'}")
 
+        if progress_bar:
+            progress_bar.progress(40)
+        if status_text:
+            status_text.info(f"🔍 Creating semantic chunks for {uploaded_file.name}...")
+        
         chunks = chunker.legal_aware_chunking(text, max_chunk_size=1200)
-        st.write(f"📦 Chunks created: {len(chunks)}")
         if not chunks:
-            return False, "No chunks were created - check file format"
+            return False, "No chunks were created - check file format", content_hash
+        
+        if status_text:
+            status_text.info(f"📦 Created {len(chunks)} chunks from {uploaded_file.name}")
 
         # Collect all chunk texts for batch embedding generation
         chunk_texts = [ch['text'] for ch in chunks]
         
+        if progress_bar:
+            progress_bar.progress(60)
+        if status_text:
+            status_text.info(f"🧠 Generating embeddings for {len(chunks)} chunks...")
+        
         # Generate embeddings locally in batch
-        st.write("🧠 Generating embeddings locally...")
         embeddings = embedding_model.encode(chunk_texts, show_progress_bar=True)
+        
+        if progress_bar:
+            progress_bar.progress(80)
+        if status_text:
+            status_text.info(f"📤 Uploading {len(chunks)} chunks to vector database...")
         
         # Prepare points for Qdrant
         points = []
@@ -198,6 +272,7 @@ def process_uploaded_file(uploaded_file, chunker, qdrant_client, embedding_model
                 'text': ch['text'],
                 **ch['metadata'],
                 'source_file': uploaded_file.name,
+                'content_hash': content_hash,
                 'upload_date': now,
                 'processed_by': 'admin'
             }
@@ -211,7 +286,6 @@ def process_uploaded_file(uploaded_file, chunker, qdrant_client, embedding_model
             points.append(point)
 
         # Upload points to Qdrant in batches
-        st.write("📤 Uploading vectors to Qdrant...")
         batch_size = 100
         for i in range(0, len(points), batch_size):
             batch = points[i:i+batch_size]
@@ -219,11 +293,23 @@ def process_uploaded_file(uploaded_file, chunker, qdrant_client, embedding_model
                 collection_name="legal_regulations",
                 points=batch
             )
+            
+            # Update progress during upload
+            if progress_bar:
+                upload_progress = 80 + (20 * (i + len(batch)) / len(points))
+                progress_bar.progress(int(upload_progress))
         
-        return True, f"Processed {len(chunks)} chunks from {uploaded_file.name}"
+        if progress_bar:
+            progress_bar.progress(100)
+        if status_text:
+            status_text.success(f"✅ Successfully processed {len(chunks)} chunks from {uploaded_file.name}")
+        
+        return True, f"Processed {len(chunks)} chunks from {uploaded_file.name}", content_hash
 
     except Exception as e:
-        return False, f"Error processing file: {e}"
+        if status_text:
+            status_text.error(f"❌ Error processing {uploaded_file.name}: {e}")
+        return False, f"Error processing file: {e}", None
 
 def main():
     if not admin_login():
@@ -309,14 +395,80 @@ def main():
         st.markdown("---")
         st.markdown("#### 📄 Document Upload")
         uploads = st.file_uploader("Upload documents", accept_multiple_files=True, type=['pdf','docx','txt'])
-        if uploads and st.button("Process"):
-            for f in uploads:
-                st.write(f"Processing {f.name}")
-                ok, msg = process_uploaded_file(f, chunker, coll, embedding_model)
-                if ok:
-                    st.success(msg)
+        
+        if uploads and st.button("🚀 Process All Documents"):
+            with st.status("🔄 Processing documents...", expanded=True) as status:
+                total_files = len(uploads)
+                processed_count = 0
+                skipped_count = 0
+                error_count = 0
+                
+                st.write(f"📋 **Processing Queue:** {total_files} files")
+                st.write("---")
+                
+                for i, uploaded_file in enumerate(uploads, 1):
+                    st.write(f"**File {i}/{total_files}: {uploaded_file.name}**")
+                    
+                    # Create progress bar and status text for this file
+                    file_progress = st.progress(0)
+                    file_status = st.empty()
+                    
+                    try:
+                        # Process the file with progress tracking
+                        success, message, content_hash = process_uploaded_file(
+                            uploaded_file, chunker, coll, embedding_model, 
+                            progress_bar=file_progress, status_text=file_status
+                        )
+                        
+                        if success:
+                            if "Skipped" in message:
+                                skipped_count += 1
+                                file_status.warning(f"⏭️ {message}")
+                            else:
+                                processed_count += 1
+                                file_status.success(f"✅ {message}")
+                        else:
+                            error_count += 1
+                            file_status.error(f"❌ {message}")
+                    
+                    except Exception as e:
+                        error_count += 1
+                        file_status.error(f"❌ Unexpected error processing {uploaded_file.name}: {e}")
+                    
+                    # Clear the progress bar after processing
+                    file_progress.empty()
+                    
+                    # Add separator between files (except for the last one)
+                    if i < total_files:
+                        st.write("---")
+                
+                # Update final status
+                if error_count == 0:
+                    if skipped_count == total_files:
+                        status.update(label="⏭️ All documents were already processed", state="complete")
+                    elif skipped_count > 0:
+                        status.update(label=f"✅ Processing complete! {processed_count} processed, {skipped_count} skipped", state="complete")
+                    else:
+                        status.update(label=f"✅ All {processed_count} documents processed successfully!", state="complete")
                 else:
-                    st.error(msg)
+                    status.update(label=f"⚠️ Processing complete with issues: {processed_count} processed, {skipped_count} skipped, {error_count} errors", state="error")
+                
+                st.write("🎉 **Batch processing finished!**")
+                
+                # Summary
+                col1, col2, col3, col4 = st.columns(4)
+                with col1:
+                    st.metric("Total Files", total_files)
+                with col2:
+                    st.metric("Processed", processed_count, delta=processed_count if processed_count > 0 else None)
+                with col3:
+                    st.metric("Skipped", skipped_count, delta=skipped_count if skipped_count > 0 else None)
+                with col4:
+                    st.metric("Errors", error_count, delta=error_count if error_count > 0 else None, delta_color="inverse")
+            
+            # Refresh the page to clear the file uploader and update the file list
+            time.sleep(2)  # Give user time to see the final status
+            st.rerun()
 
         st.markdown("---")
         st.markdown("#### 🗂️ Browse Files & Chunks")
