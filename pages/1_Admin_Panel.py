@@ -129,7 +129,9 @@ st.set_page_config(page_title="Admin Panel", page_icon="👨‍💼", layout="wi
 # Load CSS immediately after page config
 load_css()
 
+@st.cache_resource
 def init_admin_systems():
+    """Initialize admin systems with caching to improve performance"""
     user_manager = UserManager()
     chunker = LegalSemanticChunker(os.getenv("OPENAI_API_KEY"))
     
