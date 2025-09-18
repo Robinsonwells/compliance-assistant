@@ -4,6 +4,7 @@ from user_management import UserManager
 from datetime import datetime
 from dotenv import load_dotenv
 import os
+import re
 import uuid
 import hashlib
 from sentence_transformers import SentenceTransformer
@@ -61,6 +62,34 @@ def delete_file_chunks(qdrant_client, source_file: str) -> tuple[bool, str]:
         return True, f"Deleted {count} chunks"
     except Exception as e:
         return False, str(e)
+
+def natural_sort_key(s):
+    """Convert a string into a list of strings and integers for natural sorting"""
+    if not s:
+        return [0]
+    # Split the string into parts, converting numeric parts to integers
+    parts = re.split(r'(\d+)', str(s))
+    result = []
+    for part in parts:
+        if part.isdigit():
+            result.append(int(part))
+        else:
+            result.append(part)
+    return result
+
+def sort_chunks_by_document_order(chunks):
+    """Sort chunks by their document order using section_number and subsection_index"""
+    def chunk_sort_key(chunk):
+        section_number = chunk.payload.get('section_number', '0')
+        subsection_index = chunk.payload.get('subsection_index', '0')
+        
+        # Create a composite key for sorting
+        section_key = natural_sort_key(section_number)
+        subsection_key = natural_sort_key(subsection_index)
+        
+        return (section_key, subsection_key)
+    
+    return sorted(chunks, key=chunk_sort_key)
 
 # Load environment variables
 load_dotenv()
@@ -510,29 +539,48 @@ def main():
                         )
                         if st.button("🔍 Browse Chunks", key=f"browse_{fn}"):
                             try:
-                                scroll_result = coll.scroll(
-                                    collection_name="legal_regulations",
-                                    scroll_filter=Filter(
-                                        must=[
-                                            FieldCondition(
-                                                key="source_file",
-                                                match=MatchValue(value=fn)
-                                            )
-                                        ]
-                                    ),
-                                    limit=chunks_to_show,
-                                    with_payload=True,
-                                    with_vectors=False
-                                )
+                                # Fetch ALL chunks for this file first
+                                all_chunks = []
+                                next_page_offset = None
                                 
-                                points = scroll_result[0]
+                                while True:
+                                    scroll_result = coll.scroll(
+                                        collection_name="legal_regulations",
+                                        scroll_filter=Filter(
+                                            must=[
+                                                FieldCondition(
+                                                    key="source_file",
+                                                    match=MatchValue(value=fn)
+                                                )
+                                            ]
+                                        ),
+                                        limit=1000,  # Large batch size for efficiency
+                                        offset=next_page_offset,
+                                        with_payload=True,
+                                        with_vectors=False
+                                    )
+                                    
+                                    points, next_page_offset = scroll_result
+                                    all_chunks.extend(points)
+                                    
+                                    # Break if no more pages
+                                    if next_page_offset is None:
+                                        break
+                                
+                                # Sort chunks by document order
+                                sorted_chunks = sort_chunks_by_document_order(all_chunks)
+                                
+                                # Apply the display limit to sorted chunks
+                                points = sorted_chunks[:chunks_to_show]
+                                
                                 if points:
-                                    st.success(f"Displaying {len(points)} chunks")
+                                    st.success(f"Displaying {len(points)} chunks (sorted chronologically, showing chunks 1-{len(points)} of {len(all_chunks)} total)")
                                     for i, point in enumerate(points, start=1):
                                         doc = point.payload.get('text', '')
                                         meta = {k: v for k, v in point.payload.items() if k != 'text'}
                                         with st.container():
-                                            st.markdown(f"**Chunk {i}: {meta.get('chunk_id', 'N/A')}**")
+                                            st.markdown(f"**Chunk {i}:** Section {meta.get('section_number', 'N/A')}.{meta.get('subsection_index', '0')} - {meta.get('section_title', 'N/A')}")
+                                            st.caption(f"Chunk ID: {meta.get('chunk_id', 'N/A')} | Semantic Type: {meta.get('semantic_type', 'N/A')}")
                                             st.text_area("Content", doc, height=150, key=f"chunk_txt_{fn}_{i}")
                                             st.json(meta, expanded=False)
                                 else:
