@@ -9,6 +9,64 @@ import re
 import xml.etree.ElementTree as ET
 import logging
 
+def robust_xml_parse(text: str) -> List[Dict]:
+    """Parse XML legal documents with robust section extraction"""
+    legal_blocks = []
+    
+    try:
+        # Clean up the XML text first
+        xml_text = text.strip()
+        
+        # If it doesn't start with XML declaration, add a root wrapper
+        if not xml_text.startswith('<?xml') and not xml_text.startswith('<root'):
+            xml_text = f'<root>{xml_text}</root>'
+        
+        # Parse the XML
+        root = ET.fromstring(xml_text)
+        
+        # Find all code elements with type="Section"
+        sections = root.findall('.//code[@type="Section"]')
+        
+        for section in sections:
+            # Extract section number
+            number_elem = section.find('number')
+            section_number = number_elem.text.strip() if number_elem is not None and number_elem.text else ''
+            
+            # Extract section name/title
+            name_elem = section.find('name')
+            section_title = name_elem.text.strip() if name_elem is not None and name_elem.text else ''
+            
+            # Extract version if available
+            version_elem = section.find('version')
+            version = version_elem.text.strip() if version_elem is not None and version_elem.text else ''
+            
+            # Extract content
+            content_elem = section.find('content')
+            if content_elem is not None:
+                # Get all text content from the content element, including nested elements
+                content_text = ET.tostring(content_elem, encoding='unicode', method='text')
+                content_text = content_text.strip()
+                
+                if content_text and section_number:
+                    legal_blocks.append({
+                        'number': section_number,
+                        'title': section_title,
+                        'content': content_text,
+                        'version': version
+                    })
+        
+        # If we found sections, return them
+        if legal_blocks:
+            return legal_blocks
+            
+    except ET.ParseError as e:
+        print(f"XML parsing failed: {e}")
+    except Exception as e:
+        print(f"Unexpected error in XML parsing: {e}")
+    
+    # Return empty list if XML parsing failed
+    return []
+
 def detect_jurisdiction(text: str) -> str:
     """Detect jurisdiction from legal text"""
     text_lower = text.lower()
@@ -193,6 +251,14 @@ class LegalSemanticChunker:
 
     def _extract_legal_content(self, text: str) -> List[Dict]:
         """Extract pure legal content, filtering XML but preserving structure"""
+        
+        # First, try robust XML parsing for structured legal documents
+        xml_blocks = robust_xml_parse(text)
+        if xml_blocks:
+            print(f"Successfully parsed {len(xml_blocks)} sections using XML parser")
+            return xml_blocks
+        
+        print("XML parsing failed or no sections found, falling back to regex patterns")
         
         # Remove XML declaration and DTD
         content = re.sub(r'<\?xml[^>]*\?>', '', text)

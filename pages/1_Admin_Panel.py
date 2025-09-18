@@ -78,18 +78,29 @@ def natural_sort_key(s):
     return result
 
 def parse_hierarchical_number(num_str: str) -> tuple:
-    """Parse hierarchical numbers like '1.0.1' into comparable tuples like (1, 0, 1)"""
+    """Parse hierarchical numbers like '8 AAC 05.030' or '1.0.1' into comparable tuples"""
     if not num_str or not isinstance(num_str, str):
         return (0,)
     
+    # Extract the numeric hierarchical part from complex section numbers
+    # Handle formats like "8 AAC 05.030", "12 NYCRR 142-2.1", etc.
+    hierarchical_match = re.search(r'(\d+(?:\.\d+)*)', num_str)
+    if hierarchical_match:
+        hierarchical_part = hierarchical_match.group(1)
+    else:
+        # If no hierarchical pattern found, try to extract any numbers
+        numbers = re.findall(r'\d+', num_str)
+        if numbers:
+            hierarchical_part = '.'.join(numbers)
+        else:
+            return (0,)
+    
     # Split by dots and convert each part to integer
     parts = []
-    for part in num_str.split('.'):
-        # Extract numeric part from strings like "1a" or "1-2"
-        numeric_match = re.match(r'(\d+)', part.strip())
-        if numeric_match:
-            parts.append(int(numeric_match.group(1)))
-        else:
+    for part in hierarchical_part.split('.'):
+        try:
+            parts.append(int(part.strip()))
+        except ValueError:
             # Non-numeric parts get converted to 0
             parts.append(0)
     
