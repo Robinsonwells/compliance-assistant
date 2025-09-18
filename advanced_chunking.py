@@ -17,6 +17,14 @@ def robust_xml_parse(text: str) -> List[Dict]:
         # Clean up the XML text first
         xml_text = text.strip()
         
+        # Handle undefined XML entities before parsing
+        xml_text = xml_text.replace('&sect;', '§')
+        xml_text = xml_text.replace('&amp;', '&')
+        xml_text = xml_text.replace('&lt;', '<')
+        xml_text = xml_text.replace('&gt;', '>')
+        xml_text = xml_text.replace('&quot;', '"')
+        xml_text = xml_text.replace('&apos;', "'")
+        
         # If it doesn't start with XML declaration, add a root wrapper
         if not xml_text.startswith('<?xml') and not xml_text.startswith('<root'):
             xml_text = f'<root>{xml_text}</root>'
