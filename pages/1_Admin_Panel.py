@@ -132,61 +132,75 @@ load_css()
 @st.cache_resource
 def init_admin_systems():
     """Initialize admin systems with caching to improve performance"""
-    user_manager = UserManager()
-    chunker = LegalSemanticChunker(os.getenv("OPENAI_API_KEY"))
-    
-    # Initialize local embedding model
-    embedding_model = SentenceTransformer('all-MiniLM-L6-v2')
-    
-    # Initialize Qdrant client
-    qdrant_url = os.getenv("QDRANT_URL")
-    qdrant_api_key = os.getenv("QDRANT_API_KEY")
-    
-    if not qdrant_url or not qdrant_api_key:
-        raise ValueError("QDRANT_URL and QDRANT_API_KEY environment variables must be set")
-    
-    client = QdrantClient(
-        url=qdrant_url,
-        api_key=qdrant_api_key,
-    )
-    
-    collection_name = "legal_regulations"
-    
-    # Create collection if it doesn't exist
     try:
-        client.get_collection(collection_name)
-    except Exception:
-        client.create_collection(
-            collection_name=collection_name,
-            vectors_config=VectorParams(size=384, distance=Distance.COSINE)
+        # Initialize user management
+        user_manager = UserManager()
+        
+        # Initialize chunker
+        openai_api_key = os.getenv("OPENAI_API_KEY")
+        if not openai_api_key:
+            st.error("OPENAI_API_KEY environment variable is not set")
+            st.stop()
+        chunker = LegalSemanticChunker(openai_api_key)
+        
+        # Initialize local embedding model
+        embedding_model = SentenceTransformer('all-MiniLM-L6-v2')
+        
+        # Initialize Qdrant client
+        qdrant_url = os.getenv("QDRANT_URL")
+        qdrant_api_key = os.getenv("QDRANT_API_KEY")
+        
+        if not qdrant_url or not qdrant_api_key:
+            st.error("QDRANT_URL and QDRANT_API_KEY environment variables must be set")
+            st.stop()
+        
+        client = QdrantClient(
+            url=qdrant_url,
+            api_key=qdrant_api_key,
         )
-    
-    # Always ensure payload index for source_file field exists
-    try:
-        client.create_payload_index(
-            collection_name=collection_name,
-            field_name="source_file",
-            field_schema="keyword"
-        )
+        
+        collection_name = "legal_regulations"
+        
+        # Create collection if it doesn't exist
+        try:
+            client.get_collection(collection_name)
+        except Exception:
+            client.create_collection(
+                collection_name=collection_name,
+                vectors_config=VectorParams(size=384, distance=Distance.COSINE)
+            )
+        
+        # Always ensure payload index for source_file field exists
+        try:
+            client.create_payload_index(
+                collection_name=collection_name,
+                field_name="source_file",
+                field_schema="keyword"
+            )
+        except Exception as e:
+            # Index might already exist, which is fine
+            if "already exists" not in str(e).lower():
+                print(f"Warning: Could not create payload index: {e}")
+        
+        # Ensure payload index for content_hash field exists
+        try:
+            client.create_payload_index(
+                collection_name=collection_name,
+                field_name="content_hash",
+                field_schema="keyword"
+            )
+        except Exception as e:
+            # Index might already exist, which is fine
+            if "already exists" not in str(e).lower():
+                print(f"Warning: Could not create content_hash payload index: {e}")
+        
+        return user_manager, chunker, client, embedding_model
+        
     except Exception as e:
-        # Index might already exist, which is fine
-        if "already exists" not in str(e).lower():
-            print(f"Warning: Could not create payload index: {e}")
-    
-    # Ensure payload index for content_hash field exists
-    try:
-        client.create_payload_index(
-            collection_name=collection_name,
-            field_name="content_hash",
-            field_schema="keyword"
-        )
-    except Exception as e:
-        # Index might already exist, which is fine
-        if "already exists" not in str(e).lower():
-            print(f"Warning: Could not create content_hash payload index: {e}")
-    
-    collection = client
-    return user_manager, chunker, collection, embedding_model
+        st.error(f"❌ System initialization failed: {str(e)}")
+        st.error("Please check your environment variables and try refreshing the page.")
+        st.info("If the problem persists, contact your system administrator.")
+        st.stop()
 
 def admin_login():
     if 'admin_authenticated' not in st.session_state:
@@ -374,270 +388,310 @@ def process_uploaded_file(uploaded_file, chunker, qdrant_client, embedding_model
 def main():
     if not admin_login():
         st.stop()
-
-    st.markdown("""
-        <div class="dashboard-header">
-            <h1 style="margin: 0; color: white;">👨‍💼 Admin Control Panel</h1>
-            <p style="margin: 0.5rem 0 0 0; color: rgba(255,255,255,0.9);">
-                System Administration & Knowledge Base Management
-            </p>
-        </div>
-    """, unsafe_allow_html=True)
     
-    _, logout_col = st.columns([5, 1])
-    with logout_col:
-        if st.button("🚪 Logout"):
-            st.session_state.admin_authenticated = False
-            st.rerun()
-
-    um, chunker, coll, embedding_model = init_admin_systems()
-    tab1, tab2 = st.tabs(["👥 Users", "📚 Knowledge Base"])
-
-    with tab1:
-        st.markdown("### 👥 User Management")
-        left, right = st.columns(2)
-        with left:
-            st.markdown("#### ➕ Create New Access Code")
-            with st.form("add_u"):
-                name = st.text_input("Client/Company *")
-                email = st.text_input("Email (optional)")
-                days = st.number_input("Days valid", value=365, min_value=1)
-                if st.form_submit_button("Generate"):
-                    if name.strip():
-                        code = um.add_user(name.strip(), email.strip() or None, "basic", days)
-                        st.success("Access code created")
-                        st.code(code)
-                        st.warning("Save this code now!")
-                    else:
-                        st.error("Name required")
-        with right:
-            st.markdown("#### 👥 Active Users")
-            users = um.get_all_users()
-            if users:
-                for u in users:
-                    code, name, email, created, last, active, exp, tier = u
-                    # Create layout columns unconditionally
-                    info_col, action_col = st.columns([4, 1])
-                    dates_col, email_col = st.columns(2)
-                    with info_col:
-                        status = "🟢 Active" if active else "🔴 Inactive"
-                        st.write(f"**{name}** ({status})")
-                        st.write("**Access Code:**")
-                        st.code(code)
-                    with dates_col:
-                        st.caption(f"Created: {created[:10]}")
-                        st.caption(f"Last login: {last[:16] if last else 'Never'}")
-                    with email_col:
-                        if email:
-                            st.caption(f"Email: {email}")
-                        st.caption(f"Expires: {exp[:10] if exp else 'No expiry'}")
-                    with action_col:
-                        if active and st.button("🚫 Revoke", key=f"r_{code}"):
-                            um.deactivate_user(code)
-                            st.success(f"Revoked access for {name}")
-                            st.rerun()
-                    st.divider()
-            else:
-                st.info("No users created yet")
-
-    with tab2:
-        st.markdown("### 📚 Knowledge Base Management")
-        try:
-            collection_info = coll.get_collection("legal_regulations")
-            total = collection_info.points_count
-            m1, m2, m3 = st.columns(3)
-            m1.metric("Total Chunks", total)
-            m2.metric("Jurisdictions", "NY,NJ,CT")
-            m3.metric("Status", "Active" if total > 0 else "Empty")
-        except:
-            st.warning("DB init error")
-
-        st.markdown("---")
-        st.markdown("#### 📄 Document Upload")
-        uploads = st.file_uploader("Upload documents", accept_multiple_files=True, type=['pdf','docx','txt'])
+    try:
+        st.markdown("""
+            <div class="dashboard-header">
+                <h1 style="margin: 0; color: white;">👨‍💼 Admin Control Panel</h1>
+                <p style="margin: 0.5rem 0 0 0; color: rgba(255,255,255,0.9);">
+                    System Administration & Knowledge Base Management
+                </p>
+            </div>
+        """, unsafe_allow_html=True)
         
-        if uploads and st.button("🚀 Process All Documents"):
-            with st.status("🔄 Processing documents...", expanded=True) as status:
-                total_files = len(uploads)
-                processed_count = 0
-                skipped_count = 0
-                error_count = 0
-                
-                st.write(f"📋 **Processing Queue:** {total_files} files")
-                st.write("---")
-                
-                for i, uploaded_file in enumerate(uploads, 1):
-                    st.write(f"**File {i}/{total_files}: {uploaded_file.name}**")
-                    
-                    # Create progress bar and status text for this file
-                    file_progress = st.progress(0)
-                    file_status = st.empty()
-                    
-                    try:
-                        # Process the file with progress tracking
-                        success, message, content_hash = process_uploaded_file(
-                            uploaded_file, chunker, coll, embedding_model, 
-                            progress_bar=file_progress, status_text=file_status
-                        )
-                        
-                        if success:
-                            if "Skipped" in message:
-                                skipped_count += 1
-                                file_status.warning(f"⏭️ {message}")
+        _, logout_col = st.columns([5, 1])
+        with logout_col:
+            if st.button("🚪 Logout"):
+                st.session_state.admin_authenticated = False
+                st.rerun()
+
+        um, chunker, coll, embedding_model = init_admin_systems()
+        tab1, tab2 = st.tabs(["👥 Users", "📚 Knowledge Base"])
+
+        with tab1:
+            st.markdown("### 👥 User Management")
+            left, right = st.columns(2)
+            with left:
+                st.markdown("#### ➕ Create New Access Code")
+                with st.form("add_u"):
+                    name = st.text_input("Client/Company *")
+                    email = st.text_input("Email (optional)")
+                    days = st.number_input("Days valid", value=365, min_value=1)
+                    if st.form_submit_button("Generate"):
+                        try:
+                            if name.strip():
+                                code = um.add_user(name.strip(), email.strip() or None, "basic", days)
+                                st.success("Access code created")
+                                st.code(code)
+                                st.warning("Save this code now!")
                             else:
-                                processed_count += 1
-                                file_status.success(f"✅ {message}")
-                        else:
-                            error_count += 1
-                            file_status.error(f"❌ {message}")
-                    
-                    except Exception as e:
-                        error_count += 1
-                        file_status.error(f"❌ Unexpected error processing {uploaded_file.name}: {e}")
-                    
-                    # Clear the progress bar after processing
-                    file_progress.empty()
-                    
-                    # Add separator between files (except for the last one)
-                    if i < total_files:
-                        st.write("---")
-                
-                # Update final status
-                if error_count == 0:
-                    if skipped_count == total_files:
-                        status.update(label="⏭️ All documents were already processed", state="complete")
-                    elif skipped_count > 0:
-                        status.update(label=f"✅ Processing complete! {processed_count} processed, {skipped_count} skipped", state="complete")
+                                st.error("Name required")
+                        except Exception as e:
+                            st.error(f"❌ Error creating user: {str(e)}")
+                            st.info("Please try again or contact your system administrator.")
+            with right:
+                st.markdown("#### 👥 Active Users")
+                try:
+                    users = um.get_all_users()
+                    if users:
+                        for u in users:
+                            code, name, email, created, last, active, exp, tier = u
+                            # Create layout columns unconditionally
+                            info_col, action_col = st.columns([4, 1])
+                            dates_col, email_col = st.columns(2)
+                            with info_col:
+                                status = "🟢 Active" if active else "🔴 Inactive"
+                                st.write(f"**{name}** ({status})")
+                                st.write("**Access Code:**")
+                                st.code(code)
+                            with dates_col:
+                                st.caption(f"Created: {created[:10]}")
+                                st.caption(f"Last login: {last[:16] if last else 'Never'}")
+                            with email_col:
+                                if email:
+                                    st.caption(f"Email: {email}")
+                                st.caption(f"Expires: {exp[:10] if exp else 'No expiry'}")
+                            with action_col:
+                                if active and st.button("🚫 Revoke", key=f"r_{code}"):
+                                    try:
+                                        um.deactivate_user(code)
+                                        st.success(f"Revoked access for {name}")
+                                        st.rerun()
+                                    except Exception as e:
+                                        st.error(f"❌ Error revoking user: {str(e)}")
+                            st.divider()
                     else:
-                        status.update(label=f"✅ All {processed_count} documents processed successfully!", state="complete")
-                else:
-                    status.update(label=f"⚠️ Processing complete with issues: {processed_count} processed, {skipped_count} skipped, {error_count} errors", state="error")
-                
-                st.write("🎉 **Batch processing finished!**")
-                
-                # Summary
-                col1, col2, col3, col4 = st.columns(4)
-                with col1:
-                    st.metric("Total Files", total_files)
-                with col2:
-                    st.metric("Processed", processed_count, delta=processed_count if processed_count > 0 else None)
-                with col3:
-                    st.metric("Skipped", skipped_count, delta=skipped_count if skipped_count > 0 else None)
-                with col4:
-                    st.metric("Errors", error_count, delta=error_count if error_count > 0 else None, delta_color="inverse")
-            
-            # Refresh the page to clear the file uploader and update the file list
-            time.sleep(2)  # Give user time to see the final status
-            st.rerun()
+                        st.info("No users created yet")
+                except Exception as e:
+                    st.error(f"❌ Error loading users: {str(e)}")
+                    st.info("Please refresh the page or contact your system administrator.")
 
-        st.markdown("---")
-        st.markdown("#### 🗂️ Browse Files & Chunks")
-        try:
-            # Get ALL points using pagination to extract accurate file information
-            all_points = []
-            next_page_offset = None
-            
-            while True:
-                scroll_result = coll.scroll(
-                    collection_name="legal_regulations",
-                    limit=1000,  # Reasonable batch size
-                    offset=next_page_offset,
-                    with_payload=True,
-                    with_vectors=False
-                )
-                
-                points, next_page_offset = scroll_result
-                all_points.extend(points)
-                
-                # Break if no more pages
-                if next_page_offset is None:
-                    break
-            
-            files = {}
-            for point in all_points:
-                sf = point.payload.get('source_file', 'Unknown')
-                files[sf] = files.get(sf, 0) + 1
+        with tab2:
+            st.markdown("### 📚 Knowledge Base Management")
+            try:
+                collection_info = coll.get_collection("legal_regulations")
+                total = collection_info.points_count
+                m1, m2, m3 = st.columns(3)
+                m1.metric("Total Chunks", total)
+                m2.metric("Jurisdictions", "NY,NJ,CT")
+                m3.metric("Status", "Active" if total > 0 else "Empty")
+            except Exception as e:
+                st.warning(f"⚠️ Could not load database info: {str(e)}")
+                st.info("Database connection may be temporarily unavailable.")
 
-            if files:
-                st.write(f"📊 **Total Files:** {len(files)} | **Total Chunks:** {sum(files.values())}")
-                for fn, cnt in files.items():
-                    with st.expander(f"📄 {fn} ({cnt} chunks)", expanded=False):
-                        chunks_to_show = st.selectbox(
-                            "Chunks to display:",
-                            [10, 25, 50, 100],
-                            index=1,
-                            key=f"chunks_{fn}"
-                        )
-                        if st.button("🔍 Browse Chunks", key=f"browse_{fn}"):
+            st.markdown("---")
+            st.markdown("#### 📄 Document Upload")
+            uploads = st.file_uploader("Upload documents", accept_multiple_files=True, type=['pdf','docx','txt'])
+            
+            if uploads and st.button("🚀 Process All Documents"):
+                try:
+                    with st.status("🔄 Processing documents...", expanded=True) as status:
+                        total_files = len(uploads)
+                        processed_count = 0
+                        skipped_count = 0
+                        error_count = 0
+                        
+                        st.write(f"📋 **Processing Queue:** {total_files} files")
+                        st.write("---")
+                        
+                        for i, uploaded_file in enumerate(uploads, 1):
+                            st.write(f"**File {i}/{total_files}: {uploaded_file.name}**")
+                            
+                            # Create progress bar and status text for this file
+                            file_progress = st.progress(0)
+                            file_status = st.empty()
+                            
                             try:
-                                # Fetch ALL chunks for this file first
-                                all_chunks = []
-                                next_page_offset = None
+                                # Process the file with progress tracking
+                                success, message, content_hash = process_uploaded_file(
+                                    uploaded_file, chunker, coll, embedding_model, 
+                                    progress_bar=file_progress, status_text=file_status
+                                )
                                 
-                                while True:
-                                    scroll_result = coll.scroll(
-                                        collection_name="legal_regulations",
-                                        scroll_filter=Filter(
-                                            must=[
-                                                FieldCondition(
-                                                    key="source_file",
-                                                    match=MatchValue(value=fn)
-                                                )
-                                            ]
-                                        ),
-                                        limit=1000,  # Large batch size for efficiency
-                                        offset=next_page_offset,
-                                        with_payload=True,
-                                        with_vectors=False
-                                    )
-                                    
-                                    points, next_page_offset = scroll_result
-                                    all_chunks.extend(points)
-                                    
-                                    # Break if no more pages
-                                    if next_page_offset is None:
-                                        break
-                                
-                                # Sort chunks by document order
-                                sorted_chunks = sort_chunks_by_document_order(all_chunks)
-                                
-                                # Apply the display limit to sorted chunks
-                                points = sorted_chunks[:chunks_to_show]
-                                
-                                if points:
-                                    st.success(f"Displaying {len(points)} chunks (sorted chronologically, showing chunks 1-{len(points)} of {len(all_chunks)} total)")
-                                    for i, point in enumerate(points, start=1):
-                                        doc = point.payload.get('text', '')
-                                        meta = {k: v for k, v in point.payload.items() if k != 'text'}
-                                        with st.container():
-                                            st.markdown(f"**Chunk {i}:** Section {meta.get('section_number', 'N/A')}.{meta.get('subsection_index', '0')} - {meta.get('section_title', 'N/A')}")
-                                            st.caption(f"Chunk ID: {meta.get('chunk_id', 'N/A')} | Semantic Type: {meta.get('semantic_type', 'N/A')}")
-                                            st.text_area("Content", doc, height=150, key=f"chunk_txt_{fn}_{i}")
-                                            st.json(meta, expanded=False)
+                                if success:
+                                    if "Skipped" in message:
+                                        skipped_count += 1
+                                        file_status.warning(f"⏭️ {message}")
+                                    else:
+                                        processed_count += 1
+                                        file_status.success(f"✅ {message}")
                                 else:
-                                    st.warning("No chunks to display")
+                                    error_count += 1
+                                    file_status.error(f"❌ {message}")
+                            
                             except Exception as e:
-                                st.error(f"Error browsing chunks for {fn}: {e}")
+                                error_count += 1
+                                file_status.error(f"❌ Unexpected error processing {uploaded_file.name}: {e}")
+                                st.error(f"🚨 Critical error during file processing: {str(e)}")
+                                st.info("Your session remains active. You can continue with other files.")
+                            
+                            # Clear the progress bar after processing
+                            file_progress.empty()
+                            
+                            # Add separator between files (except for the last one)
+                            if i < total_files:
+                                st.write("---")
+                        
+                        # Update final status
+                        if error_count == 0:
+                            if skipped_count == total_files:
+                                status.update(label="⏭️ All documents were already processed", state="complete")
+                            elif skipped_count > 0:
+                                status.update(label=f"✅ Processing complete! {processed_count} processed, {skipped_count} skipped", state="complete")
+                            else:
+                                status.update(label=f"✅ All {processed_count} documents processed successfully!", state="complete")
+                        else:
+                            status.update(label=f"⚠️ Processing complete with issues: {processed_count} processed, {skipped_count} skipped, {error_count} errors", state="error")
+                        
+                        st.write("🎉 **Batch processing finished!**")
+                        
+                        # Summary
+                        col1, col2, col3, col4 = st.columns(4)
+                        with col1:
+                            st.metric("Total Files", total_files)
+                        with col2:
+                            st.metric("Processed", processed_count, delta=processed_count if processed_count > 0 else None)
+                        with col3:
+                            st.metric("Skipped", skipped_count, delta=skipped_count if skipped_count > 0 else None)
+                        with col4:
+                            st.metric("Errors", error_count, delta=error_count if error_count > 0 else None, delta_color="inverse")
+                    
+                    # Refresh the page to clear the file uploader and update the file list
+                    time.sleep(2)  # Give user time to see the final status
+                    st.rerun()
+                    
+                except Exception as e:
+                    st.error(f"🚨 Critical error during document processing: {str(e)}")
+                    st.error("Your session remains active. Please try again or contact your system administrator.")
+                    st.info("💡 Tip: Try uploading fewer files at once if you continue to experience issues.")
 
-                        if st.button(f"🗑️ Delete {fn}", key=f"del_{fn}"):
-                            st.session_state[f"confirm_del_{fn}"] = True
-                        if st.session_state.get(f"confirm_del_{fn}"):
-                            if st.button("✅ Confirm Delete", key=f"confirm_{fn}"):
-                                ok, msg = delete_file_chunks(coll, fn)
-                                if ok:
-                                    st.success(msg)
-                                else:
-                                    st.error(msg)
-                                st.session_state[f"confirm_del_{fn}"] = False
-                                time.sleep(1)
-                                st.rerun()
-                            if st.button("❌ Cancel", key=f"cancel_{fn}"):
-                                st.session_state[f"confirm_del_{fn}"] = False
-                                st.rerun()
-            else:
-                st.info("No files uploaded yet")
-        except Exception as e:
-            st.error(f"Error: {e}")
+            st.markdown("---")
+            st.markdown("#### 🗂️ Browse Files & Chunks")
+            try:
+                # Get ALL points using pagination to extract accurate file information
+                all_points = []
+                next_page_offset = None
+                
+                while True:
+                    scroll_result = coll.scroll(
+                        collection_name="legal_regulations",
+                        limit=1000,  # Reasonable batch size
+                        offset=next_page_offset,
+                        with_payload=True,
+                        with_vectors=False
+                    )
+                    
+                    points, next_page_offset = scroll_result
+                    all_points.extend(points)
+                    
+                    # Break if no more pages
+                    if next_page_offset is None:
+                        break
+                
+                files = {}
+                for point in all_points:
+                    sf = point.payload.get('source_file', 'Unknown')
+                    files[sf] = files.get(sf, 0) + 1
+
+                if files:
+                    st.write(f"📊 **Total Files:** {len(files)} | **Total Chunks:** {sum(files.values())}")
+                    for fn, cnt in files.items():
+                        with st.expander(f"📄 {fn} ({cnt} chunks)", expanded=False):
+                            chunks_to_show = st.selectbox(
+                                "Chunks to display:",
+                                [10, 25, 50, 100],
+                                index=1,
+                                key=f"chunks_{fn}"
+                            )
+                            if st.button("🔍 Browse Chunks", key=f"browse_{fn}"):
+                                try:
+                                    # Fetch ALL chunks for this file first
+                                    all_chunks = []
+                                    next_page_offset = None
+                                    
+                                    while True:
+                                        scroll_result = coll.scroll(
+                                            collection_name="legal_regulations",
+                                            scroll_filter=Filter(
+                                                must=[
+                                                    FieldCondition(
+                                                        key="source_file",
+                                                        match=MatchValue(value=fn)
+                                                    )
+                                                ]
+                                            ),
+                                            limit=1000,  # Large batch size for efficiency
+                                            offset=next_page_offset,
+                                            with_payload=True,
+                                            with_vectors=False
+                                        )
+                                        
+                                        points, next_page_offset = scroll_result
+                                        all_chunks.extend(points)
+                                        
+                                        # Break if no more pages
+                                        if next_page_offset is None:
+                                            break
+                                    
+                                    # Sort chunks by document order
+                                    sorted_chunks = sort_chunks_by_document_order(all_chunks)
+                                    
+                                    # Apply the display limit to sorted chunks
+                                    points = sorted_chunks[:chunks_to_show]
+                                    
+                                    if points:
+                                        st.success(f"Displaying {len(points)} chunks (sorted chronologically, showing chunks 1-{len(points)} of {len(all_chunks)} total)")
+                                        for i, point in enumerate(points, start=1):
+                                            doc = point.payload.get('text', '')
+                                            meta = {k: v for k, v in point.payload.items() if k != 'text'}
+                                            with st.container():
+                                                st.markdown(f"**Chunk {i}:** Section {meta.get('section_number', 'N/A')}.{meta.get('subsection_index', '0')} - {meta.get('section_title', 'N/A')}")
+                                                st.caption(f"Chunk ID: {meta.get('chunk_id', 'N/A')} | Semantic Type: {meta.get('semantic_type', 'N/A')}")
+                                                st.text_area("Content", doc, height=150, key=f"chunk_txt_{fn}_{i}")
+                                                st.json(meta, expanded=False)
+                                    else:
+                                        st.warning("No chunks to display")
+                                except Exception as e:
+                                    st.error(f"❌ Error browsing chunks for {fn}: {e}")
+                                    st.info("Please try again or contact your system administrator.")
+
+                            if st.button(f"🗑️ Delete {fn}", key=f"del_{fn}"):
+                                st.session_state[f"confirm_del_{fn}"] = True
+                            if st.session_state.get(f"confirm_del_{fn}"):
+                                if st.button("✅ Confirm Delete", key=f"confirm_{fn}"):
+                                    try:
+                                        ok, msg = delete_file_chunks(coll, fn)
+                                        if ok:
+                                            st.success(msg)
+                                        else:
+                                            st.error(msg)
+                                        st.session_state[f"confirm_del_{fn}"] = False
+                                        time.sleep(1)
+                                        st.rerun()
+                                    except Exception as e:
+                                        st.error(f"❌ Error deleting file: {str(e)}")
+                                        st.info("Please try again or contact your system administrator.")
+                                if st.button("❌ Cancel", key=f"cancel_{fn}"):
+                                    st.session_state[f"confirm_del_{fn}"] = False
+                                    st.rerun()
+                else:
+                    st.info("No files uploaded yet")
+            except Exception as e:
+                st.error(f"❌ Error loading file information: {str(e)}")
+                st.info("Database connection may be temporarily unavailable. Please refresh the page.")
+                
+    except Exception as e:
+        st.error(f"🚨 Critical application error: {str(e)}")
+        st.error("Your session remains active, but some features may be unavailable.")
+        st.info("Please refresh the page or contact your system administrator.")
+        st.info("💡 If this error persists, try logging out and logging back in.")
+        try:
+            # Provide emergency logout option
+            if st.button("🚪 Emergency Logout", key="emergency_logout"):
+                st.session_state.admin_authenticated = False
+                st.rerun()
+        except:
+            pass  # Don't let logout button errors crash the error handler
 
 if __name__ == "__main__":
     main()
