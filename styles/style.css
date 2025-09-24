@@ -1,8 +1,34 @@
 /* Apple-Inspired Black and White Design System */
 
-/* ===== CSS VARIABLES & APPLE-LIKE THEME SYSTEM ===== */
+/* ===== COMPREHENSIVE DARK THEME DESIGN SYSTEM ===== */
 :root {
-  /* Apple-inspired Color Palette */
+  /* Core Dark Theme Foundation */
+  --bg-primary: #1a1a1a;           /* Deep dark background - main canvas */
+  --bg-secondary: #24292e;         /* Slightly lighter - cards, sidebar */
+  --bg-tertiary: #30363d;          /* Code blocks, inputs */
+  --bg-accent: #3e444b;            /* Selected states, hover backgrounds */
+  --bg-elevated: #161b22;          /* Modals, dropdowns */
+  
+  /* Text Color Hierarchy */
+  --text-primary: #ffffff;         /* Primary text - headings, important content */
+  --text-secondary: #c9d1d9;       /* Secondary text - body content */
+  --text-muted: #8b949e;           /* Muted text - captions, placeholders */
+  --text-accent: #7d8590;          /* Accent text - metadata, timestamps */
+  --text-inverse: #0d1117;         /* Text on light backgrounds */
+  
+  /* Border System */
+  --border-light: #30363d;         /* Subtle borders */
+  --border-medium: #444c56;        /* Standard borders */
+  --border-accent: #586069;        /* Active/focused borders */
+  --border-strong: #6e7681;        /* Prominent borders */
+  
+  /* Shadow System for Dark Theme */
+  --shadow-light: rgba(255, 255, 255, 0.03);    /* Subtle white glow */
+  --shadow-medium: rgba(255, 255, 255, 0.06);   /* Medium white glow */
+  --shadow-heavy: rgba(255, 255, 255, 0.1);     /* Strong white glow */
+  --shadow-focus: rgba(0, 122, 255, 0.4);       /* Focus shadow */
+  
+  /* Interactive Color Palette */
   --primary-blue: #007AFF;
   --primary-blue-dark: #0056CC;
   --secondary-blue: #5AC8FA;
@@ -10,71 +36,74 @@
   --warning-orange: #FF9500;
   --error-red: #FF3B30;
   
-  /* Black and White Palette */
+  /* Extended Grayscale Palette */
   --white: #ffffff;
-  --gray-50: #fafafa;
-  --gray-100: #f5f5f5;
-  --gray-200: #e5e5e5;
-  --gray-300: #d4d4d4;
-  --gray-400: #a3a3a3;
-  --gray-500: #737373;
-  --gray-600: #525252;
-  --gray-700: #404040;
-  --gray-800: #262626;
-  --gray-900: #171717;
+  --gray-50: #f6f8fa;
+  --gray-100: #eaeef2;
+  --gray-200: #d0d7de;
+  --gray-300: #afb8c1;
+  --gray-400: #8b949e;
+  --gray-500: #6e7681;
+  --gray-600: #57606a;
+  --gray-700: #424a53;
+  --gray-800: #32383f;
+  --gray-900: #24292f;
   --black: #000000;
   
-  /* Theme Variables - Apple Light Theme */
-  --bg-primary: #ffffff;
-  --bg-secondary: #fafafa;
-  --bg-tertiary: #f5f5f5;
-  --bg-accent: #e5e5e5;
-  --text-primary: #000000;
-  --text-secondary: #262626;
-  --text-muted: #737373;
-  --text-accent: #525252;
-  --border-light: #e5e5e5;
-  --border-medium: #d4d4d4;
-  --border-accent: #a3a3a3;
-  --shadow-light: rgba(0, 0, 0, 0.05);
-  --shadow-medium: rgba(0, 0, 0, 0.1);
-  --shadow-heavy: rgba(0, 0, 0, 0.15);
+  /* Button System for Dark Theme */
+  --button-primary-bg: #ffffff;
+  --button-primary-text: #0d1117;
+  --button-primary-hover: #f6f8fa;
+  --button-primary-active: #eaeef2;
   
-  /* Interactive Colors */
-  --button-primary-bg: #007AFF;
-  --button-primary-hover: #0056CC;
   --button-secondary-bg: transparent;
-  --button-secondary-border: #007AFF;
-  --button-secondary-hover-bg: #007AFF;
+  --button-secondary-text: #c9d1d9;
+  --button-secondary-border: #444c56;
+  --button-secondary-hover-bg: #30363d;
+  --button-secondary-hover-border: #586069;
   
-  /* Status Colors */
-  --status-success-bg: rgba(52, 199, 89, 0.1);
-  --status-success-border: rgba(52, 199, 89, 0.3);
-  --status-warning-bg: rgba(255, 149, 0, 0.1);
-  --status-warning-border: rgba(255, 149, 0, 0.3);
-  --status-error-bg: rgba(255, 59, 48, 0.1);
-  --status-error-border: rgba(255, 59, 48, 0.3);
+  --button-accent-bg: #007AFF;
+  --button-accent-text: #ffffff;
+  --button-accent-hover: #0056CC;
+  --button-accent-active: #004499;
+  
+  /* Status Colors for Dark Theme */
+  --status-success-bg: rgba(52, 199, 89, 0.15);
+  --status-success-border: rgba(52, 199, 89, 0.4);
+  --status-success-text: #3fb950;
+  
+  --status-warning-bg: rgba(255, 149, 0, 0.15);
+  --status-warning-border: rgba(255, 149, 0, 0.4);
+  --status-warning-text: #d29922;
+  
+  --status-error-bg: rgba(255, 59, 48, 0.15);
+  --status-error-border: rgba(255, 59, 48, 0.4);
+  --status-error-text: #f85149;
+  
+  --status-info-bg: rgba(0, 122, 255, 0.15);
+  --status-info-border: rgba(0, 122, 255, 0.4);
+  --status-info-text: #58a6ff;
 }
 
-/* ===== APPLE TYPOGRAPHY SYSTEM ===== */
+/* ===== DARK THEME TYPOGRAPHY SYSTEM ===== */
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap');
 
-/* Base Typography - Apple Style */
+/* Base Typography - Dark Theme Optimized */
 .stApp {
   font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Helvetica Neue', sans-serif;
   background-color: var(--bg-primary);
-  color: var(--text-primary);
+  color: var(--text-primary) !important;
   transition: background-color 0.3s ease, color 0.3s ease;
   font-weight: 400;
   line-height: 1.47059;
   letter-spacing: -0.022em;
 }
 
-/* Headings - Apple Style */
+/* Headings - Dark Theme Optimized */
 h1, h2, h3, h4, h5, h6 {
   font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'SF Pro Display', sans-serif;
   font-weight: 700;
-  color: var(--text-primary);
+  color: var(--text-primary) !important;
   line-height: 1.0625;
   letter-spacing: -0.003em;
   margin-bottom: 1rem;
@@ -85,66 +114,74 @@ h1 {
   font-weight: 800;
   letter-spacing: -0.015em;
   line-height: 1.05;
+  color: var(--text-primary) !important;
 }
 h2 { 
   font-size: 2.5rem; 
   font-weight: 700;
   letter-spacing: -0.01em;
   line-height: 1.1;
+  color: var(--text-primary) !important;
 }
 h3 { 
   font-size: 1.75rem; 
   font-weight: 600;
   letter-spacing: -0.005em;
   line-height: 1.2;
+  color: var(--text-primary) !important;
 }
 h4 { 
   font-size: 1.5rem; 
   font-weight: 600;
   line-height: 1.25;
+  color: var(--text-primary) !important;
 }
 h5 { 
   font-size: 1.25rem; 
   font-weight: 600;
   line-height: 1.3;
+  color: var(--text-primary) !important;
 }
 h6 { 
   font-size: 1.125rem; 
   font-weight: 600;
   line-height: 1.35;
+  color: var(--text-primary) !important;
 }
 
-/* Body Text - Apple Style */
+/* Body Text - Dark Theme Optimized */
 p, .stMarkdown {
   font-size: 1.0625rem;
   line-height: 1.47059;
-  color: var(--text-secondary);
+  color: var(--text-secondary) !important;
   margin-bottom: 1rem;
   letter-spacing: -0.022em;
   font-weight: 400;
 }
 
-/* ===== LAYOUT COMPONENTS - APPLE STYLE ===== */
+/* ===== LAYOUT COMPONENTS - DARK THEME ===== */
 
 /* Main Container */
 .main-container {
   max-width: 1200px;
   margin: 0 auto;
   padding: 2rem;
-  background-color: var(--bg-primary);
+  background-color: var(--bg-primary) !important;
+  color: var(--text-primary) !important;
   min-height: 100vh;
   padding-bottom: 120px; /* Space for fixed chat input */
 }
 
-/* Apple-style Cards */
+/* Dark Theme Cards */
 .professional-card {
-  background: var(--bg-primary);
+  background: var(--bg-secondary) !important;
   border: 1px solid var(--border-light);
   border-radius: 18px;
   padding: 2rem;
   box-shadow: 0 4px 20px var(--shadow-light);
   transition: all 0.3s cubic-bezier(0.25, 0.46, 0.45, 0.94);
   margin-bottom: 1.5rem;
+  color: var(--text-primary) !important;
 }
 
 .professional-card:hover {
@@ -153,9 +190,9 @@ p, .stMarkdown {
   border-color: var(--border-medium);
 }
 
-/* Login Card - Apple Style */
+/* Login Card - Dark Theme */
 .login-card {
-  background: var(--bg-primary);
+  background: var(--bg-secondary) !important;
   border: 1px solid var(--border-light);
   border-radius: 20px;
   padding: 3rem;
@@ -164,12 +201,13 @@ p, .stMarkdown {
   margin: 2rem auto;
   text-align: center;
   backdrop-filter: blur(20px);
+  color: var(--text-primary) !important;
 }
 
-/* Dashboard Header - Apple Style */
+/* Dashboard Header - Dark Theme */
 .dashboard-header {
-  background: linear-gradient(135deg, var(--text-primary) 0%, var(--gray-800) 100%);
-  color: var(--white);
+  background: linear-gradient(135deg, var(--gray-900) 0%, var(--gray-700) 100%) !important;
+  color: var(--white) !important;
   padding: 3rem 2rem;
   border-radius: 20px;
   margin-bottom: 2rem;
@@ -694,7 +732,7 @@ p, .stMarkdown {
   }
 }
 
-/* ===== STREAMLIT CORE CONTAINER OVERRIDES - APPLE STYLE ===== */
+/* ===== STREAMLIT CORE CONTAINER OVERRIDES - DARK THEME ===== */
 
 /* Main App Container */
 [data-testid="stAppViewContainer"] {
@@ -706,35 +744,41 @@ p, .stMarkdown {
 [data-testid="stMain"] {
   background-color: var(--bg-primary) !important;
   color: var(--text-primary) !important;
+  padding-bottom: 120px !important;
 }
 
 /* Block Containers */
 [data-testid="stVerticalBlock"] {
   background-color: transparent !important;
+  color: var(--text-primary) !important;
 }
 
 [data-testid="stHorizontalBlock"] {
   background-color: transparent !important;
+  color: var(--text-primary) !important;
 }
 
 /* Column Containers */
 [data-testid="column"] {
   background-color: transparent !important;
+  color: var(--text-primary) !important;
 }
 
-/* Form Containers - Apple Style */
+/* Form Containers - Dark Theme */
 [data-testid="stForm"] {
   background-color: var(--bg-secondary) !important;
   border: 1px solid var(--border-light) !important;
   border-radius: 16px !important;
   padding: 1.5rem !important;
   box-shadow: 0 2px 15px var(--shadow-light) !important;
+  color: var(--text-primary) !important;
 }
 
 .stForm {
   border: 1px solid var(--border-light) !important;
   background-color: var(--bg-secondary) !important;
   border-radius: 16px !important;
+  color: var(--text-primary) !important;
 }
 
 /* Expander Details */
@@ -759,12 +803,14 @@ p, .stMarkdown {
   border: 1px solid var(--border-light) !important;
   border-radius: 12px !important;
   padding: 1rem !important;
+  color: var(--text-primary) !important;
 }
 
 /* Alert Containers */
 [data-testid="stAlert"] {
   border-radius: 12px !important;
   font-family: inherit !important;
+  color: var(--text-primary) !important;
 }
 
 /* Code Blocks */
@@ -788,16 +834,19 @@ p, .stMarkdown {
   background-color: var(--bg-secondary) !important;
   border: 1px solid var(--border-light) !important;
   border-radius: 12px !important;
+  color: var(--text-primary) !important;
 }
 
 /* Header */
 [data-testid="stHeader"] {
   background-color: var(--bg-primary) !important;
+  color: var(--text-primary) !important;
 }
 
 /* Toolbar */
 [data-testid="stToolbar"] {
   background-color: var(--bg-secondary) !important;
+  color: var(--text-primary) !important;
 }
 
 /* Success/Error messages - Apple Style */
