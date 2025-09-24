@@ -1,63 +1,59 @@
-/* Apple-Inspired Dark Theme Design System */
+/* Apple-Inspired Black and White Design System */
 
-/* ===== CSS VARIABLES & APPLE-LIKE DARK THEME SYSTEM ===== */
+/* ===== CSS VARIABLES & APPLE-LIKE THEME SYSTEM ===== */
 :root {
   /* Apple-inspired Color Palette */
-  --primary-blue: #0A84FF;
+  --primary-blue: #007AFF;
   --primary-blue-dark: #0056CC;
-  --secondary-blue: #64D2FF;
-  --success-green: #30D158;
-  --warning-orange: #FF9F0A;
-  --error-red: #FF453A;
+  --secondary-blue: #5AC8FA;
+  --success-green: #34C759;
+  --warning-orange: #FF9500;
+  --error-red: #FF3B30;
   
-  /* Dark Theme Palette */
+  /* Black and White Palette */
   --white: #ffffff;
-  --gray-50: #f9f9f9;
-  --gray-100: #f3f4f6;
-  --gray-200: #e5e7eb;
-  --gray-300: #d1d5db;
-  --gray-400: #9ca3af;
-  --gray-500: #6b7280;
-  --gray-600: #4b5563;
-  --gray-700: #374151;
-  --gray-800: #1f2937;
-  --gray-850: #1a202c;
-  --gray-900: #111827;
-  --gray-950: #0d1117;
+  --gray-50: #fafafa;
+  --gray-100: #f5f5f5;
+  --gray-200: #e5e5e5;
+  --gray-300: #d4d4d4;
+  --gray-400: #a3a3a3;
+  --gray-500: #737373;
+  --gray-600: #525252;
+  --gray-700: #404040;
+  --gray-800: #262626;
+  --gray-900: #171717;
   --black: #000000;
   
-  /* Dark Theme Variables */
-  --bg-primary: #0d1117;
-  --bg-secondary: #161b22;
-  --bg-tertiary: #21262d;
-  --bg-accent: #30363d;
-  --text-primary: #ffffff;
-  --text-secondary: #f0f6fc;
-  --text-muted: #8b949e;
-  --text-accent: #c9d1d9;
-  --border-light: #30363d;
-  --border-medium: #21262d;
-  --border-accent: #484f58;
-  --shadow-light: rgba(0, 0, 0, 0.3);
-  --shadow-medium: rgba(0, 0, 0, 0.5);
-  --shadow-heavy: rgba(0, 0, 0, 0.7);
+  /* Theme Variables - Apple Light Theme */
+  --bg-primary: #ffffff;
+  --bg-secondary: #fafafa;
+  --bg-tertiary: #f5f5f5;
+  --bg-accent: #e5e5e5;
+  --text-primary: #000000;
+  --text-secondary: #262626;
+  --text-muted: #737373;
+  --text-accent: #525252;
+  --border-light: #e5e5e5;
+  --border-medium: #d4d4d4;
+  --border-accent: #a3a3a3;
+  --shadow-light: rgba(0, 0, 0, 0.05);
+  --shadow-medium: rgba(0, 0, 0, 0.1);
+  --shadow-heavy: rgba(0, 0, 0, 0.15);
   
   /* Interactive Colors */
-  --button-primary-bg: #ffffff;
-  --button-primary-text: #000000;
-  --button-primary-hover: #f0f6fc;
+  --button-primary-bg: #007AFF;
+  --button-primary-hover: #0056CC;
   --button-secondary-bg: transparent;
-  --button-secondary-border: #8b949e;
-  --button-secondary-text: #f0f6fc;
-  --button-secondary-hover-bg: #21262d;
+  --button-secondary-border: #007AFF;
+  --button-secondary-hover-bg: #007AFF;
   
   /* Status Colors */
-  --status-success-bg: rgba(48, 209, 88, 0.1);
-  --status-success-border: rgba(48, 209, 88, 0.3);
-  --status-warning-bg: rgba(255, 159, 10, 0.1);
-  --status-warning-border: rgba(255, 159, 10, 0.3);
-  --status-error-bg: rgba(255, 69, 58, 0.1);
-  --status-error-border: rgba(255, 69, 58, 0.3);
+  --status-success-bg: rgba(52, 199, 89, 0.1);
+  --status-success-border: rgba(52, 199, 89, 0.3);
+  --status-warning-bg: rgba(255, 149, 0, 0.1);
+  --status-warning-border: rgba(255, 149, 0, 0.3);
+  --status-error-bg: rgba(255, 59, 48, 0.1);
+  --status-error-border: rgba(255, 59, 48, 0.3);
 }
 
 /* ===== APPLE TYPOGRAPHY SYSTEM ===== */
@@ -128,7 +124,7 @@ p, .stMarkdown {
   font-weight: 400;
 }
 
-/* ===== LAYOUT COMPONENTS - APPLE DARK STYLE ===== */
+/* ===== LAYOUT COMPONENTS - APPLE STYLE ===== */
 
 /* Main Container */
 .main-container {
@@ -137,12 +133,12 @@ p, .stMarkdown {
   padding: 2rem;
   background-color: var(--bg-primary);
   min-height: 100vh;
-  padding-bottom: 140px; /* Space for fixed chat input */
+  padding-bottom: 120px; /* Space for fixed chat input */
 }
 
 /* Apple-style Cards */
 .professional-card {
-  background: var(--bg-secondary);
+  background: var(--bg-primary);
   border: 1px solid var(--border-light);
   border-radius: 18px;
   padding: 2rem;
@@ -154,12 +150,12 @@ p, .stMarkdown {
 .professional-card:hover {
   box-shadow: 0 8px 40px var(--shadow-medium);
   transform: translateY(-2px);
-  border-color: var(--border-accent);
+  border-color: var(--border-medium);
 }
 
-/* Login Card - Apple Dark Style */
+/* Login Card - Apple Style */
 .login-card {
-  background: var(--bg-secondary);
+  background: var(--bg-primary);
   border: 1px solid var(--border-light);
   border-radius: 20px;
   padding: 3rem;
@@ -170,9 +166,9 @@ p, .stMarkdown {
   backdrop-filter: blur(20px);
 }
 
-/* Dashboard Header - Apple Dark Style */
+/* Dashboard Header - Apple Style */
 .dashboard-header {
-  background: linear-gradient(135deg, var(--gray-800) 0%, var(--gray-900) 100%);
+  background: linear-gradient(135deg, var(--text-primary) 0%, var(--gray-800) 100%);
   color: var(--white);
   padding: 3rem 2rem;
   border-radius: 20px;
@@ -187,44 +183,48 @@ p, .stMarkdown {
   margin-bottom: 2rem;
 }
 
-/* ===== STREAMLIT COMPONENT STYLING - APPLE DARK STYLE ===== */
+/* ===== STREAMLIT COMPONENT STYLING - APPLE STYLE ===== */
 
-/* Buttons - Apple Dark Style */
+/* Buttons - Apple Style */
 .stButton > button {
   background: var(--button-primary-bg);
-  color: var(--button-primary-text);
+  color: var(--white);
   border: none;
   border-radius: 12px;
   padding: 0.875rem 2rem;
   font-weight: 600;
   font-size: 1.0625rem;
   transition: all 0.3s cubic-bezier(0.25, 0.46, 0.45, 0.94);
-  box-shadow: 0 2px 10px rgba(255, 255, 255, 0.1);
+  box-shadow: 0 2px 10px rgba(0, 122, 255, 0.2);
   cursor: pointer;
   letter-spacing: -0.022em;
   font-family: inherit;
+  min-height: 44px;
+  min-width: 44px;
+  position: relative;
 }
 
 .stButton > button:hover {
   transform: translateY(-1px);
-  box-shadow: 0 4px 20px rgba(255, 255, 255, 0.15);
+  box-shadow: 0 4px 20px rgba(0, 122, 255, 0.3);
   background: var(--button-primary-hover);
 }
 
 .stButton > button:active {
   transform: translateY(0);
-  box-shadow: 0 2px 10px rgba(255, 255, 255, 0.1);
+  box-shadow: 0 2px 10px rgba(0, 122, 255, 0.2);
 }
 
 .stButton > button:focus {
-  outline: 2px solid var(--primary-blue);
+  outline: 3px solid var(--primary-blue);
   outline-offset: 2px;
+  border-color: var(--primary-blue);
 }
 
 /* Form Submit Buttons */
 .stForm > div > div > button {
   background: var(--button-primary-bg);
-  color: var(--button-primary-text);
+  color: var(--white);
   border: none;
   border-radius: 12px;
   padding: 0.875rem 2rem;
@@ -232,6 +232,8 @@ p, .stMarkdown {
   font-size: 1.0625rem;
   letter-spacing: -0.022em;
   font-family: inherit;
+  min-height: 44px;
+  min-width: 44px;
 }
 
 .stForm > div > div > button:hover {
@@ -239,9 +241,15 @@ p, .stMarkdown {
   transform: translateY(-1px);
 }
 
-/* Text Inputs - Apple Dark Style */
+.stForm > div > div > button:focus {
+  outline: 3px solid var(--primary-blue);
+  outline-offset: 2px;
+  border-color: var(--primary-blue);
+}
+
+/* Text Inputs - Apple Style */
 .stTextInput > div > div > input {
-  background-color: var(--bg-tertiary);
+  background-color: var(--bg-secondary);
   border: 1px solid var(--border-light);
   border-radius: 12px;
   padding: 0.875rem 1rem;
@@ -254,18 +262,18 @@ p, .stMarkdown {
 
 .stTextInput > div > div > input:focus {
   border-color: var(--primary-blue);
-  box-shadow: 0 0 0 3px rgba(10, 132, 255, 0.2);
+  box-shadow: 0 0 0 3px rgba(0, 122, 255, 0.1);
   outline: none;
-  background-color: var(--bg-secondary);
+  background-color: var(--bg-primary);
 }
 
 .stTextInput > div > div > input::placeholder {
   color: var(--text-muted);
 }
 
-/* Text Areas - Apple Dark Style */
+/* Text Areas - Apple Style */
 .stTextArea > div > div > textarea {
-  background-color: var(--bg-tertiary);
+  background-color: var(--bg-secondary);
   border: 1px solid var(--border-light);
   border-radius: 12px;
   color: var(--text-primary);
@@ -276,11 +284,11 @@ p, .stMarkdown {
 
 .stTextArea > div > div > textarea:focus {
   border-color: var(--primary-blue);
-  box-shadow: 0 0 0 3px rgba(10, 132, 255, 0.2);
-  background-color: var(--bg-secondary);
+  box-shadow: 0 0 0 3px rgba(0, 122, 255, 0.1);
+  background-color: var(--bg-primary);
 }
 
-/* Chat Messages - Apple Dark Style */
+/* Chat Messages - Apple Style */
 .stChatMessage {
   background: var(--bg-secondary);
   border: 1px solid var(--border-light);
@@ -295,7 +303,7 @@ p, .stMarkdown {
   background: var(--primary-blue);
   color: var(--white);
   border: none;
-  box-shadow: 0 2px 15px rgba(10, 132, 255, 0.3);
+  box-shadow: 0 2px 15px rgba(0, 122, 255, 0.2);
 }
 
 .stChatMessage[data-testid="assistant-message"] {
@@ -304,19 +312,19 @@ p, .stMarkdown {
   color: var(--text-primary);
 }
 
-/* Enhanced Chat Input - Apple Dark Style with Better Organization */
+/* Fixed Chat Input - Apple Style */
 [data-testid="stChatInput"] {
   position: fixed !important;
   bottom: 0 !important;
   left: 0 !important;
   right: 0 !important;
   z-index: 1000 !important;
-  background: rgba(13, 17, 23, 0.95) !important;
+  background: rgba(255, 255, 255, 0.8) !important;
   backdrop-filter: blur(20px) !important;
   border-top: 1px solid var(--border-light) !important;
-  padding: 1.5rem 2rem 2rem 2rem !important;
+  padding: 1rem 2rem !important;
   margin: 0 !important;
-  box-shadow: 0 -4px 20px var(--shadow-medium) !important;
+  transition: all 0.3s cubic-bezier(0.25, 0.46, 0.45, 0.94) !important;
 }
 
 [data-testid="stChatInput"] > div {
@@ -327,34 +335,48 @@ p, .stMarkdown {
 }
 
 [data-testid="stChatInput"] textarea {
-  background-color: var(--bg-secondary) !important;
+  background-color: var(--bg-primary) !important;
   color: var(--text-primary) !important;
-  border: 2px solid var(--border-light) !important;
-  border-radius: 20px !important;
-  padding: 1.25rem 1.75rem !important;
-  font-size: 1.125rem !important;
+  border: 1px solid var(--border-medium) !important;
+  border-radius: 24px !important;
+  padding: 1rem 1.5rem !important;
+  font-size: 1.0625rem !important;
   font-family: inherit !important;
   letter-spacing: -0.022em !important;
-  box-shadow: 0 4px 25px var(--shadow-light) !important;
+  box-shadow: 0 2px 20px var(--shadow-light) !important;
   transition: all 0.3s cubic-bezier(0.25, 0.46, 0.45, 0.94) !important;
-  min-height: 60px !important;
-  resize: none !important;
-  line-height: 1.5 !important;
 }
 
+  width: 100% !important;
+  box-sizing: border-box !important;
+  line-height: 1.5 !important;
 [data-testid="stChatInput"] textarea:focus {
-  background-color: var(--bg-tertiary) !important;
+  background-color: var(--bg-primary) !important;
   border-color: var(--primary-blue) !important;
-  box-shadow: 0 0 0 4px rgba(10, 132, 255, 0.15), 0 8px 40px var(--shadow-medium) !important;
-  transform: translateY(-2px) !important;
+  box-shadow: 0 0 0 3px rgba(0, 122, 255, 0.1), 0 4px 30px var(--shadow-medium) !important;
+  outline: 2px solid var(--primary-blue) !important;
+  outline-offset: 2px !important;
 }
 
 [data-testid="stChatInput"] textarea::placeholder {
   color: var(--text-muted) !important;
-  font-weight: 400 !important;
+  font-size: 1.125rem !important;
+  opacity: 0.8 !important;
 }
 
-/* Chat Input Send Button Styling */
+/* Responsive chat input for sidebar */
+@media (min-width: 768px) {
+  .css-1d391kg ~ [data-testid="stMain"] [data-testid="stChatInput"] {
+    left: 21rem !important;
+    padding: 1.5rem 2rem 1.5rem 1rem !important;
+  }
+  
+  .css-1d391kg ~ [data-testid="stMain"] [data-testid="stChatInput"] textarea {
+    max-width: calc(100vw - 23rem) !important;
+  }
+}
+
+/* Send button styling */
 [data-testid="stChatInput"] button {
   background: var(--primary-blue) !important;
   color: var(--white) !important;
@@ -365,7 +387,12 @@ p, .stMarkdown {
   font-size: 1rem !important;
   transition: all 0.3s cubic-bezier(0.25, 0.46, 0.45, 0.94) !important;
   box-shadow: 0 2px 10px rgba(10, 132, 255, 0.3) !important;
-  margin-left: 1rem !important;
+  cursor: pointer !important;
+  position: absolute !important;
+  right: 8px !important;
+  bottom: 8px !important;
+  min-height: 44px !important;
+  min-width: 44px !important;
 }
 
 [data-testid="stChatInput"] button:hover {
@@ -374,29 +401,59 @@ p, .stMarkdown {
   box-shadow: 0 4px 20px rgba(10, 132, 255, 0.4) !important;
 }
 
+[data-testid="stChatInput"] button:focus {
+  outline: 2px solid var(--white) !important;
+  outline-offset: 2px !important;
+}
+
+[data-testid="stChatInput"] button:active {
+  transform: translateY(0) !important;
+}
+
 /* Main content padding for fixed chat input */
 [data-testid="stMain"] {
-  padding-bottom: 140px !important;
+  padding-bottom: 120px !important;
 }
 
-/* Sidebar - Apple Dark Style */
-.css-1d391kg {
+/* Sidebar - Apple Style */
+.css-1d391kg, [data-testid="stSidebar"] {
   background-color: var(--bg-secondary);
   border-right: 1px solid var(--border-light);
+  min-width: 21rem;
+  max-width: 21rem;
 }
 
-.css-1d391kg .stMarkdown {
+.css-1d391kg .stMarkdown, [data-testid="stSidebar"] .stMarkdown {
   color: var(--text-secondary);
 }
 
-.css-1d391kg h3 {
+.css-1d391kg h3, [data-testid="stSidebar"] h3 {
   color: var(--text-primary);
   font-weight: 600;
 }
 
-/* Metrics - Apple Dark Style */
+/* Sidebar button styling */
+.css-1d391kg .stButton > button, [data-testid="stSidebar"] .stButton > button {
+  background: var(--error-red);
+  color: var(--white);
+  border: none;
+  min-height: 44px;
+  min-width: 44px;
+}
+
+.css-1d391kg .stButton > button:hover, [data-testid="stSidebar"] .stButton > button:hover {
+  background: #cc2e24;
+  transform: translateY(-1px);
+}
+
+.css-1d391kg .stButton > button:focus, [data-testid="stSidebar"] .stButton > button:focus {
+  outline: 3px solid var(--white);
+  outline-offset: 2px;
+}
+
+/* Metrics - Apple Style */
 .metric-card {
-  background: var(--bg-secondary);
+  background: var(--bg-primary);
   border: 1px solid var(--border-light);
   border-radius: 16px;
   padding: 1.5rem;
@@ -408,10 +465,10 @@ p, .stMarkdown {
 .metric-card:hover {
   transform: translateY(-2px);
   box-shadow: 0 4px 20px var(--shadow-medium);
-  border-color: var(--border-accent);
+  border-color: var(--border-medium);
 }
 
-/* Expanders - Apple Dark Style */
+/* Expanders - Apple Style */
 .streamlit-expanderHeader {
   background-color: var(--bg-secondary);
   border: 1px solid var(--border-light);
@@ -425,16 +482,16 @@ p, .stMarkdown {
 
 .streamlit-expanderHeader:hover {
   background-color: var(--bg-tertiary);
-  border-color: var(--border-accent);
+  border-color: var(--border-medium);
 }
 
-/* Progress Bars - Apple Dark Style */
+/* Progress Bars - Apple Style */
 .stProgress > div > div > div {
   background: linear-gradient(90deg, var(--primary-blue) 0%, var(--secondary-blue) 100%);
   border-radius: 6px;
 }
 
-/* Tabs - Apple Dark Style */
+/* Tabs - Apple Style */
 .stTabs [data-baseweb="tab-list"] {
   gap: 8px;
   background-color: var(--bg-secondary);
@@ -456,7 +513,7 @@ p, .stMarkdown {
 .stTabs [aria-selected="true"] {
   background-color: var(--primary-blue);
   color: var(--white);
-  box-shadow: 0 2px 10px rgba(10, 132, 255, 0.3);
+  box-shadow: 0 2px 10px rgba(0, 122, 255, 0.2);
 }
 
 .stTabs [data-baseweb="tab"]:hover {
@@ -464,9 +521,9 @@ p, .stMarkdown {
   color: var(--text-secondary);
 }
 
-/* Select boxes - Apple Dark Style */
+/* Select boxes - Apple Style */
 .stSelectbox > div > div > div {
-  background-color: var(--bg-tertiary);
+  background-color: var(--bg-secondary);
   border: 1px solid var(--border-light);
   color: var(--text-primary);
   border-radius: 12px;
@@ -475,12 +532,12 @@ p, .stMarkdown {
 
 .stSelectbox > div > div > div:focus-within {
   border-color: var(--primary-blue);
-  box-shadow: 0 0 0 3px rgba(10, 132, 255, 0.2);
+  box-shadow: 0 0 0 3px rgba(0, 122, 255, 0.1);
 }
 
-/* Number inputs - Apple Dark Style */
+/* Number inputs - Apple Style */
 .stNumberInput > div > div > input {
-  background-color: var(--bg-tertiary);
+  background-color: var(--bg-secondary);
   border: 1px solid var(--border-light);
   color: var(--text-primary);
   border-radius: 12px;
@@ -489,13 +546,13 @@ p, .stMarkdown {
 
 .stNumberInput > div > div > input:focus {
   border-color: var(--primary-blue);
-  box-shadow: 0 0 0 3px rgba(10, 132, 255, 0.2);
+  box-shadow: 0 0 0 3px rgba(0, 122, 255, 0.1);
 }
 
-/* File uploader - Apple Dark Style */
+/* File uploader - Apple Style */
 .stFileUploader > div > div {
   background-color: var(--bg-secondary);
-  border: 2px dashed var(--border-accent);
+  border: 2px dashed var(--border-medium);
   border-radius: 16px;
   transition: all 0.3s cubic-bezier(0.25, 0.46, 0.45, 0.94);
 }
@@ -518,7 +575,7 @@ p, .stMarkdown {
   color: var(--white);
   font-size: 1.5rem;
   font-weight: 700;
-  box-shadow: 0 4px 20px rgba(10, 132, 255, 0.3);
+  box-shadow: 0 4px 20px rgba(0, 122, 255, 0.2);
 }
 
 .status-indicator {
@@ -592,11 +649,11 @@ p, .stMarkdown {
   box-shadow: 0 8px 40px var(--shadow-medium);
 }
 
-/* ===== RESPONSIVE DESIGN - APPLE DARK STYLE ===== */
+/* ===== RESPONSIVE DESIGN - APPLE STYLE ===== */
 @media (max-width: 768px) {
   .main-container {
     padding: 1rem;
-    padding-bottom: 140px;
+    padding-bottom: 120px;
   }
   
   .login-card {
@@ -616,18 +673,12 @@ p, .stMarkdown {
   [data-testid="stChatInput"] {
     padding: 1rem !important;
   }
-  
-  [data-testid="stChatInput"] textarea {
-    padding: 1rem 1.25rem !important;
-    font-size: 1rem !important;
-    min-height: 50px !important;
-  }
 }
 
 @media (max-width: 480px) {
   .main-container {
     padding: 0.5rem;
-    padding-bottom: 140px;
+    padding-bottom: 120px;
   }
   
   .professional-card {
@@ -641,14 +692,9 @@ p, .stMarkdown {
   [data-testid="stChatInput"] {
     padding: 0.75rem !important;
   }
-  
-  [data-testid="stChatInput"] textarea {
-    padding: 0.875rem 1rem !important;
-    font-size: 0.9375rem !important;
-  }
 }
 
-/* ===== STREAMLIT CORE CONTAINER OVERRIDES - APPLE DARK STYLE ===== */
+/* ===== STREAMLIT CORE CONTAINER OVERRIDES - APPLE STYLE ===== */
 
 /* Main App Container */
 [data-testid="stAppViewContainer"] {
@@ -676,7 +722,7 @@ p, .stMarkdown {
   background-color: transparent !important;
 }
 
-/* Form Containers - Apple Dark Style */
+/* Form Containers - Apple Style */
 [data-testid="stForm"] {
   background-color: var(--bg-secondary) !important;
   border: 1px solid var(--border-light) !important;
@@ -754,7 +800,7 @@ p, .stMarkdown {
   background-color: var(--bg-secondary) !important;
 }
 
-/* Success/Error messages - Apple Dark Style */
+/* Success/Error messages - Apple Style */
 .stSuccess {
   background-color: var(--status-success-bg) !important;
   border-left: 4px solid var(--success-green) !important;
@@ -783,7 +829,7 @@ p, .stMarkdown {
   border-radius: 12px !important;
 }
 
-/* Links - Apple Dark Style */
+/* Links - Apple Style */
 a {
   color: var(--primary-blue);
   text-decoration: none;
@@ -791,11 +837,11 @@ a {
 }
 
 a:hover {
-  color: var(--secondary-blue);
+  color: var(--primary-blue-dark);
   text-decoration: underline;
 }
 
-/* Dividers - Apple Dark Style */
+/* Dividers - Apple Style */
 hr {
   border: none;
   height: 1px;
@@ -803,7 +849,7 @@ hr {
   margin: 2rem 0;
 }
 
-/* Code blocks - Apple Dark Style */
+/* Code blocks - Apple Style */
 code {
   background-color: var(--bg-tertiary);
   color: var(--text-accent);
@@ -823,7 +869,7 @@ pre {
   font-family: 'SF Mono', Monaco, 'Cascadia Code', 'Roboto Mono', Consolas, 'Courier New', monospace;
 }
 
-/* Scrollbar styling - Apple Dark Style */
+/* Scrollbar styling - Apple Style */
 ::-webkit-scrollbar {
   width: 8px;
 }
@@ -833,15 +879,15 @@ pre {
 }
 
 ::-webkit-scrollbar-thumb {
-  background: var(--border-accent);
+  background: var(--border-medium);
   border-radius: 4px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: var(--text-muted);
+  background: var(--border-accent);
 }
 
-/* Focus Indicators - Apple Dark Style */
+/* Focus Indicators - Apple Style */
 button:focus,
 input:focus,
 select:focus,
@@ -862,9 +908,9 @@ textarea:focus {
 /* High Contrast Mode Support */
 @media (prefers-contrast: high) {
   :root {
-    --border-light: var(--gray-500);
-    --border-medium: var(--gray-400);
-    --shadow-light: rgba(255, 255, 255, 0.1);
-    --shadow-medium: rgba(255, 255, 255, 0.2);
+    --border-light: var(--gray-400);
+    --border-medium: var(--gray-500);
+    --shadow-light: rgba(0, 0, 0, 0.2);
+    --shadow-medium: rgba(0, 0, 0, 0.3);
   }
 }

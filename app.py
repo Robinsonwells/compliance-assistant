@@ -717,12 +717,6 @@ def main():
     
     # Sidebar
     with st.sidebar:
-        st.markdown("### 📋 Quick Reference")
-        st.markdown("**AI Model:** GPT-5 (Responses API) with AI-Driven Relevance")
-        st.markdown("**Supported Jurisdictions:** NY, NJ, CT, Federal")
-        st.markdown("**Query Examples:** Minimum wage, overtime rules, multi-state compliance")
-        st.markdown("**Search Strategy:** Adaptive context based on query complexity")
-        
         if st.button("🚪 Logout"):
             st.session_state.authenticated = False
             st.rerun()
