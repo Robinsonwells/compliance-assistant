@@ -786,115 +786,62 @@ def main():
     
     # Process the question when submitted
     if submit_button and prompt.strip():
-        # Add user message to chat history
-        st.session_state.messages.append({"role": "user", "content": prompt})
-        
-        # Display user message
-        with st.chat_message("user"):
-            st.markdown(f'<div class="message-content">{prompt}</div>', unsafe_allow_html=True)
-        
-        # Show typing indicator
-        st.session_state.is_typing = True
-        st.rerun()
-        
-        # Generate and display assistant response
-        with st.chat_message("assistant"):
-            with st.spinner("Searching legal database..."):
-                # Use enhanced search with AI-driven relevance
-                search_data = search_legal_database(prompt, qdrant_client, embedding_model, openai_client, adaptive=True)
-                
-                if search_data:
-                    # Generate AI response
-                    if isinstance(search_data, dict) and 'total_relevant' in search_data:
-                        st.info(f"AI-filtered {search_data['total_relevant']} relevant sources from {search_data['total_candidates']} candidates - Processing with GPT-5 Adaptive Context")
-                        relevant_chunks = search_data['relevant_chunks']
-                    else:
-                        st.info(f"Found {len(search_data)} sources - Processing with GPT-5")
-                        relevant_chunks = search_data
-                    
-                    # Hide typing indicator
-                    st.session_state.is_typing = False
-                    
-                    response = generate_legal_response(prompt, search_data, openai_client)
-                    
-                    if response["success"]:
-                        ai_response = response["content"]
-                        if ai_response and ai_response.strip():
-                            st.success("GPT-5 comprehensive legal analysis generated successfully")
-                            st.markdown(f'<div class="message-content">{ai_response}</div>', unsafe_allow_html=True)
-                            
-                            # Message actions for AI response
-                            st.markdown("""
-                            """, unsafe_allow_html=True)
-                            
-                            # Add assistant response to chat history
-                            st.session_state.messages.append({"role": "assistant", "content": ai_response})
-                        else:
-                            error_msg = "Empty response from GPT-5. Please try again."
-                            st.error(error_msg)
-                            st.session_state.messages.append({"role": "assistant", "content": error_msg})
-                            st.session_state.is_typing = False
-                    else:
-                        error_msg = response.get("error", "Unknown GPT-5 API error")
-                        st.error(f"AI Response Generation Failed: {error_msg}")
-                        st.session_state.messages.append({"role": "assistant", "content": f"Error: {error_msg}"})
-                        st.session_state.is_typing = False
-                        
-                        # Clear the input after processing
-                        st.session_state.user_legal_query = ""
-                        
-                        # Show debugging information
-                        with st.expander("Debug Information"):
-                            if isinstance(search_data, dict):
-                                st.write(f"**Total candidates:** {search_data.get('total_candidates', 'N/A')}")
-                                st.write(f"**AI-filtered relevant:** {search_data.get('total_relevant', 'N/A')}")
-                                st.write(f"**Query complexity:** {search_data.get('complexity_analysis', {}).get('complexity', 'N/A')}")
-                                st.write(f"**Search strategy:** {search_data.get('complexity_analysis', {}).get('search_strategy', 'N/A')}")
-                            else:
-                                st.write(f"**Sources found:** {len(search_data) if isinstance(search_data, list) else 'N/A'}")
-                            st.write("**Model:** gpt-5 (Responses API) with AI-Driven Relevance")
-                            st.write(f"**Reasoning effort:** HIGH")
-                            st.write("**Max output tokens:** 65536")
-                            st.write(f"**Context length:** {len(prompt)} characters")
-                            st.write(f"**Error details:** {error_msg}")
-                            if response.get("response_id"):
-                                st.write(f"**Response ID:** {response['response_id']}")
-                    
-                    # Clear the input after successful processing
-                    st.session_state.user_legal_query = ""
-                    
-                    # Show sources
-                    with st.expander("Sources Referenced"):
-                        if isinstance(search_data, dict) and 'relevant_chunks' in search_data:
-                            for i, chunk in enumerate(search_data['relevant_chunks'], 1):
-                                relevance = getattr(chunk, 'ai_relevance', getattr(chunk.payload, 'ai_relevance', 'N/A'))
-                                st.markdown(f"**Source {i}:** {chunk.payload.get('citation', 'N/A')} ({chunk.payload.get('jurisdiction', 'N/A')})")
-                                st.markdown(f"*AI Relevance: {relevance}*")
-                                st.markdown(f"*Similarity Score: {chunk.score:.3f}*")
-                                st.markdown(f"*Section: {chunk.payload.get('section_number', 'N/A')} - {chunk.payload.get('section_title', 'N/A')}*")
-                                st.text_area(
-                                    f"Legal Text {i}",
-                                    chunk.payload.get('text', '')[:1000] + "..." if len(chunk.payload.get('text', '')) > 1000 else chunk.payload.get('text', ''),
-                                    height=150,
-                                    key=f"source_{i}_{len(st.session_state.messages)}"
-                                )
-                        else:
-                            # Legacy format
-                            for i, result in enumerate(search_data if isinstance(search_data, list) else [], 1):
-                                st.markdown(f"**Source {i}:** {result.get('citation', 'N/A')} ({result.get('jurisdiction', 'N/A')})")
-                                st.markdown(f"*Relevance Score: {result.get('score', 0):.3f}*")
-                                st.markdown(f"*Section: {result.get('section_number', 'N/A')} - {result.get('section_title', 'N/A')}*")
-                                st.text_area(
-                                    f"Legal Text {i}",
-                                    result.get('text', '')[:1000] + "..." if len(result.get('text', '')) > 1000 else result.get('text', ''),
-                                    height=150,  # Taller text areas
-                                    key=f"source_{i}_{len(st.session_state.messages)}"
-                                )
-                else:
-                    response = "I couldn't find relevant legal information in the database for your query. Please try rephrasing your question with more specific terms or contact legal counsel for assistance."
-                    st.markdown(f'<div class="message-content">{response}</div>', unsafe_allow_html=True)
-                    st.session_state.messages.append({"role": "assistant", "content": response})
-                    st.session_state.is_typing = False
+        # Process the question (avoid adding to chat history multiple times)
+        process_legal_question(prompt, qdrant_client, embedding_model, openai_client)
+
+def process_legal_question(prompt: str, qdrant_client, embedding_model, openai_client):
+    """Process a legal question and update chat history"""
+    
+    # Add user message to chat history (only once)
+    st.session_state.messages.append({"role": "user", "content": prompt})
+    
+    # Clear the input immediately
+    if "user_legal_query" in st.session_state:
+        st.session_state.user_legal_query = ""
+    
+    # Process with loading indicator
+    with st.status("🔍 Analyzing your legal question...", expanded=True) as status:
+        try:
+            # Step 1: Search legal database
+            status.write("📚 Searching legal database...")
+            search_data = search_legal_database(prompt, qdrant_client, embedding_model, openai_client, adaptive=True)
+            
+            if not search_data:
+                error_response = "I couldn't find relevant legal information in the database for your query. Please try rephrasing your question with more specific terms or contact legal counsel for assistance."
+                st.session_state.messages.append({"role": "assistant", "content": error_response})
+                status.update(label="❌ No relevant legal sources found", state="error")
+                st.rerun()
+                return
+            
+            # Step 2: Show search results
+            if isinstance(search_data, dict) and 'total_relevant' in search_data:
+                status.write(f"✅ Found {search_data['total_relevant']} relevant sources from {search_data['total_candidates']} candidates")
+            else:
+                status.write(f"✅ Found {len(search_data)} legal sources")
+            
+            # Step 3: Generate AI response
+            status.write("🤖 Generating comprehensive legal analysis with GPT-5...")
+            response = generate_legal_response(prompt, search_data, openai_client)
+            
+            if response["success"] and response["content"]:
+                # Add successful response to chat history
+                st.session_state.messages.append({"role": "assistant", "content": response["content"]})
+                status.update(label="✅ Legal analysis complete!", state="complete")
+            else:
+                # Add error response to chat history
+                error_msg = response.get("error", "Unknown error occurred")
+                error_response = f"Error generating legal analysis: {error_msg}"
+                st.session_state.messages.append({"role": "assistant", "content": error_response})
+                status.update(label="❌ Error generating response", state="error")
+            
+        except Exception as e:
+            # Handle any unexpected errors
+            error_response = f"An unexpected error occurred: {str(e)}"
+            st.session_state.messages.append({"role": "assistant", "content": error_response})
+            status.update(label="❌ Processing failed", state="error")
+    
+    # Force page refresh to show new messages
+    st.rerun()
 
 if __name__ == "__main__":
     main()
