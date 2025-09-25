@@ -1242,6 +1242,71 @@ button[style*="background-color: #fefefe"],
   color: #000000 !important;
 }
 
+/* AGGRESSIVE WHITE BUTTON TEXT FORCING */
+/* Target ALL possible white button selectors */
+button,
+.stButton > button,
+.stForm > div > div > button,
+[data-testid="baseButton-primary"],
+[data-testid="baseButton-secondary"],
+input[type="submit"],
+input[type="button"] {
+  /* Force black text on white/light backgrounds */
+  color: #000000 !important;
+}
+
+/* Specifically target the login form button */
+.stForm button,
+.stForm > div > div > button,
+form button,
+[data-testid="stForm"] button {
+  background: var(--white) !important;
+  color: #000000 !important;
+  border: 1px solid #d0d7de !important;
+}
+
+/* Target admin panel access button specifically */
+button:contains("Access Admin Panel"),
+button:contains("Access System"),
+button:contains("🔐") {
+  background: var(--white) !important;
+  color: #000000 !important;
+}
+
+/* Override any inherited text colors on buttons */
+button *,
+.stButton > button *,
+.stForm > div > div > button *,
+[data-testid="baseButton-primary"] *,
+[data-testid="baseButton-secondary"] * {
+  color: #000000 !important;
+}
+
+/* Force black text on ALL button states */
+button:hover,
+button:focus,
+button:active,
+button:visited,
+.stButton > button:hover,
+.stButton > button:focus,
+.stButton > button:active,
+.stButton > button:visited,
+.stForm > div > div > button:hover,
+.stForm > div > div > button:focus,
+.stForm > div > div > button:active {
+  color: #000000 !important;
+}
+
+/* Ensure button text elements have black color */
+button span,
+button div,
+button p,
+.stButton > button span,
+.stButton > button div,
+.stButton > button p {
+  color: #000000 !important;
+}
+
 /* White button hover states */
 button[style*="background: white"]:hover,
 button[style*="background-color: white"]:hover,
