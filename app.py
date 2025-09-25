@@ -825,27 +825,6 @@ def main():
     # Chat interface
     st.markdown("### 💬 Legal Research Chat")
     
-    # Scroll to bottom button
-    if len(st.session_state.messages) > 3:  # Show after 3 messages
-        st.markdown("""
-            <button class="scroll-to-bottom visible" onclick="window.scrollTo(0, document.body.scrollHeight);">
-                ⬇️
-            </button>
-        """, unsafe_allow_html=True)
-    
-    # Typing indicator
-    if st.session_state.is_typing:
-        st.markdown("""
-            <div class="typing-indicator visible">
-                <span>AI is analyzing legal sources</span>
-                <div class="typing-dots">
-                    <div class="typing-dot"></div>
-                    <div class="typing-dot"></div>
-                    <div class="typing-dot"></div>
-                </div>
-            </div>
-        """, unsafe_allow_html=True)
-    
     # Display chat messages
     for message in st.session_state.messages:
         with st.chat_message(message["role"]):
@@ -863,8 +842,44 @@ def main():
                     </div>
                 """, unsafe_allow_html=True)
     
-    # Chat input
-    if prompt := st.chat_input("Ask a legal compliance question..."):
+    # Typing indicator
+    if st.session_state.is_typing:
+        st.markdown("""
+            <div class="typing-indicator visible">
+                <span>AI is analyzing legal sources</span>
+                <div class="typing-dots">
+                    <div class="typing-dot"></div>
+                    <div class="typing-dot"></div>
+                    <div class="typing-dot"></div>
+                </div>
+            </div>
+        """, unsafe_allow_html=True)
+    
+    # Enhanced input area for legal questions
+    st.markdown("---")
+    st.markdown("### 🔍 Ask Your Legal Compliance Question")
+    
+    with st.container():
+        prompt = st.text_area(
+            "Enter your detailed legal question:",
+            height=120,
+            placeholder="Example: What are the meal break requirements for employees working 8+ hours in Connecticut? Include any exceptions for different industries and penalty requirements for violations.",
+            help="Provide detailed questions for more comprehensive legal analysis. Include specific jurisdictions, industries, or circumstances for better results.",
+            key="user_legal_query"
+        )
+        
+        # Submit button with better positioning
+        col1, col2, col3 = st.columns([1, 2, 1])
+        with col2:
+            submit_button = st.button(
+                "🔍 Research Legal Requirements", 
+                use_container_width=True,
+                type="primary",
+                disabled=not prompt.strip()
+            )
+    
+    # Process the question when submitted
+    if submit_button and prompt.strip():
         # Add user message to chat history
         st.session_state.messages.append({"role": "user", "content": prompt})
         
@@ -925,6 +940,9 @@ def main():
                         st.session_state.messages.append({"role": "assistant", "content": f"Error: {error_msg}"})
                         st.session_state.is_typing = False
                         
+                        # Clear the input after processing
+                        st.session_state.user_legal_query = ""
+                        
                         # Show debugging information
                         with st.expander("Debug Information"):
                             if isinstance(search_data, dict):
@@ -941,6 +959,9 @@ def main():
                             st.write(f"**Error details:** {error_msg}")
                             if response.get("response_id"):
                                 st.write(f"**Response ID:** {response['response_id']}")
+                    
+                    # Clear the input after successful processing
+                    st.session_state.user_legal_query = ""
                     
                     # Show sources
                     with st.expander("Sources Referenced"):

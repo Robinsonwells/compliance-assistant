@@ -369,107 +369,79 @@ p, .stMarkdown {
   color: inherit !important;
 }
 
-/* Fixed Chat Input - Apple Style */
-[data-testid="stChatInput"] {
-  position: fixed !important;
-  bottom: 0 !important;
-  left: 0 !important;
-  right: 0 !important;
-  z-index: 1000 !important;
-  background: rgba(26, 26, 26, 0.85) !important;
-  backdrop-filter: blur(20px) !important;
-  border-top: 1px solid var(--border-light) !important;
-  padding: 1rem 2rem !important;
-  margin: 0 !important;
-  transition: all 0.3s cubic-bezier(0.25, 0.46, 0.45, 0.94) !important;
+/* Enhanced Legal Question Input Area */
+.legal-question-container {
+  background: var(--bg-secondary) !important;
+  border: 1px solid var(--border-light) !important;
+  border-radius: 16px !important;
+  padding: 2rem !important;
+  margin: 2rem 0 !important;
+  box-shadow: 0 4px 20px var(--shadow-light) !important;
 }
 
-[data-testid="stChatInput"] > div {
-  max-width: 1200px !important;
-  margin: 0 auto !important;
-  background: transparent !important;
-  position: relative !important;
-}
-
-[data-testid="stChatInput"] textarea {
+/* Legal question text area styling */
+.stTextArea > div > div > textarea {
   background-color: var(--bg-tertiary) !important;
-  color: var(--text-primary) !important;
-  border: 2px solid var(--border-medium) !important;
-  border-radius: 24px !important;
+  border: 2px solid var(--border-light) !important;
+  border-radius: 12px !important;
   padding: 1rem 1.5rem !important;
   font-size: 1.0625rem !important;
+  color: var(--text-primary) !important;
   font-family: inherit !important;
   letter-spacing: -0.022em !important;
-  box-shadow: 0 4px 30px var(--shadow-medium) !important;
-  transition: all 0.3s cubic-bezier(0.25, 0.46, 0.45, 0.94) !important;
-  width: 100% !important;
-  box-sizing: border-box !important;
   line-height: 1.5 !important;
+  transition: all 0.3s cubic-bezier(0.25, 0.46, 0.45, 0.94) !important;
+  resize: vertical !important;
+  min-height: 120px !important;
 }
 
-[data-testid="stChatInput"] textarea:focus {
+.stTextArea > div > div > textarea:focus {
   background-color: var(--bg-secondary) !important;
   border-color: var(--primary-blue) !important;
-  box-shadow: 0 0 0 4px rgba(0, 122, 255, 0.2), 0 6px 40px var(--shadow-heavy) !important;
+  box-shadow: 0 0 0 4px rgba(0, 122, 255, 0.2) !important;
   outline: none !important;
 }
 
-[data-testid="stChatInput"] textarea::placeholder {
+.stTextArea > div > div > textarea::placeholder {
   color: var(--text-muted) !important;
-  font-size: 1.125rem !important;
+  font-size: 1rem !important;
   opacity: 0.8 !important;
+  line-height: 1.4 !important;
 }
 
-/* Responsive chat input for sidebar */
-@media (min-width: 768px) {
-  .css-1d391kg ~ [data-testid="stMain"] [data-testid="stChatInput"] {
-    left: 21rem !important;
-    padding: 1.5rem 2rem 1.5rem 1rem !important;
-  }
-  
-  .css-1d391kg ~ [data-testid="stMain"] [data-testid="stChatInput"] textarea {
-    max-width: calc(100vw - 23rem) !important;
-  }
-}
-
-/* Send button styling */
-[data-testid="stChatInput"] button {
+/* Legal question submit button */
+.stButton > button[data-testid="baseButton-primary"] {
   background: var(--primary-blue) !important;
   color: var(--white) !important;
   border: none !important;
-  border-radius: 18px !important;
-  padding: 1rem 1.25rem !important;
+  border-radius: 12px !important;
+  padding: 1rem 2rem !important;
   font-weight: 600 !important;
-  font-size: 1rem !important;
+  font-size: 1.125rem !important;
   transition: all 0.3s cubic-bezier(0.25, 0.46, 0.45, 0.94) !important;
-  box-shadow: 0 3px 15px rgba(0, 122, 255, 0.4) !important;
+  box-shadow: 0 4px 20px rgba(0, 122, 255, 0.3) !important;
   cursor: pointer !important;
-  position: absolute !important;
-  right: 6px !important;
-  bottom: 6px !important;
   min-height: 48px !important;
-  min-width: 48px !important;
+  letter-spacing: -0.022em !important;
 }
 
-[data-testid="stChatInput"] button:hover {
+.stButton > button[data-testid="baseButton-primary"]:hover {
   background: var(--primary-blue-dark) !important;
-  transform: translateY(-1px) !important;
-  box-shadow: 0 5px 25px rgba(0, 122, 255, 0.5) !important;
+  transform: translateY(-2px) !important;
+  box-shadow: 0 6px 30px rgba(0, 122, 255, 0.4) !important;
 }
 
-[data-testid="stChatInput"] button:focus {
-  outline: 3px solid var(--white) !important;
-  outline-offset: 2px !important;
-}
-
-[data-testid="stChatInput"] button:active {
+.stButton > button[data-testid="baseButton-primary"]:active {
   transform: translateY(0) !important;
-  box-shadow: 0 2px 10px rgba(0, 122, 255, 0.3) !important;
+  box-shadow: 0 2px 15px rgba(0, 122, 255, 0.3) !important;
 }
 
-/* Main content padding for fixed chat input */
-[data-testid="stMain"] {
-  padding-bottom: 120px !important;
+.stButton > button[data-testid="baseButton-primary"]:disabled {
+  background: var(--gray-600) !important;
+  color: var(--gray-400) !important;
+  cursor: not-allowed !important;
+  transform: none !important;
+  box-shadow: none !important;
 }
 
 /* Sidebar - Apple Style */
