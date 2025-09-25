@@ -72,6 +72,24 @@ def init_systems():
         st.error(f"System initialization error: {e}")
         st.stop()
 
+def store_systems_in_session():
+    """Store initialized systems in session state for callback access"""
+    if 'systems_initialized' not in st.session_state:
+        user_manager, embedding_model, qdrant_client, openai_client = init_systems()
+        st.session_state.user_manager = user_manager
+        st.session_state.embedding_model = embedding_model
+        st.session_state.qdrant_client = qdrant_client
+        st.session_state.openai_client = openai_client
+        st.session_state.systems_initialized = True
+
+def submit_question_callback():
+    """Callback function to handle question submission"""
+    if st.session_state.user_legal_query and st.session_state.user_legal_query.strip():
+        # Store the question to process
+        st.session_state.query_to_process = st.session_state.user_legal_query.strip()
+        # Clear the input immediately
+        st.session_state.user_legal_query = ""
+
 def authenticate_user():
     """Handle user authentication"""
     if 'authenticated' not in st.session_state:
@@ -103,7 +121,8 @@ def authenticate_user():
                 submit_button = st.form_submit_button("🔐 Access System", use_container_width=True)
             
             if submit_button and access_code:
-                user_manager, _, _, _ = init_systems()
+                store_systems_in_session()
+                user_manager = st.session_state.user_manager
                 
                 if user_manager.validate_access_code(access_code.strip().upper()):
                     # Create session
@@ -570,9 +589,11 @@ def search_legal_database(query: str, qdrant_client, embedding_model, openai_cli
         
         return formatted_results
 
-def generate_legal_response(query: str, search_data, openai_client):
+def generate_legal_response(query: str, search_data):
     """Generate legal response using adaptive context and comprehensive sources"""
     try:
+        openai_client = st.session_state.openai_client
+        
         # Handle both new adaptive format and legacy format
         if isinstance(search_data, dict) and 'adaptive_context' in search_data:
             # New adaptive format
@@ -688,10 +709,62 @@ AVAILABLE LEGAL CONTEXT:
             "error": error_msg
         }
 
+def process_legal_question_logic(prompt: str):
+    """Process a legal question - contains only the processing logic"""
+    
+    # Add user message to chat history (only once)
+    st.session_state.messages.append({"role": "user", "content": prompt})
+    
+    # Process with loading indicator
+    with st.status("🔍 Analyzing your legal question...", expanded=True) as status:
+        try:
+            # Get systems from session state
+            qdrant_client = st.session_state.qdrant_client
+            embedding_model = st.session_state.embedding_model
+            openai_client = st.session_state.openai_client
+            
+            # Step 1: Search legal database
+            status.write("📚 Searching legal database...")
+            search_data = search_legal_database(prompt, qdrant_client, embedding_model, openai_client, adaptive=True)
+            
+            if not search_data:
+                error_response = "I couldn't find relevant legal information in the database for your query. Please try rephrasing your question with more specific terms or contact legal counsel for assistance."
+                st.session_state.messages.append({"role": "assistant", "content": error_response})
+                status.update(label="❌ No relevant legal sources found", state="error")
+                return
+            
+            # Step 2: Show search results
+            if isinstance(search_data, dict) and 'total_relevant' in search_data:
+                status.write(f"✅ Found {search_data['total_relevant']} relevant sources from {search_data['total_candidates']} candidates")
+            else:
+                status.write(f"✅ Found {len(search_data)} legal sources")
+            
+            # Step 3: Generate AI response
+            status.write("🤖 Generating comprehensive legal analysis with GPT-5...")
+            response = generate_legal_response(prompt, search_data)
+            
+            if response["success"] and response["content"]:
+                # Add successful response to chat history
+                st.session_state.messages.append({"role": "assistant", "content": response["content"]})
+                status.update(label="✅ Legal analysis complete!", state="complete")
+            else:
+                # Add error response to chat history
+                error_msg = response.get("error", "Unknown error occurred")
+                error_response = f"Error generating legal analysis: {error_msg}"
+                st.session_state.messages.append({"role": "assistant", "content": error_response})
+                status.update(label="❌ Error generating response", state="error")
+            
+        except Exception as e:
+            # Handle any unexpected errors
+            error_response = f"An unexpected error occurred: {str(e)}"
+            st.session_state.messages.append({"role": "assistant", "content": error_response})
+            status.update(label="❌ Processing failed", state="error")
+
 def main():
     """Main application logic"""
-    # Initialize systems
-    user_manager, embedding_model, qdrant_client, openai_client = init_systems()
+    # Initialize systems and store in session state
+    store_systems_in_session()
+    user_manager = st.session_state.user_manager
     
     # Authenticate user
     if not authenticate_user():
@@ -706,11 +779,15 @@ def main():
     # Update session activity
     user_manager.update_session_activity(st.session_state.session_id)
     
-    # Initialize UI state
+    # Initialize UI state and processing variables
     if "theme" not in st.session_state:
         st.session_state.theme = "dark"
     if "is_typing" not in st.session_state:
         st.session_state.is_typing = False
+    if "query_to_process" not in st.session_state:
+        st.session_state.query_to_process = None
+    if "user_legal_query" not in st.session_state:
+        st.session_state.user_legal_query = ""
     
     # Main application interface
     st.markdown("""
@@ -740,13 +817,6 @@ def main():
         with st.chat_message(message["role"]):
             # Enhanced message formatting
             st.markdown(f'<div class="message-content">{message["content"]}</div>', unsafe_allow_html=True)
-            
-            # Message actions
-            if message["role"] == "assistant":
-                st.markdown("""
-                    <div class="message-actions">
-                    </div>
-                """, unsafe_allow_html=True)
     
     # Typing indicator
     if st.session_state.is_typing:
@@ -766,12 +836,13 @@ def main():
     st.markdown("### 🔍 Ask Your Legal Compliance Question")
     
     with st.container():
-        prompt = st.text_area(
+        prompt_input = st.text_area(
             "Enter your detailed legal question:",
             height=120,
             placeholder="Example: What are the meal break requirements for employees working 8+ hours in Connecticut? Include any exceptions for different industries and penalty requirements for violations.",
             help="Provide detailed questions for more comprehensive legal analysis. Include specific jurisdictions, industries, or circumstances for better results.",
-            key="user_legal_query"
+            key="user_legal_query",
+            value=st.session_state.user_legal_query
         )
         
         # Submit button with better positioning
@@ -781,67 +852,16 @@ def main():
                 "🔍 Research Legal Requirements", 
                 use_container_width=True,
                 type="primary",
-                disabled=not prompt.strip()
+                disabled=not prompt_input.strip(),
+                on_click=submit_question_callback
             )
     
-    # Process the question when submitted
-    if submit_button and prompt.strip():
-        # Process the question (avoid adding to chat history multiple times)
-        process_legal_question(prompt, qdrant_client, embedding_model, openai_client)
-
-def process_legal_question(prompt: str, qdrant_client, embedding_model, openai_client):
-    """Process a legal question and update chat history"""
-    
-    # Add user message to chat history (only once)
-    st.session_state.messages.append({"role": "user", "content": prompt})
-    
-    # Clear the input immediately
-    if "user_legal_query" in st.session_state:
-        st.session_state.user_legal_query = ""
-    
-    # Process with loading indicator
-    with st.status("🔍 Analyzing your legal question...", expanded=True) as status:
-        try:
-            # Step 1: Search legal database
-            status.write("📚 Searching legal database...")
-            search_data = search_legal_database(prompt, qdrant_client, embedding_model, openai_client, adaptive=True)
-            
-            if not search_data:
-                error_response = "I couldn't find relevant legal information in the database for your query. Please try rephrasing your question with more specific terms or contact legal counsel for assistance."
-                st.session_state.messages.append({"role": "assistant", "content": error_response})
-                status.update(label="❌ No relevant legal sources found", state="error")
-                st.rerun()
-                return
-            
-            # Step 2: Show search results
-            if isinstance(search_data, dict) and 'total_relevant' in search_data:
-                status.write(f"✅ Found {search_data['total_relevant']} relevant sources from {search_data['total_candidates']} candidates")
-            else:
-                status.write(f"✅ Found {len(search_data)} legal sources")
-            
-            # Step 3: Generate AI response
-            status.write("🤖 Generating comprehensive legal analysis with GPT-5...")
-            response = generate_legal_response(prompt, search_data, openai_client)
-            
-            if response["success"] and response["content"]:
-                # Add successful response to chat history
-                st.session_state.messages.append({"role": "assistant", "content": response["content"]})
-                status.update(label="✅ Legal analysis complete!", state="complete")
-            else:
-                # Add error response to chat history
-                error_msg = response.get("error", "Unknown error occurred")
-                error_response = f"Error generating legal analysis: {error_msg}"
-                st.session_state.messages.append({"role": "assistant", "content": error_response})
-                status.update(label="❌ Error generating response", state="error")
-            
-        except Exception as e:
-            # Handle any unexpected errors
-            error_response = f"An unexpected error occurred: {str(e)}"
-            st.session_state.messages.append({"role": "assistant", "content": error_response})
-            status.update(label="❌ Processing failed", state="error")
-    
-    # Force page refresh to show new messages
-    st.rerun()
+    # Process queued question after the input area is rendered
+    if st.session_state.query_to_process:
+        query = st.session_state.query_to_process
+        st.session_state.query_to_process = None  # Clear to prevent re-processing
+        process_legal_question_logic(query)
+        st.rerun()  # Refresh to show new messages
 
 if __name__ == "__main__":
     main()
