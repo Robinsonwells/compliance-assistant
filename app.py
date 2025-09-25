@@ -82,7 +82,17 @@ def store_systems_in_session():
         st.session_state.openai_client = openai_client
         st.session_state.systems_initialized = True
 
-def submit_question_callback():
+def _init_session_state_systems():
+    """Initialize systems in session state if not already done"""
+    if 'systems_initialized' not in st.session_state:
+        user_manager, embedding_model, qdrant_client, openai_client = init_systems()
+        st.session_state.user_manager = user_manager
+        st.session_state.embedding_model = embedding_model
+        st.session_state.qdrant_client = qdrant_client
+        st.session_state.openai_client = openai_client
+        st.session_state.systems_initialized = True
+
+def _submit_question_callback():
     """Callback function to handle question submission"""
     if st.session_state.user_legal_query and st.session_state.user_legal_query.strip():
         # Store the question to process
@@ -121,7 +131,7 @@ def authenticate_user():
                 submit_button = st.form_submit_button("🔐 Access System", use_container_width=True)
             
             if submit_button and access_code:
-                store_systems_in_session()
+                _init_session_state_systems()
                 user_manager = st.session_state.user_manager
                 
                 if user_manager.validate_access_code(access_code.strip().upper()):
@@ -709,7 +719,7 @@ AVAILABLE LEGAL CONTEXT:
             "error": error_msg
         }
 
-def process_legal_question_logic(prompt: str):
+def _process_legal_question_logic(prompt: str):
     """Process a legal question - contains only the processing logic"""
     
     # Add user message to chat history (only once)
@@ -762,8 +772,8 @@ def process_legal_question_logic(prompt: str):
 
 def main():
     """Main application logic"""
-    # Initialize systems and store in session state
-    store_systems_in_session()
+    # Initialize systems in session state
+    _init_session_state_systems()
     user_manager = st.session_state.user_manager
     
     # Authenticate user
@@ -853,14 +863,14 @@ def main():
                 use_container_width=True,
                 type="primary",
                 disabled=not prompt_input.strip(),
-                on_click=submit_question_callback
+                on_click=_submit_question_callback
             )
     
     # Process queued question after the input area is rendered
     if st.session_state.query_to_process:
         query = st.session_state.query_to_process
         st.session_state.query_to_process = None  # Clear to prevent re-processing
-        process_legal_question_logic(query)
+        _process_legal_question_logic(query)
         st.rerun()  # Refresh to show new messages
 
 if __name__ == "__main__":
