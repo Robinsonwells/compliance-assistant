@@ -1283,21 +1283,133 @@ button[style*="background-color: #ffffff"]:disabled,
   opacity: 0.6;
 }
 
-/* Ensure primary buttons with white backgrounds always have black text */
-.stButton > button,
-.stForm > div > div > button,
-button[data-testid*="primary"],
-button[class*="primary"] {
+/* Enhanced primary button styling with proper contrast */
+.stButton > button {
+  background: var(--white) !important;
+  color: #000000 !important;
+  border: none !important;
+  border-radius: 12px !important;
+  padding: 0.875rem 2rem !important;
+  font-weight: 600 !important;
+  font-size: 1.0625rem !important;
+  transition: all 0.3s cubic-bezier(0.25, 0.46, 0.45, 0.94) !important;
+  box-shadow: 0 2px 10px rgba(255, 255, 255, 0.1) !important;
+  cursor: pointer !important;
+  letter-spacing: -0.022em !important;
+  font-family: inherit !important;
+  min-height: 44px !important;
+  min-width: 44px !important;
+  position: relative !important;
+}
+
+.stButton > button:hover {
+  transform: translateY(-1px) !important;
+  box-shadow: 0 4px 20px rgba(255, 255, 255, 0.2) !important;
+  background: var(--gray-100) !important;
   color: #000000 !important;
 }
 
+.stButton > button:active {
+  transform: translateY(0) !important;
+  box-shadow: 0 2px 10px rgba(255, 255, 255, 0.1) !important;
+  color: #000000 !important;
+}
+
+.stButton > button:focus {
+  outline: 3px solid var(--primary-blue) !important;
+  outline-offset: 2px !important;
+  color: #000000 !important;
+}
+
+.stButton > button:disabled {
+  background: var(--gray-300) !important;
+  color: #666666 !important;
+  cursor: not-allowed !important;
+  transform: none !important;
+  box-shadow: none !important;
+  opacity: 0.6 !important;
+}
+
+/* Form Submit Buttons with proper contrast */
+.stForm > div > div > button {
+  background: var(--button-primary-bg) !important;
+  color: #000000 !important;
+  border: none !important;
+  border-radius: 12px !important;
+  padding: 0.875rem 2rem !important;
+  font-weight: 600 !important;
+  font-size: 1.0625rem !important;
+  letter-spacing: -0.022em !important;
+  font-family: inherit !important;
+  min-height: 44px !important;
+  min-width: 44px !important;
+}
+
+.stForm > div > div > button:hover {
+  background: var(--button-primary-hover) !important;
+  transform: translateY(-1px) !important;
+  color: #000000 !important;
+}
+
+.stForm > div > div > button:focus {
+  outline: 3px solid var(--primary-blue) !important;
+  outline-offset: 2px !important;
+  color: #000000 !important;
+}
+
+.stForm > div > div > button:active {
+  background: var(--button-primary-active) !important;
+  color: #000000 !important;
+}
+
+.stForm > div > div > button:disabled {
+  background: var(--gray-300) !important;
+  color: #666666 !important;
+  cursor: not-allowed !important;
+  opacity: 0.6 !important;
+}
+
 /* Override any conflicting text colors on white buttons */
-.stButton > button * {
+.stButton > button *,
+.stForm > div > div > button * {
   color: inherit !important;
 }
 
-.stForm > div > div > button * {
-  color: inherit !important;
+/* Specific targeting for primary type buttons */
+button[data-testid="baseButton-primary"] {
+  background: var(--primary-blue) !important;
+  color: var(--white) !important;
+  border: none !important;
+  border-radius: 12px !important;
+  padding: 1rem 2rem !important;
+  font-weight: 600 !important;
+  font-size: 1.125rem !important;
+  transition: all 0.3s cubic-bezier(0.25, 0.46, 0.45, 0.94) !important;
+  box-shadow: 0 4px 20px rgba(0, 122, 255, 0.3) !important;
+  cursor: pointer !important;
+  min-height: 48px !important;
+  letter-spacing: -0.022em !important;
+}
+
+button[data-testid="baseButton-primary"]:hover {
+  background: var(--primary-blue-dark) !important;
+  transform: translateY(-2px) !important;
+  box-shadow: 0 6px 30px rgba(0, 122, 255, 0.4) !important;
+  color: var(--white) !important;
+}
+
+button[data-testid="baseButton-primary"]:active {
+  transform: translateY(0) !important;
+  box-shadow: 0 2px 15px rgba(0, 122, 255, 0.3) !important;
+  color: var(--white) !important;
+}
+
+button[data-testid="baseButton-primary"]:disabled {
+  background: var(--gray-600) !important;
+  color: var(--gray-400) !important;
+  cursor: not-allowed !important;
+  transform: none !important;
+  box-shadow: none !important;
 }
 
 /* ===== FINAL VALIDATION CHECKLIST ===== */
