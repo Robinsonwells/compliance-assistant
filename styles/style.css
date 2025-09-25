@@ -1346,6 +1346,78 @@ textarea:focus {
   contain: layout !important;
 }
 
+/* ===== WHITE BUTTON CONTRAST ENHANCEMENT ===== */
+
+/* Ensure all white/light background buttons have black text */
+button[style*="background: white"],
+button[style*="background-color: white"],
+button[style*="background: #ffffff"],
+button[style*="background-color: #ffffff"],
+button[style*="background: #fefefe"],
+button[style*="background-color: #fefefe"],
+.stButton > button[style*="background: white"],
+.stButton > button[style*="background-color: white"] {
+  color: #000000 !important;
+}
+
+/* White button hover states */
+button[style*="background: white"]:hover,
+button[style*="background-color: white"]:hover,
+button[style*="background: #ffffff"]:hover,
+button[style*="background-color: #ffffff"]:hover,
+.stButton > button[style*="background: white"]:hover,
+.stButton > button[style*="background-color: white"]:hover {
+  color: #000000 !important;
+}
+
+/* White button focus states */
+button[style*="background: white"]:focus,
+button[style*="background-color: white"]:focus,
+button[style*="background: #ffffff"]:focus,
+button[style*="background-color: #ffffff"]:focus,
+.stButton > button[style*="background: white"]:focus,
+.stButton > button[style*="background-color: white"]:focus {
+  color: #000000 !important;
+}
+
+/* White button active states */
+button[style*="background: white"]:active,
+button[style*="background-color: white"]:active,
+button[style*="background: #ffffff"]:active,
+button[style*="background-color: #ffffff"]:active,
+.stButton > button[style*="background: white"]:active,
+.stButton > button[style*="background-color: white"]:active {
+  color: #000000 !important;
+}
+
+/* Disabled white button states */
+button[style*="background: white"]:disabled,
+button[style*="background-color: white"]:disabled,
+button[style*="background: #ffffff"]:disabled,
+button[style*="background-color: #ffffff"]:disabled,
+.stButton > button[style*="background: white"]:disabled,
+.stButton > button[style*="background-color: white"]:disabled {
+  color: #666666 !important; /* Slightly lighter for disabled state but still accessible */
+  opacity: 0.6;
+}
+
+/* Ensure primary buttons with white backgrounds always have black text */
+.stButton > button,
+.stForm > div > div > button,
+button[data-testid*="primary"],
+button[class*="primary"] {
+  color: #000000 !important;
+}
+
+/* Override any conflicting text colors on white buttons */
+.stButton > button * {
+  color: inherit !important;
+}
+
+.stForm > div > div > button * {
+  color: inherit !important;
+}
+
 /* ===== FINAL VALIDATION CHECKLIST ===== */
 /*
 ✅ ACCESSIBILITY COMPLIANCE:
