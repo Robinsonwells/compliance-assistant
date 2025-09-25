@@ -13,6 +13,7 @@ from datetime import datetime
 import json
 import re
 from typing import List, Dict, Any, Tuple
+import time
 
 # Load environment variables
 load_dotenv()
@@ -705,6 +706,23 @@ def main():
     # Update session activity
     user_manager.update_session_activity(st.session_state.session_id)
     
+    # Initialize UI state
+    if "theme" not in st.session_state:
+        st.session_state.theme = "dark"
+    if "show_search" not in st.session_state:
+        st.session_state.show_search = False
+    if "search_query" not in st.session_state:
+        st.session_state.search_query = ""
+    if "is_typing" not in st.session_state:
+        st.session_state.is_typing = False
+    
+    # Theme toggle functionality
+    def toggle_theme():
+        st.session_state.theme = "light" if st.session_state.theme == "dark" else "dark"
+    
+    # Add theme data attribute to body
+    st.markdown(f'<script>document.documentElement.setAttribute("data-theme", "{st.session_state.theme}");</script>', unsafe_allow_html=True)
+    
     # Main application interface
     st.markdown("""
         <div class="dashboard-header">
@@ -715,23 +733,135 @@ def main():
         </div>
     """, unsafe_allow_html=True)
     
+    # Theme toggle button
+    st.markdown(f"""
+        <div class="theme-toggle">
+            <button class="theme-toggle-button {'active' if st.session_state.theme == 'dark' else ''}" 
+                    onclick="document.querySelector('[data-testid=\\"baseButton-secondary\\"]').click()">
+                🌙
+            </button>
+            <button class="theme-toggle-button {'active' if st.session_state.theme == 'light' else ''}" 
+                    onclick="document.querySelector('[data-testid=\\"baseButton-secondary\\"]').click()">
+                ☀️
+            </button>
+        </div>
+    """, unsafe_allow_html=True)
+    
     # Sidebar
     with st.sidebar:
+        if st.button("🎨 Toggle Theme", key="theme_toggle"):
+            toggle_theme()
+            st.rerun()
+        
+        st.divider()
+        
+        if st.button("🔍 Search Chat", key="search_toggle"):
+            st.session_state.show_search = not st.session_state.show_search
+            st.rerun()
+        
+        st.divider()
+        
         if st.button("🚪 Logout"):
             st.session_state.authenticated = False
             st.rerun()
-    
-    # Chat interface
-    st.markdown("### 💬 Legal Research Chat")
     
     # Initialize chat history
     if "messages" not in st.session_state:
         st.session_state.messages = []
     
+    # Search functionality
+    def search_messages(query):
+        if not query:
+            return []
+        
+        results = []
+        for i, message in enumerate(st.session_state.messages):
+            if query.lower() in message["content"].lower():
+                # Highlight the search term
+                highlighted_content = message["content"].replace(
+                    query, f'<span class="search-highlight">{query}</span>'
+                )
+                results.append({
+                    "index": i,
+                    "role": message["role"],
+                    "content": highlighted_content,
+                    "preview": message["content"][:100] + "..." if len(message["content"]) > 100 else message["content"]
+                })
+        return results
+    
+    # Chat search interface
+    if st.session_state.show_search:
+        st.markdown("""
+            <div class="chat-search">
+                <div style="position: relative;">
+                    <span class="chat-search-icon">🔍</span>
+                </div>
+            </div>
+        """, unsafe_allow_html=True)
+        
+        search_query = st.text_input(
+            "Search chat history...",
+            value=st.session_state.search_query,
+            key="chat_search_input",
+            placeholder="Type to search messages..."
+        )
+        
+        if search_query != st.session_state.search_query:
+            st.session_state.search_query = search_query
+        
+        if search_query:
+            search_results = search_messages(search_query)
+            if search_results:
+                st.markdown(f"**Found {len(search_results)} results:**")
+                for result in search_results[:5]:  # Show top 5 results
+                    with st.expander(f"{result['role'].title()}: {result['preview']}"):
+                        st.markdown(result["content"], unsafe_allow_html=True)
+                        if st.button(f"Jump to message", key=f"jump_{result['index']}"):
+                            # This would scroll to the message in a real implementation
+                            st.info(f"Would scroll to message {result['index'] + 1}")
+            else:
+                st.info("No messages found matching your search.")
+    
+    # Chat interface
+    st.markdown("### 💬 Legal Research Chat")
+    
+    # Scroll to bottom button
+    if len(st.session_state.messages) > 3:  # Show after 3 messages
+        st.markdown("""
+            <button class="scroll-to-bottom visible" onclick="window.scrollTo(0, document.body.scrollHeight);">
+                ⬇️
+            </button>
+        """, unsafe_allow_html=True)
+    
+    # Typing indicator
+    if st.session_state.is_typing:
+        st.markdown("""
+            <div class="typing-indicator visible">
+                <span>AI is analyzing legal sources</span>
+                <div class="typing-dots">
+                    <div class="typing-dot"></div>
+                    <div class="typing-dot"></div>
+                    <div class="typing-dot"></div>
+                </div>
+            </div>
+        """, unsafe_allow_html=True)
+    
     # Display chat messages
     for message in st.session_state.messages:
         with st.chat_message(message["role"]):
-            st.markdown(message["content"])
+            # Enhanced message formatting
+            st.markdown(f'<div class="message-content">{message["content"]}</div>', unsafe_allow_html=True)
+            
+            # Message actions
+            if message["role"] == "assistant":
+                st.markdown("""
+                    <div class="message-actions">
+                        <button class="message-action-button">📋 Copy</button>
+                        <button class="message-action-button">🔗 Share</button>
+                        <button class="message-action-button">👍 Helpful</button>
+                        <button class="message-action-button">👎 Not Helpful</button>
+                    </div>
+                """, unsafe_allow_html=True)
     
     # Chat input
     if prompt := st.chat_input("Ask a legal compliance question..."):
@@ -740,7 +870,11 @@ def main():
         
         # Display user message
         with st.chat_message("user"):
-            st.markdown(prompt)
+            st.markdown(f'<div class="message-content">{prompt}</div>', unsafe_allow_html=True)
+        
+        # Show typing indicator
+        st.session_state.is_typing = True
+        st.rerun()
         
         # Generate and display assistant response
         with st.chat_message("assistant"):
@@ -757,23 +891,39 @@ def main():
                         st.info(f"Found {len(search_data)} sources - Processing with GPT-5")
                         relevant_chunks = search_data
                     
+                    # Hide typing indicator
+                    st.session_state.is_typing = False
+                    
                     response = generate_legal_response(prompt, search_data, openai_client)
                     
                     if response["success"]:
                         ai_response = response["content"]
                         if ai_response and ai_response.strip():
                             st.success("GPT-5 comprehensive legal analysis generated successfully")
-                            st.markdown(ai_response)
+                            st.markdown(f'<div class="message-content">{ai_response}</div>', unsafe_allow_html=True)
+                            
+                            # Message actions for AI response
+                            st.markdown("""
+                                <div class="message-actions">
+                                    <button class="message-action-button">📋 Copy</button>
+                                    <button class="message-action-button">🔗 Share</button>
+                                    <button class="message-action-button">👍 Helpful</button>
+                                    <button class="message-action-button">👎 Not Helpful</button>
+                                </div>
+                            """, unsafe_allow_html=True)
+                            
                             # Add assistant response to chat history
                             st.session_state.messages.append({"role": "assistant", "content": ai_response})
                         else:
                             error_msg = "Empty response from GPT-5. Please try again."
                             st.error(error_msg)
                             st.session_state.messages.append({"role": "assistant", "content": error_msg})
+                            st.session_state.is_typing = False
                     else:
                         error_msg = response.get("error", "Unknown GPT-5 API error")
                         st.error(f"AI Response Generation Failed: {error_msg}")
                         st.session_state.messages.append({"role": "assistant", "content": f"Error: {error_msg}"})
+                        st.session_state.is_typing = False
                         
                         # Show debugging information
                         with st.expander("Debug Information"):
@@ -821,8 +971,9 @@ def main():
                                 )
                 else:
                     response = "I couldn't find relevant legal information in the database for your query. Please try rephrasing your question with more specific terms or contact legal counsel for assistance."
-                    st.markdown(response)
+                    st.markdown(f'<div class="message-content">{response}</div>', unsafe_allow_html=True)
                     st.session_state.messages.append({"role": "assistant", "content": response})
+                    st.session_state.is_typing = False
 
 if __name__ == "__main__":
     main()

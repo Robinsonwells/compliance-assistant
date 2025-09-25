@@ -361,6 +361,13 @@ def main():
     if not admin_login():
         st.stop()
     
+    # Initialize theme state
+    if "admin_theme" not in st.session_state:
+        st.session_state.admin_theme = "dark"
+    
+    # Add theme data attribute
+    st.markdown(f'<script>document.documentElement.setAttribute("data-theme", "{st.session_state.admin_theme}");</script>', unsafe_allow_html=True)
+    
     try:
         st.markdown("""
             <div class="dashboard-header">
@@ -371,7 +378,15 @@ def main():
             </div>
         """, unsafe_allow_html=True)
         
-        _, logout_col = st.columns([5, 1])
+        # Theme toggle for admin panel
+        def toggle_admin_theme():
+            st.session_state.admin_theme = "light" if st.session_state.admin_theme == "dark" else "dark"
+        
+        theme_col, _, logout_col = st.columns([1, 4, 1])
+        with theme_col:
+            if st.button("🎨 Theme"):
+                toggle_admin_theme()
+                st.rerun()
         with logout_col:
             if st.button("🚪 Logout"):
                 st.session_state.admin_authenticated = False
