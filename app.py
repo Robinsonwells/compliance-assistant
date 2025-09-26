@@ -349,9 +349,10 @@ Sources to evaluate:
                     if 'ESSENTIAL' in decision_clean or 'USEFUL' in decision_clean:
                         chunk_with_relevance = batch[j]
                         # Store relevance level
-                        chunk_with_relevance.ai_relevance = 'ESSENTIAL' if 'ESSENTIAL' in decision_clean else 'USEFUL'
-                        relevant_chunks.append(chunk_with_relevance)
-        
+                        relevance_level = 'ESSENTIAL' if 'ESSENTIAL' in decision_clean else 'USEFUL'
+                        chunk_with_relevance.payload['ai_relevance'] = relevance_level
+                        # Debug: Print what's being assigned
+                        print(f"Assigning relevance '{relevance_level}' to chunk: {chunk_with_relevance.payload.get('citation', 'N/A')}")
         essential_count = len([c for c in relevant_chunks if getattr(c, 'ai_relevance', '') == 'ESSENTIAL'])
         useful_count = len([c for c in relevant_chunks if getattr(c, 'ai_relevance', '') == 'USEFUL'])
         
@@ -392,6 +393,10 @@ def search_legal_database_adaptive(query: str, qdrant_client, embedding_model, o
         if essential_chunks:
             context_parts.append("=== ESSENTIAL SOURCES ===")
             for i, chunk in enumerate(essential_chunks, 1):
+                # Ensure relevance is stored in payload
+                if 'ai_relevance' not in chunk.payload:
+                    chunk.payload['ai_relevance'] = 'ESSENTIAL'
+                
                 context_parts.append(f"""Essential Source {i}:
 Citation: {chunk.payload.get('citation', 'N/A')}
 Jurisdiction: {chunk.payload.get('jurisdiction', 'N/A')}  
@@ -403,6 +408,10 @@ Legal Text: {chunk.payload.get('text', '')}
         if useful_chunks:
             context_parts.append("\n=== SUPPORTING SOURCES ===")
             for i, chunk in enumerate(useful_chunks, 1):
+                # Ensure relevance is stored in payload
+                if 'ai_relevance' not in chunk.payload:
+                    chunk.payload['ai_relevance'] = 'USEFUL'
+                    
                 context_parts.append(f"""Supporting Source {i}:
 Citation: {chunk.payload.get('citation', 'N/A')} ({chunk.payload.get('jurisdiction', 'N/A')})
 Text: {chunk.payload.get('text', '')}
