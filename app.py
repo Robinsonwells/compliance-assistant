@@ -525,8 +525,23 @@ def display_sources_expander(search_data):
             """)
             
             # Separate essential and supporting sources
-            essential_chunks = [c for c in relevant_chunks if getattr(c, 'ai_relevance', '') == 'ESSENTIAL']
-            useful_chunks = [c for c in relevant_chunks if getattr(c, 'ai_relevance', '') == 'USEFUL']
+            essential_chunks = []
+            useful_chunks = []
+
+            for chunk in relevant_chunks:
+                relevance = getattr(chunk, 'ai_relevance', None)
+                if relevance == 'ESSENTIAL':
+                    essential_chunks.append(chunk)
+                elif relevance == 'USEFUL':
+                    useful_chunks.append(chunk)
+                else:
+                    # If no relevance assigned, check score to categorize
+                    if chunk.score > 0.7:
+                        chunk.ai_relevance = 'ESSENTIAL'
+                        essential_chunks.append(chunk)
+                    elif chunk.score > 0.4:
+                        chunk.ai_relevance = 'USEFUL'
+                        useful_chunks.append(chunk)
             
             # Display Essential Sources
             if essential_chunks:
