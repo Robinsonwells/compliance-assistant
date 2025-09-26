@@ -152,6 +152,363 @@ def authenticate_user():
     
     return True
 
+def adaptive_relevance_search(query: str, qdrant_client, embedding_model, openai_client):
+    """Progressive search that stops when sufficient relevant content is found"""
+    
+    print("Starting adaptive relevance search...")
+    start_time = time.time()
+    
+    # Progressive search with expanding thresholds
+    search_phases = [
+        {"limit": 50, "threshold": 0.8, "phase": "high_precision"},
+        {"limit": 150, "threshold": 0.6, "phase": "medium_precision"}, 
+        {"limit": 400, "threshold": 0.4, "phase": "broad_coverage"},
+        {"limit": 800, "threshold": 0.25, "phase": "comprehensive_sweep"}
+    ]
+    
+    all_candidates = []
+    query_embedding = embedding_model.encode([query])[0].tolist()
+    
+    for phase in search_phases:
+        print(f"Phase: {phase['phase']} (limit: {phase['limit']}, threshold: {phase['threshold']})")
+        
+        # Search this phase
+        phase_results = qdrant_client.search(
+            collection_name="legal_regulations",
+            query_vector=query_embedding,
+            limit=phase['limit'],
+            score_threshold=phase['threshold'],
+            with_payload=True,
+            with_vectors=False
+        )
+        
+        # Add new results (avoid duplicates)
+        existing_ids = {getattr(c, 'id', hash(str(c))) for c in all_candidates}
+        new_results = [r for r in phase_results if getattr(r, 'id', hash(str(r))) not in existing_ids]
+        all_candidates.extend(new_results)
+        
+        print(f"Found {len(new_results)} new chunks (total: {len(all_candidates)})")
+        
+        # AI decides if we have enough relevant content
+        if len(all_candidates) >= 30:  # Minimum threshold before asking AI
+            sufficiency_check = assess_content_sufficiency(query, all_candidates, openai_client)
+            
+            if sufficiency_check['sufficient']:
+                print(f"AI determined sufficient content found: {sufficiency_check['reason']}")
+                break
+            else:
+                print(f"AI wants more content: {sufficiency_check['reason']}")
+    
+    print(f"Discovery phase complete: {len(all_candidates)} candidates in {time.time() - start_time:.1f}s")
+    return all_candidates
+
+def assess_content_sufficiency(query: str, candidates: List, openai_client) -> Dict:
+    """AI determines if we have sufficient relevant content"""
+    try:
+        # Create overview of current candidates
+        coverage_summary = create_coverage_summary(candidates)
+        
+        sufficiency_prompt = f"""Legal Query: "{query}"
+
+Current Search Results Summary:
+- Total Sources: {len(candidates)}
+- Jurisdictions: {', '.join(coverage_summary['jurisdictions'])}
+- Topics Covered: {', '.join(coverage_summary['topics'])}
+- Relevance Range: {coverage_summary['score_range']}
+
+Sample High-Relevance Sources:
+{coverage_summary['top_sources']}
+
+ASSESSMENT TASK:
+Do we have sufficient legal sources to comprehensively answer this query?
+
+Consider:
+1. Does this cover the main legal requirements?
+2. Are key jurisdictions represented?
+3. Are we missing critical legal aspects?
+
+Respond in JSON format:
+{{
+    "sufficient": true/false,
+    "confidence": 0.0-1.0,
+    "reason": "Brief explanation of why sufficient/insufficient",
+    "missing_aspects": ["list", "of", "gaps"] or [],
+    "continue_search": true/false
+}}"""
+
+        response = openai_client.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=[{"role": "user", "content": sufficiency_prompt}],
+            max_completion_tokens=200,
+            temperature=0.1
+        )
+        
+        assessment = json.loads(response.choices[0].message.content)
+        return assessment
+        
+    except Exception as e:
+        print(f"Sufficiency assessment failed: {e}")
+        # Conservative fallback: continue searching unless we have a lot
+        return {
+            "sufficient": len(candidates) > 200,
+            "confidence": 0.5,
+            "reason": f"Assessment failed, fallback decision based on count: {len(candidates)}",
+            "missing_aspects": [],
+            "continue_search": len(candidates) <= 200
+        }
+
+def create_coverage_summary(candidates: List) -> Dict:
+    """Create a summary of what we've found so far"""
+    jurisdictions = set()
+    topics = set()
+    scores = []
+    top_sources = []
+    
+    for candidate in candidates[:50]:  # Analyze top 50 for speed
+        payload = candidate.payload
+        jurisdictions.add(payload.get('jurisdiction', 'Unknown'))
+        
+        # Extract topics from section titles and text
+        section_title = payload.get('section_title', '').lower()
+        text_preview = payload.get('text', '')[:200].lower()
+        
+        # Common legal topics
+        legal_topics = ['wage', 'overtime', 'break', 'leave', 'safety', 'discrimination', 'harassment']
+        for topic in legal_topics:
+            if topic in section_title or topic in text_preview:
+                topics.add(topic)
+        
+        scores.append(candidate.score)
+        
+        if len(top_sources) < 5:
+            top_sources.append(f"- {payload.get('citation', 'N/A')}: {payload.get('text', '')[:150]}...")
+    
+    return {
+        'jurisdictions': list(jurisdictions),
+        'topics': list(topics),
+        'score_range': f"{min(scores):.3f} - {max(scores):.3f}" if scores else "N/A",
+        'top_sources': '\n'.join(top_sources)
+    }
+
+def ai_driven_relevance_filter(query: str, candidates: List, openai_client) -> List:
+    """AI determines exact set of relevant chunks needed"""
+    try:
+        print(f"AI-driven filtering of {len(candidates)} candidates...")
+        
+        # Process in batches for accuracy while maintaining flexibility
+        relevant_chunks = []
+        batch_size = 30  # Smaller batches for better AI accuracy
+        
+        for i in range(0, len(candidates), batch_size):
+            batch = candidates[i:i+batch_size]
+            
+            relevance_prompt = f"""Legal Query: "{query}"
+
+TASK: Determine which sources are relevant for answering this query. Be selective - only include sources that add value.
+
+RELEVANCE CRITERIA:
+- ESSENTIAL: Directly answers the query or provides critical legal requirements
+- USEFUL: Provides valuable context or related requirements  
+- SKIP: Not directly related or redundant with already selected content
+
+For each source, respond with: ESSENTIAL, USEFUL, or SKIP
+
+Sources to evaluate:
+"""
+            
+            for j, chunk in enumerate(batch):
+                payload = chunk.payload
+                relevance_prompt += f"""
+{j+1}. Citation: {payload.get('citation', 'N/A')}
+   Jurisdiction: {payload.get('jurisdiction', 'N/A')}
+   Section: {payload.get('section_number', 'N/A')} - {payload.get('section_title', 'N/A')}
+   Text: {payload.get('text', '')[:300]}...
+   Score: {chunk.score:.3f}
+"""
+            
+            # Get AI relevance decisions
+            response = openai_client.chat.completions.create(
+                model="gpt-4o-mini",
+                messages=[{
+                    "role": "system",
+                    "content": "You are a legal research expert. Be selective - only mark sources as ESSENTIAL or USEFUL if they truly contribute to answering the query."
+                }, {
+                    "role": "user", 
+                    "content": relevance_prompt
+                }],
+                max_completion_tokens=batch_size * 10,
+                temperature=0.1
+            )
+            
+            # Parse decisions
+            decisions = response.choices[0].message.content.strip().split('\n')
+            
+            for j, decision in enumerate(decisions):
+                if j < len(batch):
+                    decision_clean = decision.strip().upper()
+                    if 'ESSENTIAL' in decision_clean or 'USEFUL' in decision_clean:
+                        chunk_with_relevance = batch[j]
+                        # Store relevance level
+                        chunk_with_relevance.ai_relevance = 'ESSENTIAL' if 'ESSENTIAL' in decision_clean else 'USEFUL'
+                        relevant_chunks.append(chunk_with_relevance)
+        
+        essential_count = len([c for c in relevant_chunks if getattr(c, 'ai_relevance', '') == 'ESSENTIAL'])
+        useful_count = len([c for c in relevant_chunks if getattr(c, 'ai_relevance', '') == 'USEFUL'])
+        
+        print(f"AI selected {len(relevant_chunks)} relevant chunks ({essential_count} essential, {useful_count} useful)")
+        
+        return relevant_chunks
+        
+    except Exception as e:
+        print(f"AI relevance filtering failed: {e}")
+        # Fallback: take top candidates by score
+        return sorted(candidates, key=lambda x: x.score, reverse=True)[:min(100, len(candidates))]
+
+def search_legal_database_adaptive(query: str, qdrant_client, embedding_model, openai_client):
+    """Fully adaptive search - uses exactly what's needed, no more, no less"""
+    start_time = time.time()
+    
+    try:
+        print("=== ADAPTIVE LEGAL SEARCH ===")
+        
+        # Stage 1: Progressive discovery until sufficient
+        candidates = adaptive_relevance_search(query, qdrant_client, embedding_model, openai_client)
+        
+        if not candidates:
+            return {"error": "No relevant legal sources found"}
+        
+        # Stage 2: AI determines exact relevant set
+        relevant_chunks = ai_driven_relevance_filter(query, candidates, openai_client)
+        
+        if not relevant_chunks:
+            return {"error": "No sources deemed relevant by AI"}
+        
+        # Build context from exactly the chunks needed
+        context_parts = []
+        essential_chunks = [c for c in relevant_chunks if getattr(c, 'ai_relevance', '') == 'ESSENTIAL']
+        useful_chunks = [c for c in relevant_chunks if getattr(c, 'ai_relevance', '') == 'USEFUL']
+        
+        # Essential sources first (full detail)
+        if essential_chunks:
+            context_parts.append("=== ESSENTIAL SOURCES ===")
+            for i, chunk in enumerate(essential_chunks, 1):
+                context_parts.append(f"""Essential Source {i}:
+Citation: {chunk.payload.get('citation', 'N/A')}
+Jurisdiction: {chunk.payload.get('jurisdiction', 'N/A')}  
+Section: {chunk.payload.get('section_number', 'N/A')} - {chunk.payload.get('section_title', 'N/A')}
+Legal Text: {chunk.payload.get('text', '')}
+""")
+        
+        # Useful sources second (structured)
+        if useful_chunks:
+            context_parts.append("\n=== SUPPORTING SOURCES ===")
+            for i, chunk in enumerate(useful_chunks, 1):
+                context_parts.append(f"""Supporting Source {i}:
+Citation: {chunk.payload.get('citation', 'N/A')} ({chunk.payload.get('jurisdiction', 'N/A')})
+Text: {chunk.payload.get('text', '')}
+""")
+        
+        total_time = time.time() - start_time
+        
+        return {
+            'relevant_chunks': relevant_chunks,
+            'context': '\n'.join(context_parts),
+            'search_stats': {
+                'total_candidates_evaluated': len(candidates),
+                'essential_sources': len(essential_chunks),
+                'supporting_sources': len(useful_chunks),
+                'total_relevant': len(relevant_chunks),
+                'processing_time_seconds': round(total_time, 1)
+            }
+        }
+        
+    except Exception as e:
+        print(f"Adaptive search failed: {e}")
+        return {"error": str(e)}
+
+def generate_legal_response_gpt5(query: str, search_data, openai_client):
+    """Generate final legal response using GPT-5 with adaptive context"""
+    try:
+        print("Generating legal response with GPT-5...")
+        
+        # Extract context from adaptive search results
+        if isinstance(search_data, dict) and 'context' in search_data:
+            context = search_data['context']
+            stats = search_data['search_stats']
+            
+            print(f"GPT-5 context: {stats['essential_sources']} essential + {stats['supporting_sources']} supporting sources")
+        else:
+            # Fallback for legacy format
+            context = str(search_data)
+            stats = {"total_relevant": "unknown"}
+        
+        # Enhanced legal system prompt for GPT-5
+        legal_system_prompt = """You are an expert legal research assistant specializing in employment law compliance. 
+        
+Your task is to provide comprehensive legal analysis based on the provided legal sources. 
+
+RESPONSE REQUIREMENTS:
+1. QUOTE relevant legal provisions verbatim with exact citations
+2. ANALYZE the legal requirements in detail
+3. EXPLAIN compliance obligations clearly
+4. IDENTIFY potential risks or penalties
+5. PROVIDE actionable guidance where appropriate
+
+Always cite sources using the exact citations provided in the context."""
+
+        # Construct GPT-5 prompt
+        gpt5_prompt = f"""{legal_system_prompt}
+
+LEGAL QUESTION: {query}
+
+LEGAL SOURCES AND CONTEXT:
+{context}
+
+Please provide a comprehensive legal analysis addressing this question."""
+
+        print(f"Making GPT-5 Responses API call (context length: {len(gpt5_prompt)} characters)")
+        
+        # Correct GPT-5 Responses API call
+        response = openai_client.responses.create(
+            model="gpt-5",
+            input=gpt5_prompt,  # ✅ Correct format (string, not list)
+            reasoning={
+                "effort": "high"  # Use high reasoning for complex legal analysis
+            },
+            text={
+                "verbosity": "high"  # Detailed legal explanations
+            },
+            max_output_tokens=16384  # Allow for comprehensive responses
+        )
+        
+        # Extract response using correct attribute
+        response_text = response.output_text
+        
+        print(f"GPT-5 response length: {len(response_text) if response_text else 0} characters")
+        
+        if response_text and response_text.strip():
+            return {
+                "success": True,
+                "content": response_text,
+                "model": "gpt-5",
+                "reasoning_effort": "high",
+                "response_id": getattr(response, 'id', None)
+            }
+        else:
+            return {
+                "success": False,
+                "error": "Empty response from GPT-5",
+                "content": "GPT-5 returned an empty response. Please try rephrasing your question."
+            }
+            
+    except Exception as e:
+        print(f"GPT-5 error: {e}")
+        return {
+            "success": False,
+            "error": str(e),
+            "content": f"Error generating GPT-5 response: {str(e)}"
+        }
+
 def extract_legal_entities(query: str) -> Dict[str, List[str]]:
     """Extract legal entities from query for enhanced search"""
     entities = {
@@ -532,26 +889,8 @@ def search_legal_database(query: str, qdrant_client, embedding_model, openai_cli
     """Enhanced search with AI-driven relevance and adaptive context"""
     try:
         if adaptive:
-            # Step 1: Analyze query complexity
-            complexity_analysis = analyze_query_complexity(query, openai_client)
-            print(f"Query complexity: {complexity_analysis['complexity']} - {complexity_analysis['explanation']}")
-            
-            # Step 2: Intelligent wide retrieval
-            candidates = intelligent_wide_retrieval(query, qdrant_client, embedding_model, complexity_analysis)
-            
-            # Step 3: AI relevance filtering
-            relevant_chunks = ai_relevance_filter(query, candidates, openai_client)
-            
-            # Step 4: Build adaptive context
-            adaptive_context = build_adaptive_context(query, relevant_chunks)
-            
-            return {
-                'relevant_chunks': relevant_chunks,
-                'adaptive_context': adaptive_context,
-                'complexity_analysis': complexity_analysis,
-                'total_candidates': len(candidates),
-                'total_relevant': len(relevant_chunks)
-            }
+            # Use new adaptive search
+            return search_legal_database_adaptive(query, qdrant_client, embedding_model, openai_client)
         else:
             # Fallback to original method
             query_embedding = embedding_model.encode([query])[0].tolist()
@@ -600,132 +939,14 @@ def search_legal_database(query: str, qdrant_client, embedding_model, openai_cli
         return formatted_results
 
 def generate_legal_response(query: str, search_data):
-    """Generate legal response using adaptive context and comprehensive sources"""
-    try:
-        openai_client = st.session_state.openai_client
-        
-        # Handle both new adaptive format and legacy format
-        if isinstance(search_data, dict) and 'adaptive_context' in search_data:
-            # New adaptive format
-            context = search_data['adaptive_context']
-            relevant_chunks = search_data['relevant_chunks']
-            complexity_analysis = search_data['complexity_analysis']
-            
-            print(f"Generating response with adaptive context: {len(relevant_chunks)} sources, {complexity_analysis['complexity']} complexity")
-            
-            # Enhanced system prompt for adaptive context
-            enhanced_prompt = f"""{ENHANCED_LEGAL_COMPLIANCE_SYSTEM_PROMPT}
-
-QUERY COMPLEXITY ANALYSIS:
-- Complexity Level: {complexity_analysis['complexity']}
-- Jurisdictions: {', '.join(complexity_analysis.get('jurisdictions', []))}
-- Topics: {', '.join(complexity_analysis.get('topics', []))}
-- Search Strategy: {complexity_analysis.get('search_strategy', 'comprehensive')}
-
-ADAPTIVE CONTEXT INSTRUCTIONS:
-- ESSENTIAL sources MUST be quoted verbatim and analyzed in detail
-- IMPORTANT sources should be referenced where relevant to provide context
-- You have access to {len(relevant_chunks)} AI-filtered relevant sources
-- Provide comprehensive analysis appropriate for {complexity_analysis['complexity']} complexity level
-
-USER QUERY: {query}
-
-LEGAL CONTEXT:
-{context}"""
-            
-        else:
-            # Legacy format compatibility
-            search_results = search_data if isinstance(search_data, list) else []
-            context = "\n\n".join([
-                f"LEGAL TEXT {i+1}:\n\"{result['text']}\"\n(Source: {result['citation']})\n(Jurisdiction: {result['jurisdiction']})\n(Section: {result['section_number']} - {result['section_title']})\n(Relevance Score: {result['score']:.4f})"
-                for i, result in enumerate(search_results)
-            ])
-            
-            enhanced_prompt = f"""{ENHANCED_LEGAL_COMPLIANCE_SYSTEM_PROMPT}
-
-USER QUERY: {query}
-
-AVAILABLE LEGAL CONTEXT:
-{context}"""
-        
-        # Validate context length
-        total_content_length = len(enhanced_prompt)
-        print(f"Total context length: {total_content_length} characters")
-        
-        if total_content_length > 1200000:  # 1.2M character limit for safety
-            print(f"WARNING: Context length {total_content_length} exceeds safe limits")
-            # This should rarely happen with adaptive context, but provide fallback
-            return {
-                "success": False,
-                "content": None,
-                "error": "Context too large even after adaptive filtering. Please refine your query."
-            }
-        
-        print("Making OpenAI GPT-5 Responses API call with adaptive context...")
-        
-        # Call OpenAI GPT-5 Responses API
-        response = openai_client.responses.create(
-            model="gpt-5",
-            input=[{"role": "user", "content": enhanced_prompt}],
-            reasoning={
-                "effort": "high"  # Use HIGH reasoning for maximum thoroughness
-            },
-            max_output_tokens=65536  # Increased output tokens for comprehensive responses
-        )
-        
-        # Extract and validate response
-        if response and hasattr(response, 'output') and response.output:
-            # Extract content from the response structure
-            content = None
-            for output_item in response.output:
-                if hasattr(output_item, 'content') and output_item.content:
-                    for content_item in output_item.content:
-                        if hasattr(content_item, 'text'):
-                            content = content_item.text
-                            break
-                    if content:
-                        break
-            
-            print(f"Received comprehensive response of length: {len(content) if content else 0}")
-            
-            if content and content.strip():
-                return {
-                    "success": True,
-                    "content": content,
-                    "error": None,
-                    "response_id": getattr(response, 'id', None)  # Store response ID for multi-turn conversations
-                }
-            else:
-                print("Empty response content from GPT-5")
-                return {
-                    "success": False,
-                    "content": None,
-                    "error": "Empty response from GPT-5 Responses API"
-                }
-        else:
-            print("Invalid response structure from GPT-5")
-            return {
-                "success": False,
-                "content": None,
-                "error": "Invalid response structure from GPT-5 Responses API"
-            }
-    
-    except Exception as e:
-        error_msg = f"GPT-5 API error: {e}"
-        print(f"Exception in generate_legal_response: {error_msg}")
-        return {
-            "success": False,
-            "content": None,
-            "error": error_msg
-        }
+    """Generate legal response using GPT-5 with adaptive context"""
+    return generate_legal_response_gpt5(query, search_data, st.session_state.openai_client)
 
 def _process_legal_question_logic(prompt: str):
-    """Process a legal question - contains only the processing logic"""
+    """Complete adaptive processing with GPT-5 final response"""
     
-    # Add user message to chat history (only once)
     st.session_state.messages.append({"role": "user", "content": prompt})
     
-    # Process with loading indicator
     with st.status("🔍 Analyzing your legal question...", expanded=True) as status:
         try:
             # Get systems from session state
@@ -733,40 +954,34 @@ def _process_legal_question_logic(prompt: str):
             embedding_model = st.session_state.embedding_model
             openai_client = st.session_state.openai_client
             
-            # Step 1: Search legal database
-            status.write("📚 Searching legal database...")
+            # Step 1: Adaptive search with GPT-4o-mini intelligence
+            status.write("📚 Adaptive legal search with AI filtering...")
             search_data = search_legal_database(prompt, qdrant_client, embedding_model, openai_client, adaptive=True)
             
-            if not search_data:
-                error_response = "I couldn't find relevant legal information in the database for your query. Please try rephrasing your question with more specific terms or contact legal counsel for assistance."
+            if 'error' in search_data:
+                error_response = f"Search error: {search_data['error']}"
                 st.session_state.messages.append({"role": "assistant", "content": error_response})
-                status.update(label="❌ No relevant legal sources found", state="error")
+                status.update(label="❌ Search failed", state="error")
                 return
             
-            # Step 2: Show search results
-            if isinstance(search_data, dict) and 'total_relevant' in search_data:
-                status.write(f"✅ Found {search_data['total_relevant']} relevant sources from {search_data['total_candidates']} candidates")
-            else:
-                status.write(f"✅ Found {len(search_data)} legal sources")
+            # Step 2: Show adaptive results
+            stats = search_data['search_stats']
+            status.write(f"✅ Found {stats['total_relevant']} relevant sources ({stats['essential_sources']} essential)")
             
-            # Step 3: Generate AI response
-            status.write("🤖 Generating comprehensive legal analysis with GPT-5...")
+            # Step 3: Generate GPT-5 response
+            status.write("🧠 Generating comprehensive legal analysis with GPT-5...")
             response = generate_legal_response(prompt, search_data)
             
-            if response["success"] and response["content"]:
-                # Add successful response to chat history
+            if response["success"]:
                 st.session_state.messages.append({"role": "assistant", "content": response["content"]})
-                status.update(label="✅ Legal analysis complete!", state="complete")
+                status.update(label="✅ GPT-5 legal analysis complete!", state="complete")
             else:
-                # Add error response to chat history
-                error_msg = response.get("error", "Unknown error occurred")
-                error_response = f"Error generating legal analysis: {error_msg}"
-                st.session_state.messages.append({"role": "assistant", "content": error_response})
-                status.update(label="❌ Error generating response", state="error")
-            
+                error_msg = f"GPT-5 analysis failed: {response.get('error', 'Unknown error')}"
+                st.session_state.messages.append({"role": "assistant", "content": error_msg})
+                status.update(label="❌ GPT-5 error", state="error")
+                
         except Exception as e:
-            # Handle any unexpected errors
-            error_response = f"An unexpected error occurred: {str(e)}"
+            error_response = f"Processing error: {str(e)}"
             st.session_state.messages.append({"role": "assistant", "content": error_response})
             status.update(label="❌ Processing failed", state="error")
 
