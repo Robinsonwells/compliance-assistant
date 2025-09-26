@@ -509,6 +509,95 @@ Please provide a comprehensive legal analysis addressing this question."""
             "content": f"Error generating GPT-5 response: {str(e)}"
         }
 
+def display_sources_expander(search_data):
+    """Display all sources used in a collapsible expander"""
+    if isinstance(search_data, dict) and 'relevant_chunks' in search_data:
+        relevant_chunks = search_data['relevant_chunks']
+        stats = search_data['search_stats']
+        
+        with st.expander(f"📋 Sources Referenced ({len(relevant_chunks)} sources)", expanded=False):
+            st.markdown(f"""
+            **Search Statistics:**
+            - Total Candidates Evaluated: {stats['total_candidates_evaluated']}
+            - Essential Sources: {stats['essential_sources']}
+            - Supporting Sources: {stats['supporting_sources']}
+            - Processing Time: {stats['processing_time_seconds']}s
+            """)
+            
+            # Separate essential and supporting sources
+            essential_chunks = [c for c in relevant_chunks if getattr(c, 'ai_relevance', '') == 'ESSENTIAL']
+            useful_chunks = [c for c in relevant_chunks if getattr(c, 'ai_relevance', '') == 'USEFUL']
+            
+            # Display Essential Sources
+            if essential_chunks:
+                st.markdown("### 🔴 Essential Sources")
+                st.markdown("*These sources directly answer your legal question:*")
+                
+                for i, chunk in enumerate(essential_chunks, 1):
+                    with st.container():
+                        col1, col2 = st.columns([3, 1])
+                        
+                        with col1:
+                            st.markdown(f"**Essential Source {i}**")
+                            st.markdown(f"**Citation:** {chunk.payload.get('citation', 'N/A')}")
+                            st.markdown(f"**Section:** {chunk.payload.get('section_number', 'N/A')} - {chunk.payload.get('section_title', 'N/A')}")
+                        
+                        with col2:
+                            st.markdown(f"**Jurisdiction:** {chunk.payload.get('jurisdiction', 'N/A')}")
+                            st.markdown(f"**Relevance Score:** {chunk.score:.3f}")
+                        
+                        # Full legal text in expandable section
+                        with st.expander(f"View Full Legal Text - Essential Source {i}", expanded=False):
+                            st.markdown(f"```\n{chunk.payload.get('text', 'No text available')}\n```")
+                        
+                        st.divider()
+            
+            # Display Supporting Sources
+            if useful_chunks:
+                st.markdown("### 🟡 Supporting Sources")
+                st.markdown("*These sources provide important context and related information:*")
+                
+                for i, chunk in enumerate(useful_chunks, 1):
+                    with st.container():
+                        col1, col2 = st.columns([3, 1])
+                        
+                        with col1:
+                            st.markdown(f"**Supporting Source {i}**")
+                            st.markdown(f"**Citation:** {chunk.payload.get('citation', 'N/A')}")
+                            st.markdown(f"**Section:** {chunk.payload.get('section_number', 'N/A')} - {chunk.payload.get('section_title', 'N/A')}")
+                        
+                        with col2:
+                            st.markdown(f"**Jurisdiction:** {chunk.payload.get('jurisdiction', 'N/A')}")
+                            st.markdown(f"**Relevance Score:** {chunk.score:.3f}")
+                        
+                        # Full legal text in expandable section
+                        with st.expander(f"View Full Legal Text - Supporting Source {i}", expanded=False):
+                            st.markdown(f"```\n{chunk.payload.get('text', 'No text available')}\n```")
+                        
+                        st.divider()
+    
+    elif isinstance(search_data, list):
+        # Legacy format fallback
+        with st.expander(f"📋 Sources Referenced ({len(search_data)} sources)", expanded=False):
+            for i, source in enumerate(search_data, 1):
+                with st.container():
+                    col1, col2 = st.columns([3, 1])
+                    
+                    with col1:
+                        st.markdown(f"**Source {i}**")
+                        st.markdown(f"**Citation:** {source.get('citation', 'N/A')}")
+                        st.markdown(f"**Section:** {source.get('section_number', 'N/A')} - {source.get('section_title', 'N/A')}")
+                    
+                    with col2:
+                        st.markdown(f"**Jurisdiction:** {source.get('jurisdiction', 'N/A')}")
+                        st.markdown(f"**Relevance Score:** {source.get('score', 0):.3f}")
+                    
+                    # Full legal text in expandable section
+                    with st.expander(f"View Full Legal Text - Source {i}", expanded=False):
+                        st.markdown(f"```\n{source.get('text', 'No text available')}\n```")
+                    
+                    st.divider()
+
 def extract_legal_entities(query: str) -> Dict[str, List[str]]:
     """Extract legal entities from query for enhanced search"""
     entities = {
@@ -973,7 +1062,13 @@ def _process_legal_question_logic(prompt: str):
             response = generate_legal_response(prompt, search_data)
             
             if response["success"]:
-                st.session_state.messages.append({"role": "assistant", "content": response["content"]})
+                # Add successful response to chat history WITH source data
+                assistant_message = {
+                    "role": "assistant", 
+                    "content": response["content"],
+                    "sources": search_data  # Store source data with the message
+                }
+                st.session_state.messages.append(assistant_message)
                 status.update(label="✅ GPT-5 legal analysis complete!", state="complete")
             else:
                 error_msg = f"GPT-5 analysis failed: {response.get('error', 'Unknown error')}"
@@ -1042,6 +1137,10 @@ def main():
         with st.chat_message(message["role"]):
             # Enhanced message formatting
             st.markdown(f'<div class="message-content">{message["content"]}</div>', unsafe_allow_html=True)
+            
+            # Display sources for assistant messages
+            if message["role"] == "assistant" and "sources" in message:
+                display_sources_expander(message["sources"])
     
     # Typing indicator
     if st.session_state.is_typing:
