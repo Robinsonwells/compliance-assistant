@@ -454,7 +454,7 @@ Text: {chunk.payload.get('text', '')}
         print(f"Adaptive search failed: {e}")
         return {"error": str(e)}
 
-def generate_legal_response_gpt5(query: str, search_data, openai_client):
+def generate_legal_response_gpt5(query: str, search_data, openai_client, verbosity='medium', effort='medium'):
     """Generate final legal response using GPT-5 with adaptive context"""
     try:
         print("Generating legal response with GPT-5...")
@@ -496,15 +496,15 @@ Please provide a comprehensive legal analysis addressing this question."""
 
         print(f"Making GPT-5 Responses API call (context length: {len(gpt5_prompt)} characters)")
         
-        # Correct GPT-5 Responses API call
+        # Correct GPT-5 Responses API call with dynamic parameters
         response = openai_client.responses.create(
             model="gpt-5",
             input=gpt5_prompt,  # ✅ Correct format (string, not list)
             reasoning={
-                "effort": "high"  # Use high reasoning for complex legal analysis
+                "effort": effort  # Use user-selected reasoning effort
             },
             text={
-                "verbosity": "high"  # Detailed legal explanations
+                "verbosity": verbosity  # Use user-selected verbosity
             },
             max_output_tokens=16384  # Allow for comprehensive responses
         )
@@ -1059,6 +1059,24 @@ def process_legal_query():
             key="user_legal_query"
         )
 
+
+        # Model configuration dropdowns
+        col1, col2 = st.columns(2)
+        with col1:
+            verbosity = st.selectbox(
+                "Response Verbosity",
+                options=["low", "medium", "high"],
+                index=1,  # Default to "medium"
+                help="Controls how detailed the AI response will be"
+            )
+        with col2:
+            effort = st.selectbox(
+                "Reasoning Effort", 
+                options=["minimal", "low", "medium", "high"],
+                index=2,  # Default to "medium"
+                help="Controls how much reasoning the AI applies to your question"
+            )
+
         col1, col2, col3 = st.columns([2, 1, 2])
         with col2:
             submitted = st.form_submit_button("🔍 Research", use_container_width=True)
@@ -1066,6 +1084,9 @@ def process_legal_query():
     # Process query
     if submitted and query.strip():
         st.session_state.query_to_process = query.strip()
+        # Store the configuration values in session state
+        st.session_state.verbosity = verbosity
+        st.session_state.effort = effort
 
     if hasattr(st.session_state, 'query_to_process') and st.session_state.query_to_process:
         query_to_process = st.session_state.query_to_process
@@ -1093,6 +1114,10 @@ def process_legal_query():
                 context = build_adaptive_context(query_to_process, relevant_chunks)
 
                 # Step 5: Generate response with GPT-5
+                # Get user configuration from session state
+                user_verbosity = st.session_state.get('verbosity', 'medium')
+                user_effort = st.session_state.get('effort', 'medium')
+
                 response_data = generate_legal_response_gpt5(query_to_process, {
                     'context': context,
                     'relevant_chunks': relevant_chunks,
@@ -1103,7 +1128,7 @@ def process_legal_query():
                         'total_relevant': len(relevant_chunks),
                         'processing_time_seconds': 0
                     }
-                }, openai_client)
+                }, openai_client, user_verbosity, user_effort)
 
                 # Display results
                 if response_data["success"]:
