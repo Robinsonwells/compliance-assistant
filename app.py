@@ -1108,6 +1108,9 @@ def process_legal_query():
                 # Display results
                 if response_data["success"]:
                     st.markdown("### ⚖️ Legal Analysis")
+                    st.markdown("**Your Question:**")
+                    st.markdown(f"*{query_to_process}*")
+                    st.markdown("---")
                     st.markdown(response_data["content"])
 
                     # Display sources
