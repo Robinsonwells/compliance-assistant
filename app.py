@@ -302,7 +302,8 @@ def ai_driven_relevance_filter(query: str, candidates: List, openai_client) -> L
         for i in range(0, len(candidates), batch_size):
             batch = candidates[i:i+batch_size]
             
-        relevance_prompt = f"""Legal Query: "{query}"
+            # FIX #1: Proper indentation for the relevance_prompt
+            relevance_prompt = f"""Legal Query: "{query}"
 
 TASK: Determine which sources are relevant for answering this query. Be inclusive - if a source might be helpful, include it.
 
@@ -353,10 +354,27 @@ Sources to evaluate:
                         chunk_with_relevance.payload['ai_relevance'] = relevance_level
                         # Debug: Print what's being assigned
                         print(f"Assigning relevance '{relevance_level}' to chunk: {chunk_with_relevance.payload.get('citation', 'N/A')}")
-        essential_count = len([c for c in relevant_chunks if getattr(c, 'ai_relevance', '') == 'ESSENTIAL'])
-        useful_count = len([c for c in relevant_chunks if getattr(c, 'ai_relevance', '') == 'USEFUL'])
+                        relevant_chunks.append(chunk_with_relevance)
+        
+        # FIX #2: Corrected reference to payload for relevance check
+        essential_count = len([c for c in relevant_chunks if c.payload.get('ai_relevance', '') == 'ESSENTIAL'])
+        useful_count = len([c for c in relevant_chunks if c.payload.get('ai_relevance', '') == 'USEFUL'])
         
         print(f"AI selected {len(relevant_chunks)} relevant chunks ({essential_count} essential, {useful_count} useful)")
+        
+        # FIX #3: Add fallback mechanism when no chunks are selected
+        if len(relevant_chunks) == 0:
+            print("AI filtered out all chunks - using fallback selection")
+            top_candidates = sorted(candidates, key=lambda x: x.score, reverse=True)[:20]
+            for i, chunk in enumerate(top_candidates):
+                # Assign relevance based on score
+                if chunk.score > 0.6:
+                    chunk.payload['ai_relevance'] = 'ESSENTIAL'
+                else:
+                    chunk.payload['ai_relevance'] = 'USEFUL'
+                relevant_chunks.append(chunk)
+            
+            print(f"Fallback selected {len(relevant_chunks)} chunks based on relevance scores")
         
         return relevant_chunks
         
@@ -386,8 +404,9 @@ def search_legal_database_adaptive(query: str, qdrant_client, embedding_model, o
         
         # Build context from exactly the chunks needed
         context_parts = []
-        essential_chunks = [c for c in relevant_chunks if getattr(c, 'ai_relevance', '') == 'ESSENTIAL']
-        useful_chunks = [c for c in relevant_chunks if getattr(c, 'ai_relevance', '') == 'USEFUL']
+        # FIX #4: Corrected reference to payload for relevance check
+        essential_chunks = [c for c in relevant_chunks if c.payload.get('ai_relevance', '') == 'ESSENTIAL']
+        useful_chunks = [c for c in relevant_chunks if c.payload.get('ai_relevance', '') == 'USEFUL']
         
         # Essential sources first (full detail)
         if essential_chunks:
@@ -533,12 +552,12 @@ def display_sources_expander(search_data):
             - Processing Time: {stats['processing_time_seconds']}s
             """)
             
-            # Separate essential and supporting sources
+            # FIX #5: Corrected relevance checking logic
             essential_chunks = []
             useful_chunks = []
 
             for chunk in relevant_chunks:
-                relevance = getattr(chunk, 'ai_relevance', None)
+                relevance = chunk.payload.get('ai_relevance', None)
                 if relevance == 'ESSENTIAL':
                     essential_chunks.append(chunk)
                 elif relevance == 'USEFUL':
@@ -546,10 +565,10 @@ def display_sources_expander(search_data):
                 else:
                     # If no relevance assigned, check score to categorize
                     if chunk.score > 0.7:
-                        chunk.ai_relevance = 'ESSENTIAL'
+                        chunk.payload['ai_relevance'] = 'ESSENTIAL'
                         essential_chunks.append(chunk)
                     elif chunk.score > 0.4:
-                        chunk.ai_relevance = 'USEFUL'
+                        chunk.payload['ai_relevance'] = 'USEFUL'
                         useful_chunks.append(chunk)
             
             # Display Essential Sources
@@ -572,7 +591,7 @@ def display_sources_expander(search_data):
                         
                         # Full legal text in expandable section
                         with st.expander(f"View Full Legal Text - Essential Source {i}", expanded=False):
-                            st.markdown(f"```\n{chunk.payload.get('text', 'No text available')}\n```")
+                            st.markdown(f"``````")
                         
                         st.divider()
             
@@ -596,7 +615,7 @@ def display_sources_expander(search_data):
                         
                         # Full legal text in expandable section
                         with st.expander(f"View Full Legal Text - Supporting Source {i}", expanded=False):
-                            st.markdown(f"```\n{chunk.payload.get('text', 'No text available')}\n```")
+                            st.markdown(f"``````")
                         
                         st.divider()
     
@@ -618,7 +637,7 @@ def display_sources_expander(search_data):
                     
                     # Full legal text in expandable section
                     with st.expander(f"View Full Legal Text - Source {i}", expanded=False):
-                        st.markdown(f"```\n{source.get('text', 'No text available')}\n```")
+                        st.markdown(f"``````")
                     
                     st.divider()
 
