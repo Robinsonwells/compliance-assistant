@@ -978,3 +978,157 @@ def build_adaptive_context(query: str, relevant_chunks: List) -> str:
             
             for i, chunk in enumerate(essential_chunks, 1):
                 context_parts
+            context_parts.append(f"""
+ESSENTIAL SOURCE {i}:
+Citation: {chunk.payload.get('citation', 'N/A')}
+Jurisdiction: {chunk.payload.get('jurisdiction', 'N/A')}
+Section: {chunk.payload.get('section_number', 'N/A')} - {chunk.payload.get('section_title', 'N/A')}
+Legal Text: {chunk.payload.get('text', '')}
+""")
+            context_parts.append("")
+
+        # Include important chunks (summary format if many)
+        if important_chunks:
+            context_parts.append("=== IMPORTANT SUPPORTING PROVISIONS ===")
+            context_parts.append(f"The following {len(important_chunks)} sources provide important context:")
+            context_parts.append("")
+
+            for i, chunk in enumerate(important_chunks, 1):
+                context_parts.append(f"""
+IMPORTANT SOURCE {i}:
+Citation: {chunk.payload.get('citation', 'N/A')} ({chunk.payload.get('jurisdiction', 'N/A')})
+Text: {chunk.payload.get('text', '')[:500]}...
+""")
+                context_parts.append("")
+
+        return "\n".join(context_parts)
+
+    except Exception as e:
+        print(f"Context building failed: {e}")
+        # Fallback to simple concatenation
+        context_parts = []
+        for i, chunk in enumerate(relevant_chunks[:50], 1):  # Limit to 50 chunks
+            context_parts.append(f"""
+SOURCE {i}:
+Citation: {chunk.payload.get('citation', 'N/A')}
+Jurisdiction: {chunk.payload.get('jurisdiction', 'N/A')}
+Text: {chunk.payload.get('text', '')}
+""")
+        return "\n".join(context_parts)
+
+def process_legal_query():
+    """Main function to process legal queries"""
+    if not authenticate_user():
+        return
+
+    # Store systems in session for callbacks
+    store_systems_in_session()
+
+    # Get systems from session state
+    user_manager = st.session_state.user_manager
+    embedding_model = st.session_state.embedding_model
+    qdrant_client = st.session_state.qdrant_client
+    openai_client = st.session_state.openai_client
+
+    # Page header
+    st.markdown("""
+        <div class="page-header">
+            <h1>⚖️ AI Compliance Assistant</h1>
+            <p>Professional Employment Organization Legal Research</p>
+        </div>
+    """, unsafe_allow_html=True)
+
+    # Sidebar for user info and logout
+    with st.sidebar:
+        st.markdown("### 👤 Session Info")
+        st.markdown(f"**Access Code:** {st.session_state.access_code}")
+        st.markdown(f"**Session ID:** {st.session_state.session_id[:8]}...")
+
+        if st.button("🚪 Logout", use_container_width=True):
+            user_manager.end_session(st.session_state.session_id)
+            for key in list(st.session_state.keys()):
+                del st.session_state[key]
+            st.rerun()
+
+    # Query input
+    with st.form("legal_query_form", clear_on_submit=True):
+        query = st.text_area(
+            "Legal Question",
+            placeholder="Enter your compliance question...",
+            height=100,
+            key="user_legal_query"
+        )
+
+        col1, col2, col3 = st.columns([2, 1, 2])
+        with col2:
+            submitted = st.form_submit_button("🔍 Research", use_container_width=True)
+
+    # Process query
+    if submitted and query.strip():
+        st.session_state.query_to_process = query.strip()
+
+    if hasattr(st.session_state, 'query_to_process') and st.session_state.query_to_process:
+        query_to_process = st.session_state.query_to_process
+
+        with st.spinner("🔍 Analyzing legal requirements..."):
+            try:
+                # Step 1: Analyze query complexity
+                complexity_analysis = analyze_query_complexity(query_to_process, openai_client)
+
+                # Step 2: Wide retrieval based on complexity
+                candidates = intelligent_wide_retrieval(query_to_process, qdrant_client, embedding_model, complexity_analysis)
+
+                if not candidates:
+                    st.error("No relevant legal sources found for your query.")
+                    return
+
+                # Step 3: AI relevance filtering
+                relevant_chunks = ai_relevance_filter(query_to_process, candidates, openai_client)
+
+                if not relevant_chunks:
+                    st.error("No sources were deemed relevant by AI analysis.")
+                    return
+
+                # Step 4: Build adaptive context
+                context = build_adaptive_context(query_to_process, relevant_chunks)
+
+                # Step 5: Generate response with GPT-5
+                response_data = generate_legal_response_gpt5(query_to_process, {
+                    'context': context,
+                    'relevant_chunks': relevant_chunks,
+                    'search_stats': {
+                        'total_candidates_evaluated': len(candidates),
+                        'essential_sources': len([c for c in relevant_chunks if 'ESSENTIAL' in str(getattr(c, 'ai_relevance', getattr(c.payload, 'ai_relevance', '')))]),
+                        'supporting_sources': len([c for c in relevant_chunks if 'IMPORTANT' in str(getattr(c, 'ai_relevance', getattr(c.payload, 'ai_relevance', '')))]),
+                        'total_relevant': len(relevant_chunks),
+                        'processing_time_seconds': 0
+                    }
+                }, openai_client)
+
+                # Display results
+                if response_data["success"]:
+                    st.markdown("### ⚖️ Legal Analysis")
+                    st.markdown(response_data["content"])
+
+                    # Display sources
+                    display_sources_expander({
+                        'relevant_chunks': relevant_chunks,
+                        'search_stats': {
+                            'total_candidates_evaluated': len(candidates),
+                            'essential_sources': len([c for c in relevant_chunks if 'ESSENTIAL' in str(getattr(c, 'ai_relevance', getattr(c.payload, 'ai_relevance', '')))]),
+                            'supporting_sources': len([c for c in relevant_chunks if 'IMPORTANT' in str(getattr(c, 'ai_relevance', getattr(c.payload, 'ai_relevance', '')))]),
+                            'total_relevant': len(relevant_chunks),
+                            'processing_time_seconds': 0
+                        }
+                    })
+                else:
+                    st.error(f"Failed to generate response: {response_data.get('error', 'Unknown error')}")
+
+            except Exception as e:
+                st.error(f"Error processing query: {str(e)}")
+
+        # Clear the processed query
+        del st.session_state.query_to_process
+
+if __name__ == "__main__":
+    process_legal_query()
