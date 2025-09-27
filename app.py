@@ -302,14 +302,14 @@ def ai_driven_relevance_filter(query: str, candidates: List, openai_client) -> L
         for i in range(0, len(candidates), batch_size):
             batch = candidates[i:i+batch_size]
             
-            relevance_prompt = f"""Legal Query: "{query}"
+        relevance_prompt = f"""Legal Query: "{query}"
 
-TASK: Determine which sources are relevant for answering this query. Be selective - only include sources that add value.
+TASK: Determine which sources are relevant for answering this query. Be inclusive - if a source might be helpful, include it.
 
 RELEVANCE CRITERIA:
 - ESSENTIAL: Directly answers the query or provides critical legal requirements
-- USEFUL: Provides valuable context or related requirements  
-- SKIP: Not directly related or redundant with already selected content
+- USEFUL: Provides any context, related requirements, or background information that could be helpful
+- SKIP: Only if completely unrelated to the legal topic
 
 For each source, respond with: ESSENTIAL, USEFUL, or SKIP
 
