@@ -589,9 +589,29 @@ def display_sources_expander(search_data):
                             st.markdown(f"**Jurisdiction:** {chunk.payload.get('jurisdiction', 'N/A')}")
                             st.markdown(f"**Relevance Score:** {chunk.score:.3f}")
                         
-                        # Full legal text in expandable section
-                        with st.expander(f"View Full Legal Text - Essential Source {i}", expanded=False):
-                            st.markdown(f"``````")
+                        # Use HTML details/summary instead of st.expander to avoid nesting
+                        citation = chunk.payload.get('citation', 'N/A')
+                        section_num = chunk.payload.get('section_number', 'N/A')
+                        section_title = chunk.payload.get('section_title', 'N/A')
+                        jurisdiction = chunk.payload.get('jurisdiction', 'N/A')
+                        legal_text = chunk.payload.get('text', '')
+                        
+                        st.markdown(f"""
+                        <details style="margin-bottom: 1rem; border: 1px solid var(--border-light); border-radius: 8px; background: var(--bg-secondary);">
+                            <summary style="padding: 1rem; cursor: pointer; font-weight: 600; color: var(--text-primary);">
+                                📄 Essential Source {i}: {citation}
+                            </summary>
+                            <div style="padding: 0 1rem 1rem 1rem; border-top: 1px solid var(--border-light); margin-top: 0.5rem;">
+                                <p><strong>Citation:</strong> {citation}</p>
+                                <p><strong>Section:</strong> {section_num} - {section_title}</p>
+                                <p><strong>Jurisdiction:</strong> {jurisdiction}</p>
+                                <p><strong>Legal Text:</strong></p>
+                                <div style="background: var(--bg-tertiary); padding: 1rem; border-radius: 6px; max-height: 300px; overflow-y: auto; font-family: monospace; font-size: 0.9em; line-height: 1.4; color: var(--text-primary);">
+                                    {legal_text}
+                                </div>
+                            </div>
+                        </details>
+                        """, unsafe_allow_html=True)
                         
                         st.divider()
             
@@ -613,9 +633,29 @@ def display_sources_expander(search_data):
                             st.markdown(f"**Jurisdiction:** {chunk.payload.get('jurisdiction', 'N/A')}")
                             st.markdown(f"**Relevance Score:** {chunk.score:.3f}")
                         
-                        # Full legal text in expandable section
-                        with st.expander(f"View Full Legal Text - Supporting Source {i}", expanded=False):
-                            st.markdown(f"``````")
+                        # Use HTML details/summary instead of st.expander to avoid nesting
+                        citation = chunk.payload.get('citation', 'N/A')
+                        section_num = chunk.payload.get('section_number', 'N/A')
+                        section_title = chunk.payload.get('section_title', 'N/A')
+                        jurisdiction = chunk.payload.get('jurisdiction', 'N/A')
+                        legal_text = chunk.payload.get('text', '')
+                        
+                        st.markdown(f"""
+                        <details style="margin-bottom: 1rem; border: 1px solid var(--border-light); border-radius: 8px; background: var(--bg-secondary);">
+                            <summary style="padding: 1rem; cursor: pointer; font-weight: 600; color: var(--text-primary);">
+                                📄 Supporting Source {i}: {citation}
+                            </summary>
+                            <div style="padding: 0 1rem 1rem 1rem; border-top: 1px solid var(--border-light); margin-top: 0.5rem;">
+                                <p><strong>Citation:</strong> {citation}</p>
+                                <p><strong>Section:</strong> {section_num} - {section_title}</p>
+                                <p><strong>Jurisdiction:</strong> {jurisdiction}</p>
+                                <p><strong>Legal Text:</strong></p>
+                                <div style="background: var(--bg-tertiary); padding: 1rem; border-radius: 6px; max-height: 300px; overflow-y: auto; font-family: monospace; font-size: 0.9em; line-height: 1.4; color: var(--text-primary);">
+                                    {legal_text}
+                                </div>
+                            </div>
+                        </details>
+                        """, unsafe_allow_html=True)
                         
                         st.divider()
     
@@ -937,298 +977,4 @@ def build_adaptive_context(query: str, relevant_chunks: List) -> str:
             context_parts.append("")
             
             for i, chunk in enumerate(essential_chunks, 1):
-                context_parts.append(f"""ESSENTIAL SOURCE {i}:
-Citation: {chunk.payload.get('citation', 'N/A')}
-Jurisdiction: {chunk.payload.get('jurisdiction', 'N/A')}
-Section: {chunk.payload.get('section_number', 'N/A')} - {chunk.payload.get('section_title', 'N/A')}
-Full Legal Text: "{chunk.payload.get('text', '')}"
-""")
-        
-        # Include important chunks (full text if manageable, otherwise structured)
-        if important_chunks:
-            context_parts.append("\n=== IMPORTANT RELATED PROVISIONS ===")
-            context_parts.append(f"The following {len(important_chunks)} sources provide important context and should be referenced where relevant:")
-            context_parts.append("")
-            
-            if len(important_chunks) <= 30:
-                # Include full text for manageable number
-                for i, chunk in enumerate(important_chunks, 1):
-                    context_parts.append(f"""IMPORTANT SOURCE {i}:
-Citation: {chunk.payload.get('citation', 'N/A')}
-Jurisdiction: {chunk.payload.get('jurisdiction', 'N/A')}
-Legal Text: "{chunk.payload.get('text', '')}"
-""")
-            else:
-                # Provide structured summary for large number
-                context_parts.append(f"[{len(important_chunks)} Important Sources - Structured Summary]")
-                context_parts.append("")
-                
-                # Group by jurisdiction
-                by_jurisdiction = {}
-                for chunk in important_chunks:
-                    jurisdiction = chunk.payload.get('jurisdiction', 'Unknown')
-                    if jurisdiction not in by_jurisdiction:
-                        by_jurisdiction[jurisdiction] = []
-                    by_jurisdiction[jurisdiction].append(chunk)
-                
-                for jurisdiction, chunks in by_jurisdiction.items():
-                    context_parts.append(f"**{jurisdiction} Provisions ({len(chunks)} sources):**")
-                    for chunk in chunks[:10]:  # Limit per jurisdiction
-                        context_parts.append(f"- {chunk.payload.get('citation', 'N/A')}: {chunk.payload.get('text', '')[:200]}...")
-                    if len(chunks) > 10:
-                        context_parts.append(f"- ... and {len(chunks) - 10} additional {jurisdiction} sources")
-                    context_parts.append("")
-        
-        final_context = "\n".join(context_parts)
-        
-        # Check context length and provide summary if too large
-        if len(final_context) > 800000:  # 800K character limit
-            print("Context too large, creating executive summary")
-            context_parts = []
-            
-            # Essential sources (always include)
-            if essential_chunks:
-                context_parts.append("=== ESSENTIAL LEGAL PROVISIONS (FULL TEXT) ===")
-                for i, chunk in enumerate(essential_chunks[:20], 1):  # Limit to top 20 essential
-                    context_parts.append(f"""ESSENTIAL SOURCE {i}:
-Citation: {chunk.payload.get('citation', 'N/A')}
-Text: "{chunk.payload.get('text', '')}"
-""")
-            
-            # Important sources (summary only)
-            if important_chunks:
-                context_parts.append("\n=== IMPORTANT SOURCES (SUMMARY) ===")
-                context_parts.append("Key Citations and Provisions:")
-                for chunk in important_chunks[:50]:  # Top 50 important
-                    context_parts.append(f"- {chunk.payload.get('citation', 'N/A')} ({chunk.payload.get('jurisdiction', 'N/A')}): {chunk.payload.get('text', '')[:150]}...")
-            
-            final_context = "\n".join(context_parts)
-        
-        return final_context
-        
-    except Exception as e:
-        print(f"Context building failed: {e}")
-        # Fallback to simple concatenation
-        context_parts = []
-        for i, chunk in enumerate(relevant_chunks[:50], 1):
-            context_parts.append(f"""SOURCE {i}:
-Citation: {chunk.payload.get('citation', 'N/A')}
-Text: "{chunk.payload.get('text', '')}"
-""")
-        return "\n\n".join(context_parts)
-
-def search_legal_database(query: str, qdrant_client, embedding_model, openai_client, adaptive: bool = True):
-    """Enhanced search with AI-driven relevance and adaptive context"""
-    try:
-        if adaptive:
-            # Use new adaptive search
-            return search_legal_database_adaptive(query, qdrant_client, embedding_model, openai_client)
-        else:
-            # Fallback to original method
-            query_embedding = embedding_model.encode([query])[0].tolist()
-            search_results = qdrant_client.search(
-                collection_name="legal_regulations",
-                query_vector=query_embedding,
-                limit=50,
-                with_payload=True
-            )
-            
-            formatted_results = []
-            for result in search_results:
-                formatted_results.append({
-                    'text': result.payload.get('text', ''),
-                    'citation': result.payload.get('citation', ''),
-                    'section_number': result.payload.get('section_number', ''),
-                    'section_title': result.payload.get('section_title', ''),
-                    'jurisdiction': result.payload.get('jurisdiction', ''),
-                    'score': result.score
-                })
-            
-            return formatted_results
-            
-    except Exception as e:
-        print(f"Enhanced search failed: {e}")
-        # Ultimate fallback
-        query_embedding = embedding_model.encode([query])[0].tolist()
-        search_results = qdrant_client.search(
-            collection_name="legal_regulations",
-            query_vector=query_embedding,
-            limit=50,
-            with_payload=True
-        )
-        
-        formatted_results = []
-        for result in search_results:
-            formatted_results.append({
-                'text': result.payload.get('text', ''),
-                'citation': result.payload.get('citation', ''),
-                'section_number': result.payload.get('section_number', ''),
-                'section_title': result.payload.get('section_title', ''),
-                'jurisdiction': result.payload.get('jurisdiction', ''),
-                'score': result.score
-            })
-        
-        return formatted_results
-
-def generate_legal_response(query: str, search_data):
-    """Generate legal response using GPT-5 with adaptive context"""
-    return generate_legal_response_gpt5(query, search_data, st.session_state.openai_client)
-
-def _process_legal_question_logic(prompt: str):
-    """Complete adaptive processing with GPT-5 final response"""
-    
-    st.session_state.messages.append({"role": "user", "content": prompt})
-    
-    with st.status("🔍 Analyzing your legal question...", expanded=True) as status:
-        try:
-            # Get systems from session state
-            qdrant_client = st.session_state.qdrant_client
-            embedding_model = st.session_state.embedding_model
-            openai_client = st.session_state.openai_client
-            
-            # Step 1: Adaptive search with GPT-4o-mini intelligence
-            status.write("📚 Adaptive legal search with AI filtering...")
-            search_data = search_legal_database(prompt, qdrant_client, embedding_model, openai_client, adaptive=True)
-            
-            if 'error' in search_data:
-                error_response = f"Search error: {search_data['error']}"
-                st.session_state.messages.append({"role": "assistant", "content": error_response})
-                status.update(label="❌ Search failed", state="error")
-                return
-            
-            # Step 2: Show adaptive results
-            stats = search_data['search_stats']
-            status.write(f"✅ Found {stats['total_relevant']} relevant sources ({stats['essential_sources']} essential)")
-            
-            # Step 3: Generate GPT-5 response
-            status.write("🧠 Generating comprehensive legal analysis with GPT-5...")
-            response = generate_legal_response(prompt, search_data)
-            
-            if response["success"]:
-                # Add successful response to chat history WITH source data
-                assistant_message = {
-                    "role": "assistant", 
-                    "content": response["content"],
-                    "sources": search_data  # Store source data with the message
-                }
-                st.session_state.messages.append(assistant_message)
-                status.update(label="✅ GPT-5 legal analysis complete!", state="complete")
-            else:
-                error_msg = f"GPT-5 analysis failed: {response.get('error', 'Unknown error')}"
-                st.session_state.messages.append({"role": "assistant", "content": error_msg})
-                status.update(label="❌ GPT-5 error", state="error")
-                
-        except Exception as e:
-            error_response = f"Processing error: {str(e)}"
-            st.session_state.messages.append({"role": "assistant", "content": error_response})
-            status.update(label="❌ Processing failed", state="error")
-
-def main():
-    """Main application logic"""
-    # Initialize systems in session state
-    _init_session_state_systems()
-    user_manager = st.session_state.user_manager
-    
-    # Authenticate user
-    if not authenticate_user():
-        return
-    
-    # Validate session
-    if not user_manager.is_session_valid(st.session_state.session_id):
-        st.error("Your session has expired. Please log in again.")
-        st.session_state.authenticated = False
-        st.rerun()
-    
-    # Update session activity
-    user_manager.update_session_activity(st.session_state.session_id)
-    
-    # Initialize UI state and processing variables
-    if "theme" not in st.session_state:
-        st.session_state.theme = "dark"
-    if "is_typing" not in st.session_state:
-        st.session_state.is_typing = False
-    if "query_to_process" not in st.session_state:
-        st.session_state.query_to_process = None
-    if "user_legal_query" not in st.session_state:
-        st.session_state.user_legal_query = ""
-    
-    # Main application interface
-    st.markdown("""
-        <div class="dashboard-header">
-            <h1 style="margin: 0; color: white;">AI Legal Compliance Assistant</h1>
-            <p style="margin: 0.5rem 0 0 0; color: rgba(255,255,255,0.9);">
-                Professional Employment Organization Legal Research Tool
-            </p>
-        </div>
-    """, unsafe_allow_html=True)
-    
-    # Sidebar
-    with st.sidebar:
-        if st.button("🚪 Logout"):
-            st.session_state.authenticated = False
-            st.rerun()
-    
-    # Initialize chat history
-    if "messages" not in st.session_state:
-        st.session_state.messages = []
-    
-    # Chat interface
-    st.markdown("### 💬 Legal Research Chat")
-    
-    # Display chat messages
-    for message in st.session_state.messages:
-        with st.chat_message(message["role"]):
-            # Enhanced message formatting
-            st.markdown(f'<div class="message-content">{message["content"]}</div>', unsafe_allow_html=True)
-            
-            # Display sources for assistant messages
-            if message["role"] == "assistant" and "sources" in message:
-                display_sources_expander(message["sources"])
-    
-    # Typing indicator
-    if st.session_state.is_typing:
-        st.markdown("""
-            <div class="typing-indicator visible">
-                <span>AI is analyzing legal sources</span>
-                <div class="typing-dots">
-                    <div class="typing-dot"></div>
-                    <div class="typing-dot"></div>
-                    <div class="typing-dot"></div>
-                </div>
-            </div>
-        """, unsafe_allow_html=True)
-    
-    # Enhanced input area for legal questions
-    st.markdown("---")
-    st.markdown("### 🔍 Ask Your Legal Compliance Question")
-    
-    with st.container():
-        prompt_input = st.text_area(
-            "Enter your detailed legal question:",
-            height=120,
-            placeholder="Example: What are the meal break requirements for employees working 8+ hours in Connecticut? Include any exceptions for different industries and penalty requirements for violations.",
-            help="Provide detailed questions for more comprehensive legal analysis. Include specific jurisdictions, industries, or circumstances for better results.",
-            key="user_legal_query",
-            value=st.session_state.user_legal_query
-        )
-        
-        # Submit button with better positioning
-        col1, col2, col3 = st.columns([1, 2, 1])
-        with col2:
-            submit_button = st.button(
-                "🔍 Research Legal Requirements", 
-                use_container_width=True,
-                type="primary",
-                disabled=not prompt_input.strip(),
-                on_click=_submit_question_callback
-            )
-    
-    # Process queued question after the input area is rendered
-    if st.session_state.query_to_process:
-        query = st.session_state.query_to_process
-        st.session_state.query_to_process = None  # Clear to prevent re-processing
-        _process_legal_question_logic(query)
-        st.rerun()  # Refresh to show new messages
-
-if __name__ == "__main__":
-    main()
+                context_parts
