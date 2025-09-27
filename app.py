@@ -454,7 +454,7 @@ Text: {chunk.payload.get('text', '')}
         print(f"Adaptive search failed: {e}")
         return {"error": str(e)}
 
-def generate_legal_response_gpt5(query: str, search_data, openai_client):
+def generate_legal_response_gpt5(query: str, search_data, openai_client, reasoning_effort="medium", verbosity_level="medium"):
     """Generate final legal response using GPT-5 with adaptive context"""
     try:
         print("Generating legal response with GPT-5...")
@@ -501,10 +501,10 @@ Please provide a comprehensive legal analysis addressing this question."""
             model="gpt-5",
             input=gpt5_prompt,  # ✅ Correct format (string, not list)
             reasoning={
-                "effort": "high"  # Use high reasoning for complex legal analysis
+                "effort": reasoning_effort  # User-selected reasoning effort
             },
             text={
-                "verbosity": "high"  # Detailed legal explanations
+                "verbosity": verbosity_level  # User-selected verbosity level
             },
             max_output_tokens=16384  # Allow for comprehensive responses
         )
@@ -978,43 +978,6 @@ def build_adaptive_context(query: str, relevant_chunks: List) -> str:
             
             for i, chunk in enumerate(essential_chunks, 1):
                 context_parts
-            context_parts.append(f"""
-ESSENTIAL SOURCE {i}:
-Citation: {chunk.payload.get('citation', 'N/A')}
-Jurisdiction: {chunk.payload.get('jurisdiction', 'N/A')}
-Section: {chunk.payload.get('section_number', 'N/A')} - {chunk.payload.get('section_title', 'N/A')}
-Legal Text: {chunk.payload.get('text', '')}
-""")
-            context_parts.append("")
-
-        # Include important chunks (summary format if many)
-        if important_chunks:
-            context_parts.append("=== IMPORTANT SUPPORTING PROVISIONS ===")
-            context_parts.append(f"The following {len(important_chunks)} sources provide important context:")
-            context_parts.append("")
-
-            for i, chunk in enumerate(important_chunks, 1):
-                context_parts.append(f"""
-IMPORTANT SOURCE {i}:
-Citation: {chunk.payload.get('citation', 'N/A')} ({chunk.payload.get('jurisdiction', 'N/A')})
-Text: {chunk.payload.get('text', '')[:500]}...
-""")
-                context_parts.append("")
-
-        return "\n".join(context_parts)
-
-    except Exception as e:
-        print(f"Context building failed: {e}")
-        # Fallback to simple concatenation
-        context_parts = []
-        for i, chunk in enumerate(relevant_chunks[:50], 1):  # Limit to 50 chunks
-            context_parts.append(f"""
-SOURCE {i}:
-Citation: {chunk.payload.get('citation', 'N/A')}
-Jurisdiction: {chunk.payload.get('jurisdiction', 'N/A')}
-Text: {chunk.payload.get('text', '')}
-""")
-        return "\n".join(context_parts)
 
 def process_legal_query():
     """Main function to process legal queries"""
@@ -1050,6 +1013,25 @@ def process_legal_query():
                 del st.session_state[key]
             st.rerun()
 
+    # AI Settings dropdowns - Added as requested
+    col1, col2, col3 = st.columns([2, 1, 1])
+
+    with col2:
+        reasoning_effort = st.selectbox(
+            "🧠 Reasoning Effort",
+            options=["minimal", "low", "medium", "high"],
+            index=2,  # Default to "medium"
+            help="Controls how much the AI thinks before responding. Higher = more thorough but slower."
+        )
+
+    with col3:
+        verbosity_level = st.selectbox(
+            "📝 Response Length",
+            options=["low", "medium", "high"],
+            index=2,  # Default to "medium"
+            help="Controls how detailed the AI response is. Higher = more comprehensive."
+        )
+
     # Query input
     with st.form("legal_query_form", clear_on_submit=True):
         query = st.text_area(
@@ -1066,9 +1048,13 @@ def process_legal_query():
     # Process query
     if submitted and query.strip():
         st.session_state.query_to_process = query.strip()
+        st.session_state.current_reasoning_effort = reasoning_effort
+        st.session_state.current_verbosity = verbosity_level
 
     if hasattr(st.session_state, 'query_to_process') and st.session_state.query_to_process:
         query_to_process = st.session_state.query_to_process
+        current_effort = getattr(st.session_state, 'current_reasoning_effort', 'medium')
+        current_verbosity = getattr(st.session_state, 'current_verbosity', 'medium')
 
         with st.spinner("🔍 Analyzing legal requirements..."):
             try:
@@ -1092,7 +1078,7 @@ def process_legal_query():
                 # Step 4: Build adaptive context
                 context = build_adaptive_context(query_to_process, relevant_chunks)
 
-                # Step 5: Generate response with GPT-5
+                # Step 5: Generate response with GPT-5 using user-selected parameters
                 response_data = generate_legal_response_gpt5(query_to_process, {
                     'context': context,
                     'relevant_chunks': relevant_chunks,
@@ -1103,7 +1089,7 @@ def process_legal_query():
                         'total_relevant': len(relevant_chunks),
                         'processing_time_seconds': 0
                     }
-                }, openai_client)
+                }, openai_client, current_effort, current_verbosity)
 
                 # Display results
                 if response_data["success"]:
