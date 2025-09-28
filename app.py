@@ -1051,7 +1051,7 @@ def process_legal_query():
             st.rerun()
 
     # Query input
-    with st.form("legal_query_form", clear_on_submit=True):
+    with st.form("legal_query_form"):
         query = st.text_area(
             "Legal Question",
             placeholder="Enter your compliance question...",
@@ -1087,6 +1087,8 @@ def process_legal_query():
         # Store the configuration values in session state
         st.session_state.verbosity = verbosity
         st.session_state.effort = effort
+        # Manually clear only the query field by setting its key value
+        st.session_state.user_legal_query = ""
 
     if hasattr(st.session_state, 'query_to_process') and st.session_state.query_to_process:
         query_to_process = st.session_state.query_to_process
