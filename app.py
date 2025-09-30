@@ -978,8 +978,7 @@ def build_adaptive_context(query: str, relevant_chunks: List) -> str:
             context_parts.append("")
             
             for i, chunk in enumerate(essential_chunks, 1):
-                context_parts
-            context_parts.append(f"""
+                context_parts.append(f"""
 ESSENTIAL SOURCE {i}:
 Citation: {chunk.payload.get('citation', 'N/A')}
 Jurisdiction: {chunk.payload.get('jurisdiction', 'N/A')}
