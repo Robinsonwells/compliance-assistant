@@ -475,7 +475,7 @@ def generate_legal_response_gpt5(query: str, search_data, openai_client, verbosi
         from system_prompts import LEGAL_COMPLIANCE_SYSTEM_PROMPT
 
         # Construct GPT-5 prompt
-        gpt5_prompt = f"""{legal_system_prompt}
+        gpt5_prompt = f"""{LEGAL_COMPLIANCE_SYSTEM_PROMPT}
 
 LEGAL QUESTION: {query}
 
@@ -738,7 +738,7 @@ def analyze_query_complexity(query: str, openai_client) -> Dict[str, Any]:
         response = openai_client.chat.completions.create(
             model="gpt-4o-mini",  # Use faster model for analysis
             messages=[{
-                {"role": "system", "content": LEGAL_COMPLIANCE_SYSTEM_PROMPT},
+                "role": "system", 
                 "content": "You are a legal research expert. Analyze queries precisely and respond only with valid JSON."
             }, {
                 "role": "user", 
