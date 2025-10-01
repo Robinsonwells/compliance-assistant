@@ -903,9 +903,18 @@ def main():
                                             status_color = "🟢" if doc_status == "current" else "🟡" if doc_status == "unknown" else "🔴"
                                             
                                             with st.container():
-                                                st.markdown(f"**Chunk {i}:** Section {meta.get('section_number', 'N/A')}.{meta.get('subsection_index', '0')} - {meta.get('section_title', 'N/A')} {status_color}")
+                                                # Phase 3: Enhanced chunk display with validation info
+                                                version_num = meta.get('version_number', 1)
+                                                validation_warnings = meta.get('validation_warnings', 0)
+                                                citation_issues = meta.get('citation_issues', 0)
+                                                
+                                                version_indicator = f" (v{version_num})" if version_num > 1 else ""
+                                                warning_indicator = f" ⚠️{validation_warnings}" if validation_warnings > 0 else ""
+                                                citation_indicator = f" 🔍{citation_issues}" if citation_issues > 0 else ""
+                                                
+                                                st.markdown(f"**Chunk {i}:** Section {meta.get('section_number', 'N/A')}.{meta.get('subsection_index', '0')} - {meta.get('section_title', 'N/A')} {status_color}{version_indicator}{warning_indicator}{citation_indicator}")
                                                 st.caption(f"Status: {doc_status} | Year: {meta.get('year', 'N/A')} | Citation: {meta.get('citation', 'N/A')}")
-                                                st.caption(f"Chunk ID: {meta.get('chunk_id', 'N/A')} | Semantic Type: {meta.get('semantic_type', 'N/A')}")
+                                                st.caption(f"Chunk ID: {meta.get('chunk_id', 'N/A')} | Semantic Type: {meta.get('semantic_type', 'N/A')} | Fingerprint: {meta.get('document_fingerprint', 'N/A')[:12]}...")
                                                 st.text_area("Content", doc, height=150, key=f"chunk_txt_{fn}_{i}")
                                                 st.json(meta, expanded=False)
                                     else:
