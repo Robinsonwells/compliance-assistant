@@ -534,13 +534,7 @@ def display_sources_expander(search_data):
         stats = search_data['search_stats']
         
         with st.expander(f"📋 Sources Referenced ({len(relevant_chunks)} sources)", expanded=False):
-            st.markdown(f"""
-            **Search Statistics:**
-            - Total Candidates Evaluated: {stats['total_candidates_evaluated']}
-            - Essential Sources: {stats['essential_sources']}
-            - Supporting Sources: {stats['supporting_sources']}
-            - Processing Time: {stats['processing_time_seconds']}s
-            """)
+            # REMOVED: Search Statistics section completely removed
             
             # FIX #5: Corrected relevance checking logic
             essential_chunks = []
@@ -1074,7 +1068,8 @@ def process_legal_query():
     if hasattr(st.session_state, 'query_to_process') and st.session_state.query_to_process:
         query_to_process = st.session_state.query_to_process
 
-        with st.spinner("🔍 Analyzing legal requirements..."):
+        # CHANGED: Removed emojis from spinner message
+        with st.spinner("Analyzing legal requirements..."):
             try:
                 # Step 1: Analyze query complexity
                 complexity_analysis = analyze_query_complexity(query_to_process, openai_client)
