@@ -13,7 +13,7 @@ from datetime import datetime
 import json
 import re
 from typing import Dict, List, Any
-from qdrant_client.models import Distance, VectorParams, PointStruct, Filter, FieldCondition, MatchValue, RangeValue
+from qdrant_client.models import Distance, VectorParams, PointStruct, Filter, FieldCondition, MatchValue, Range
 import time
 
 # Load environment variables
