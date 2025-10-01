@@ -260,6 +260,9 @@ class LegalSemanticChunker:
                     metadata['title_number'] = match.group(1)
                     break
         
+        # Document status detection
+        metadata['document_status'] = self._detect_document_status(text)
+        
         # Set defaults
         metadata.setdefault('state', 'Unknown')
         metadata.setdefault('year', '2025')
@@ -591,7 +594,13 @@ class LegalSemanticChunker:
         state = doc_metadata.get('state', 'Unknown')
         year = doc_metadata.get('year', '2025')
         
-        if state != 'Unknown':
+        if state == 'NY':
+            return f"12 NYCRR § {section_number}"
+        elif state == 'NJ':
+            return f"N.J.A.C. § {section_number}"
+        elif state == 'CT':
+            return f"Conn. Agencies Regs. § {section_number}"
+        elif state != 'Unknown':
             return f"{state} Admin. Code § {section_number} ({year})"
         else:
             return f"Admin. Code § {section_number} ({year})"

@@ -179,6 +179,18 @@ def adaptive_relevance_search(query: str, qdrant_client, embedding_model, openai
             query_vector=query_embedding,
             limit=phase['limit'],
             score_threshold=phase['threshold'],
+            query_filter=Filter(
+                must=[
+                    FieldCondition(
+                        key="document_status",
+                        match=MatchValue(value="current")
+                    ),
+                    FieldCondition(
+                        key="year",
+                        range=RangeValue(gte=2020)  # Only recent laws
+                    )
+                ]
+            ),
             with_payload=True,
             with_vectors=False
         )

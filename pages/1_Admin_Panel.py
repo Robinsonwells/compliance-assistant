@@ -166,6 +166,30 @@ def init_admin_systems():
             if "already exists" not in str(e).lower():
                 print(f"Warning: Could not create content_hash payload index: {e}")
         
+        # Ensure payload index for document_status field exists
+        try:
+            client.create_payload_index(
+                collection_name=collection_name,
+                field_name="document_status",
+                field_schema="keyword"
+            )
+        except Exception as e:
+            # Index might already exist, which is fine
+            if "already exists" not in str(e).lower():
+                print(f"Warning: Could not create document_status payload index: {e}")
+        
+        # Ensure payload index for year field exists
+        try:
+            client.create_payload_index(
+                collection_name=collection_name,
+                field_name="year",
+                field_schema="integer"
+            )
+        except Exception as e:
+            # Index might already exist, which is fine
+            if "already exists" not in str(e).lower():
+                print(f"Warning: Could not create year payload index: {e}")
+        
         return user_manager, chunker, client, embedding_model
         
     except Exception as e:
