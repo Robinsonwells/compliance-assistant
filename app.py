@@ -659,7 +659,6 @@ def display_sources_expander(search_data):
                     
                     with col2:
                         st.markdown(f"**Jurisdiction:** {source.get('jurisdiction', 'N/A')}")
-                        st.markdown(f"**Relevance Score:** {source.get('score', 0):.3f}")
                     
                     # Full legal text in expandable section
                     with st.expander(f"View Full Legal Text - Source {i}", expanded=False):
