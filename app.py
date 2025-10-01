@@ -471,19 +471,8 @@ def generate_legal_response_gpt5(query: str, search_data, openai_client, verbosi
             context = str(search_data)
             stats = {"total_relevant": "unknown"}
         
-        # Enhanced legal system prompt for GPT-5
-        legal_system_prompt = """You are an expert legal research assistant specializing in employment law compliance. 
-        
-Your task is to provide comprehensive legal analysis based on the provided legal sources. 
-
-RESPONSE REQUIREMENTS:
-1. QUOTE relevant legal provisions verbatim with exact citations
-2. ANALYZE the legal requirements in detail
-3. EXPLAIN compliance obligations clearly
-4. IDENTIFY potential risks or penalties
-5. PROVIDE actionable guidance where appropriate
-
-Always cite sources using the exact citations provided in the context."""
+        # Import and use the correct conversational system prompt
+        from system_prompts import LEGAL_COMPLIANCE_SYSTEM_PROMPT
 
         # Construct GPT-5 prompt
         gpt5_prompt = f"""{legal_system_prompt}
@@ -749,7 +738,7 @@ def analyze_query_complexity(query: str, openai_client) -> Dict[str, Any]:
         response = openai_client.chat.completions.create(
             model="gpt-4o-mini",  # Use faster model for analysis
             messages=[{
-                "role": "system",
+                {"role": "system", "content": LEGAL_COMPLIANCE_SYSTEM_PROMPT},
                 "content": "You are a legal research expert. Analyze queries precisely and respond only with valid JSON."
             }, {
                 "role": "user", 
