@@ -562,92 +562,88 @@ def display_sources_expander(search_data):
                         useful_chunks.append(chunk)
             
             # Display Essential Sources
-            if essential_chunks:
-                st.markdown("### 🔴 Essential Sources")
-                st.markdown("*These sources directly answer your legal question:*")
-                
-                for i, chunk in enumerate(essential_chunks, 1):
-                    with st.container():
-                        col1, col2 = st.columns([3, 1])
-                        
-                        with col1:
-                            st.markdown(f"**Essential Source {i}**")
-                            st.markdown(f"**Citation:** {chunk.payload.get('citation', 'N/A')}")
-                            st.markdown(f"**Section:** {chunk.payload.get('section_number', 'N/A')} - {chunk.payload.get('section_title', 'N/A')}")
-                        
-                        with col2:
-                            st.markdown(f"**Jurisdiction:** {chunk.payload.get('jurisdiction', 'N/A')}")
-                            st.markdown(f"**Relevance Score:** {chunk.score:.3f}")
-                        
-                        # Use HTML details/summary instead of st.expander to avoid nesting
-                        citation = chunk.payload.get('citation', 'N/A')
-                        section_num = chunk.payload.get('section_number', 'N/A')
-                        section_title = chunk.payload.get('section_title', 'N/A')
-                        jurisdiction = chunk.payload.get('jurisdiction', 'N/A')
-                        legal_text = chunk.payload.get('text', '')
-                        
-                        st.markdown(f"""
-                        <details style="margin-bottom: 1rem; border: 1px solid var(--border-light); border-radius: 8px; background: var(--bg-secondary);">
-                            <summary style="padding: 1rem; cursor: pointer; font-weight: 600; color: var(--text-primary);">
-                                📄 Essential Source {i}: {citation}
-                            </summary>
-                            <div style="padding: 0 1rem 1rem 1rem; border-top: 1px solid var(--border-light); margin-top: 0.5rem;">
-                                <p><strong>Citation:</strong> {citation}</p>
-                                <p><strong>Section:</strong> {section_num} - {section_title}</p>
-                                <p><strong>Jurisdiction:</strong> {jurisdiction}</p>
-                                <p><strong>Legal Text:</strong></p>
-                                <div style="background: var(--bg-tertiary); padding: 1rem; border-radius: 6px; max-height: 300px; overflow-y: auto; font-family: monospace; font-size: 0.9em; line-height: 1.4; color: var(--text-primary);">
-                                    {legal_text}
+            if essential_chunks or useful_chunks:
+                # Display essential sources
+                if essential_chunks:
+                    for i, chunk in enumerate(essential_chunks, 1):
+                        with st.container():
+                            col1, col2 = st.columns([3, 1])
+                            
+                            with col1:
+                                st.markdown(f"**Essential Source {i}**")
+                                st.markdown(f"**Citation:** {chunk.payload.get('citation', 'N/A')}")
+                                st.markdown(f"**Section:** {chunk.payload.get('section_number', 'N/A')} - {chunk.payload.get('section_title', 'N/A')}")
+                            
+                            with col2:
+                                st.markdown(f"**Jurisdiction:** {chunk.payload.get('jurisdiction', 'N/A')}")
+                                st.markdown(f"**Relevance Score:** {chunk.score:.3f}")
+                            
+                            # Use HTML details/summary instead of st.expander to avoid nesting
+                            citation = chunk.payload.get('citation', 'N/A')
+                            section_num = chunk.payload.get('section_number', 'N/A')
+                            section_title = chunk.payload.get('section_title', 'N/A')
+                            jurisdiction = chunk.payload.get('jurisdiction', 'N/A')
+                            legal_text = chunk.payload.get('text', '')
+                            
+                            st.markdown(f"""
+                            <details style="margin-bottom: 1rem; border: 1px solid var(--border-light); border-radius: 8px; background: var(--bg-secondary);">
+                                <summary style="padding: 1rem; cursor: pointer; font-weight: 600; color: var(--text-primary);">
+                                    📄 Essential Source {i}: {citation}
+                                </summary>
+                                <div style="padding: 0 1rem 1rem 1rem; border-top: 1px solid var(--border-light); margin-top: 0.5rem;">
+                                    <p><strong>Citation:</strong> {citation}</p>
+                                    <p><strong>Section:</strong> {section_num} - {section_title}</p>
+                                    <p><strong>Jurisdiction:</strong> {jurisdiction}</p>
+                                    <p><strong>Legal Text:</strong></p>
+                                    <div style="background: var(--bg-tertiary); padding: 1rem; border-radius: 6px; max-height: 300px; overflow-y: auto; font-family: monospace; font-size: 0.9em; line-height: 1.4; color: var(--text-primary);">
+                                        {legal_text}
+                                    </div>
                                 </div>
-                            </div>
-                        </details>
-                        """, unsafe_allow_html=True)
-                        
-                        st.divider()
-            
-            # Display Supporting Sources
-            if useful_chunks:
-                st.markdown("### 🟡 Supporting Sources")
-                st.markdown("*These sources provide important context and related information:*")
+                            </details>
+                            """, unsafe_allow_html=True)
+                            
+                            st.divider()
                 
-                for i, chunk in enumerate(useful_chunks, 1):
-                    with st.container():
-                        col1, col2 = st.columns([3, 1])
-                        
-                        with col1:
-                            st.markdown(f"**Supporting Source {i}**")
-                            st.markdown(f"**Citation:** {chunk.payload.get('citation', 'N/A')}")
-                            st.markdown(f"**Section:** {chunk.payload.get('section_number', 'N/A')} - {chunk.payload.get('section_title', 'N/A')}")
-                        
-                        with col2:
-                            st.markdown(f"**Jurisdiction:** {chunk.payload.get('jurisdiction', 'N/A')}")
-                            st.markdown(f"**Relevance Score:** {chunk.score:.3f}")
-                        
-                        # Use HTML details/summary instead of st.expander to avoid nesting
-                        citation = chunk.payload.get('citation', 'N/A')
-                        section_num = chunk.payload.get('section_number', 'N/A')
-                        section_title = chunk.payload.get('section_title', 'N/A')
-                        jurisdiction = chunk.payload.get('jurisdiction', 'N/A')
-                        legal_text = chunk.payload.get('text', '')
-                        
-                        st.markdown(f"""
-                        <details style="margin-bottom: 1rem; border: 1px solid var(--border-light); border-radius: 8px; background: var(--bg-secondary);">
-                            <summary style="padding: 1rem; cursor: pointer; font-weight: 600; color: var(--text-primary);">
-                                📄 Supporting Source {i}: {citation}
-                            </summary>
-                            <div style="padding: 0 1rem 1rem 1rem; border-top: 1px solid var(--border-light); margin-top: 0.5rem;">
-                                <p><strong>Citation:</strong> {citation}</p>
-                                <p><strong>Section:</strong> {section_num} - {section_title}</p>
-                                <p><strong>Jurisdiction:</strong> {jurisdiction}</p>
-                                <p><strong>Legal Text:</strong></p>
-                                <div style="background: var(--bg-tertiary); padding: 1rem; border-radius: 6px; max-height: 300px; overflow-y: auto; font-family: monospace; font-size: 0.9em; line-height: 1.4; color: var(--text-primary);">
-                                    {legal_text}
+                # Display supporting sources
+                if useful_chunks:
+                    for i, chunk in enumerate(useful_chunks, 1):
+                        with st.container():
+                            col1, col2 = st.columns([3, 1])
+                            
+                            with col1:
+                                st.markdown(f"**Supporting Source {i}**")
+                                st.markdown(f"**Citation:** {chunk.payload.get('citation', 'N/A')}")
+                                st.markdown(f"**Section:** {chunk.payload.get('section_number', 'N/A')} - {chunk.payload.get('section_title', 'N/A')}")
+                            
+                            with col2:
+                                st.markdown(f"**Jurisdiction:** {chunk.payload.get('jurisdiction', 'N/A')}")
+                                st.markdown(f"**Relevance Score:** {chunk.score:.3f}")
+                            
+                            # Use HTML details/summary instead of st.expander to avoid nesting
+                            citation = chunk.payload.get('citation', 'N/A')
+                            section_num = chunk.payload.get('section_number', 'N/A')
+                            section_title = chunk.payload.get('section_title', 'N/A')
+                            jurisdiction = chunk.payload.get('jurisdiction', 'N/A')
+                            legal_text = chunk.payload.get('text', '')
+                            
+                            st.markdown(f"""
+                            <details style="margin-bottom: 1rem; border: 1px solid var(--border-light); border-radius: 8px; background: var(--bg-secondary);">
+                                <summary style="padding: 1rem; cursor: pointer; font-weight: 600; color: var(--text-primary);">
+                                    📄 Supporting Source {i}: {citation}
+                                </summary>
+                                <div style="padding: 0 1rem 1rem 1rem; border-top: 1px solid var(--border-light); margin-top: 0.5rem;">
+                                    <p><strong>Citation:</strong> {citation}</p>
+                                    <p><strong>Section:</strong> {section_num} - {section_title}</p>
+                                    <p><strong>Jurisdiction:</strong> {jurisdiction}</p>
+                                    <p><strong>Legal Text:</strong></p>
+                                    <div style="background: var(--bg-tertiary); padding: 1rem; border-radius: 6px; max-height: 300px; overflow-y: auto; font-family: monospace; font-size: 0.9em; line-height: 1.4; color: var(--text-primary);">
+                                        {legal_text}
+                                    </div>
                                 </div>
-                            </div>
-                        </details>
-                        """, unsafe_allow_html=True)
-                        
-                        st.divider()
+                            </details>
+                            """, unsafe_allow_html=True)
+                            
+                            st.divider()
     
     elif isinstance(search_data, list):
         # Legacy format fallback
