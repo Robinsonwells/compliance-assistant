@@ -21,6 +21,113 @@ def load_css():
     except FileNotFoundError:
         st.warning("Custom CSS file not found. Using default styling.")
 
+def audit_knowledge_base(qdrant_client):
+    """Audit knowledge base for data quality issues"""
+    try:
+        # Get all points to analyze
+        all_points = []
+        next_page_offset = None
+        
+        while True:
+            scroll_result = qdrant_client.scroll(
+                collection_name="legal_regulations",
+                limit=1000,
+                offset=next_page_offset,
+                with_payload=True,
+                with_vectors=False
+            )
+            
+            points, next_page_offset = scroll_result
+            all_points.extend(points)
+            
+            if next_page_offset is None:
+                break
+        
+        # Analyze document status distribution
+        status_counts = {}
+        year_counts = {}
+        files_by_status = {}
+        problematic_chunks = []
+        
+        for point in all_points:
+            payload = point.payload
+            status = payload.get('document_status', 'unknown')
+            year = payload.get('year', 'unknown')
+            source_file = payload.get('source_file', 'unknown')
+            
+            # Count by status
+            status_counts[status] = status_counts.get(status, 0) + 1
+            
+            # Count by year
+            year_counts[year] = year_counts.get(year, 0) + 1
+            
+            # Group files by status
+            if status not in files_by_status:
+                files_by_status[status] = set()
+            files_by_status[status].add(source_file)
+            
+            # Flag problematic chunks
+            if status in ['proposed_withdrawn', 'repealed', 'unknown']:
+                problematic_chunks.append({
+                    'id': point.id,
+                    'source_file': source_file,
+                    'status': status,
+                    'section': payload.get('section_number', 'N/A'),
+                    'citation': payload.get('citation', 'N/A'),
+                    'text_preview': payload.get('text', '')[:200] + '...'
+                })
+        
+        return {
+            'total_chunks': len(all_points),
+            'status_counts': status_counts,
+            'year_counts': year_counts,
+            'files_by_status': files_by_status,
+            'problematic_chunks': problematic_chunks
+        }
+        
+    except Exception as e:
+        return {'error': str(e)}
+
+def clean_problematic_chunks(qdrant_client, chunk_ids):
+    """Delete problematic chunks by their IDs"""
+    try:
+        qdrant_client.delete(
+            collection_name="legal_regulations",
+            points_selector=chunk_ids
+        )
+        return True, f"Deleted {len(chunk_ids)} problematic chunks"
+    except Exception as e:
+        return False, str(e)
+
+def update_chunk_status(qdrant_client, chunk_id, new_status):
+    """Update the document status of a specific chunk"""
+    try:
+        # Get the current point
+        point = qdrant_client.retrieve(
+            collection_name="legal_regulations",
+            ids=[chunk_id],
+            with_payload=True,
+            with_vectors=True
+        )[0]
+        
+        # Update the payload
+        updated_payload = point.payload.copy()
+        updated_payload['document_status'] = new_status
+        
+        # Upsert the updated point
+        qdrant_client.upsert(
+            collection_name="legal_regulations",
+            points=[PointStruct(
+                id=chunk_id,
+                vector=point.vector,
+                payload=updated_payload
+            )]
+        )
+        
+        return True, f"Updated chunk {chunk_id} status to {new_status}"
+    except Exception as e:
+        return False, str(e)
+
 def delete_file_chunks(qdrant_client, source_file: str) -> tuple[bool, str]:
     """Delete all chunks associated with a specific source file"""
     try:
@@ -490,6 +597,113 @@ def main():
                 st.warning(f"⚠️ Could not load database info: {str(e)}")
                 st.info("Database connection may be temporarily unavailable.")
 
+            # Data Quality Audit Section
+            st.markdown("---")
+            st.markdown("#### 🔍 Data Quality Audit")
+            
+            if st.button("🔍 Run Knowledge Base Audit"):
+                with st.spinner("Auditing knowledge base..."):
+                    audit_results = audit_knowledge_base(coll)
+                    
+                    if 'error' in audit_results:
+                        st.error(f"❌ Audit failed: {audit_results['error']}")
+                    else:
+                        st.success(f"✅ Audit complete! Analyzed {audit_results['total_chunks']} chunks")
+                        
+                        # Display status distribution
+                        st.markdown("##### 📊 Document Status Distribution")
+                        status_cols = st.columns(len(audit_results['status_counts']))
+                        for i, (status, count) in enumerate(audit_results['status_counts'].items()):
+                            with status_cols[i]:
+                                color = "normal" if status == "current" else "inverse"
+                                st.metric(status.replace('_', ' ').title(), count, delta_color=color)
+                        
+                        # Display year distribution
+                        st.markdown("##### 📅 Year Distribution")
+                        year_data = audit_results['year_counts']
+                        if year_data:
+                            st.bar_chart(year_data)
+                        
+                        # Show files by status
+                        st.markdown("##### 📁 Files by Status")
+                        for status, files in audit_results['files_by_status'].items():
+                            if status != 'current':
+                                with st.expander(f"⚠️ {status.replace('_', ' ').title()} Files ({len(files)})", expanded=False):
+                                    for file in sorted(files):
+                                        st.write(f"• {file}")
+                        
+                        # Show problematic chunks
+                        if audit_results['problematic_chunks']:
+                            st.markdown("##### 🚨 Problematic Chunks")
+                            st.warning(f"Found {len(audit_results['problematic_chunks'])} chunks that may need attention")
+                            
+                            # Group by file for easier management
+                            chunks_by_file = {}
+                            for chunk in audit_results['problematic_chunks']:
+                                file = chunk['source_file']
+                                if file not in chunks_by_file:
+                                    chunks_by_file[file] = []
+                                chunks_by_file[file].append(chunk)
+                            
+                            for file, chunks in chunks_by_file.items():
+                                with st.expander(f"🗂️ {file} ({len(chunks)} problematic chunks)", expanded=False):
+                                    for chunk in chunks[:5]:  # Show first 5 chunks
+                                        st.write(f"**Status:** {chunk['status']}")
+                                        st.write(f"**Section:** {chunk['section']}")
+                                        st.write(f"**Citation:** {chunk['citation']}")
+                                        st.write(f"**Preview:** {chunk['text_preview']}")
+                                        
+                                        col1, col2, col3 = st.columns(3)
+                                        with col1:
+                                            if st.button("✅ Mark Current", key=f"current_{chunk['id']}"):
+                                                success, msg = update_chunk_status(coll, chunk['id'], 'current')
+                                                if success:
+                                                    st.success(msg)
+                                                else:
+                                                    st.error(msg)
+                                        with col2:
+                                            if st.button("🗑️ Delete", key=f"delete_{chunk['id']}"):
+                                                success, msg = clean_problematic_chunks(coll, [chunk['id']])
+                                                if success:
+                                                    st.success(msg)
+                                                else:
+                                                    st.error(msg)
+                                        with col3:
+                                            if st.button("📝 Review", key=f"review_{chunk['id']}"):
+                                                st.info("Marked for manual review")
+                                        
+                                        st.divider()
+                                    
+                                    if len(chunks) > 5:
+                                        st.info(f"... and {len(chunks) - 5} more chunks in this file")
+                                    
+                                    # Bulk actions for file
+                                    st.markdown("**Bulk Actions for this file:**")
+                                    bulk_col1, bulk_col2 = st.columns(2)
+                                    with bulk_col1:
+                                        if st.button(f"🗑️ Delete All {len(chunks)} Chunks", key=f"bulk_delete_{file}"):
+                                            chunk_ids = [c['id'] for c in chunks]
+                                            success, msg = clean_problematic_chunks(coll, chunk_ids)
+                                            if success:
+                                                st.success(msg)
+                                                st.rerun()
+                                            else:
+                                                st.error(msg)
+                                    with bulk_col2:
+                                        if st.button(f"✅ Mark All {len(chunks)} as Current", key=f"bulk_current_{file}"):
+                                            success_count = 0
+                                            for chunk in chunks:
+                                                success, _ = update_chunk_status(coll, chunk['id'], 'current')
+                                                if success:
+                                                    success_count += 1
+                                            st.success(f"Updated {success_count}/{len(chunks)} chunks")
+                                            if success_count == len(chunks):
+                                                st.rerun()
+                        else:
+                            st.success("✅ No problematic chunks found! All documents appear to be current.")
+                        
+                        # Store audit results in session state for reference
+                        st.session_state['last_audit'] = audit_results
             st.markdown("---")
             st.markdown("#### 📄 Document Upload")
             uploads = st.file_uploader("Upload documents", accept_multiple_files=True, type=['pdf','docx','txt'])
@@ -567,6 +781,10 @@ def main():
                         with col4:
                             st.metric("Errors", error_count, delta=error_count if error_count > 0 else None, delta_color="inverse")
                     
+                    # Recommend audit after upload
+                    if processed_count > 0:
+                        st.info("💡 **Recommendation:** Run a Data Quality Audit above to verify the uploaded documents have correct status metadata.")
+                    
                     # Refresh the page to clear the file uploader and update the file list
                     time.sleep(2)  # Give user time to see the final status
                     st.rerun()
@@ -606,8 +824,32 @@ def main():
 
                 if files:
                     st.write(f"📊 **Total Files:** {len(files)} | **Total Chunks:** {sum(files.values())}")
+                    
+                    # Show audit summary if available
+                    if 'last_audit' in st.session_state:
+                        audit = st.session_state['last_audit']
+                        status_counts = audit.get('status_counts', {})
+                        if status_counts:
+                            current_count = status_counts.get('current', 0)
+                            total_count = sum(status_counts.values())
+                            problematic_count = total_count - current_count
+                            
+                            if problematic_count > 0:
+                                st.warning(f"⚠️ **Data Quality Alert:** {problematic_count} chunks may need attention (not marked as 'current')")
+                            else:
+                                st.success("✅ **Data Quality:** All chunks are marked as current")
+                    
                     for fn, cnt in files.items():
                         with st.expander(f"📄 {fn} ({cnt} chunks)", expanded=False):
+                            # Show file-specific status info if available
+                            if 'last_audit' in st.session_state:
+                                audit = st.session_state['last_audit']
+                                problematic_chunks = [c for c in audit.get('problematic_chunks', []) if c['source_file'] == fn]
+                                if problematic_chunks:
+                                    st.warning(f"⚠️ This file has {len(problematic_chunks)} chunks that may need attention")
+                                else:
+                                    st.success("✅ All chunks from this file appear to be current")
+                            
                             chunks_to_show = st.selectbox(
                                 "Chunks to display:",
                                 [10, 25, 50, 100],
@@ -655,8 +897,14 @@ def main():
                                         for i, point in enumerate(points, start=1):
                                             doc = point.payload.get('text', '')
                                             meta = {k: v for k, v in point.payload.items() if k != 'text'}
+                                            
+                                            # Highlight document status
+                                            doc_status = meta.get('document_status', 'unknown')
+                                            status_color = "🟢" if doc_status == "current" else "🟡" if doc_status == "unknown" else "🔴"
+                                            
                                             with st.container():
-                                                st.markdown(f"**Chunk {i}:** Section {meta.get('section_number', 'N/A')}.{meta.get('subsection_index', '0')} - {meta.get('section_title', 'N/A')}")
+                                                st.markdown(f"**Chunk {i}:** Section {meta.get('section_number', 'N/A')}.{meta.get('subsection_index', '0')} - {meta.get('section_title', 'N/A')} {status_color}")
+                                                st.caption(f"Status: {doc_status} | Year: {meta.get('year', 'N/A')} | Citation: {meta.get('citation', 'N/A')}")
                                                 st.caption(f"Chunk ID: {meta.get('chunk_id', 'N/A')} | Semantic Type: {meta.get('semantic_type', 'N/A')}")
                                                 st.text_area("Content", doc, height=150, key=f"chunk_txt_{fn}_{i}")
                                                 st.json(meta, expanded=False)
