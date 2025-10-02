@@ -130,6 +130,7 @@ def detect_jurisdiction(text: str) -> str:
     elif any(ct_term in text_lower for ct_term in ['connecticut', 'ct admin', 'conn. gen. stat', 'ct labor']):
         return 'CT'
     else:
+        return 'Unknown'
 
 def detect_law_type(text: str) -> str:
     """Detect type of legal document"""
