@@ -452,7 +452,13 @@ def process_uploaded_file(uploaded_file, chunker, qdrant_client, embedding_model
         if status_text:
             status_text.info(f"🔍 Creating semantic chunks for {uploaded_file.name}...")
         
-        chunks = chunker.legal_aware_chunking(text, max_chunk_size=1200)
+        try:
+            chunks = chunker.legal_aware_chunking(text, max_chunk_size=1200)
+        except Exception as chunking_error:
+            if status_text:
+                status_text.error(f"❌ Error during chunking: {chunking_error}")
+            return False, f"Chunking failed: {chunking_error}", content_hash
+            
         if not chunks:
             return False, "No chunks were created - check file format", content_hash
         
@@ -468,7 +474,12 @@ def process_uploaded_file(uploaded_file, chunker, qdrant_client, embedding_model
             status_text.info(f"🧠 Generating embeddings for {len(chunks)} chunks...")
         
         # Generate embeddings locally in batch
-        embeddings = embedding_model.encode(chunk_texts, show_progress_bar=True)
+        try:
+            embeddings = embedding_model.encode(chunk_texts, show_progress_bar=True)
+        except Exception as embedding_error:
+            if status_text:
+                status_text.error(f"❌ Error generating embeddings: {embedding_error}")
+            return False, f"Embedding generation failed: {embedding_error}", content_hash
         
         if progress_bar:
             progress_bar.progress(80)
@@ -479,40 +490,50 @@ def process_uploaded_file(uploaded_file, chunker, qdrant_client, embedding_model
         points = []
         now = datetime.now().isoformat()
         
-        for i, (ch, embedding) in enumerate(zip(chunks, embeddings)):
-            vector = embedding.tolist()
-            
-            # Prepare payload
-            payload = {
-                'text': ch['text'],
-                **ch['metadata'],
-                'source_file': uploaded_file.name,
-                'content_hash': content_hash,
-                'upload_date': now,
-                'processed_by': 'admin'
-            }
-            
-            # Create point
-            point = PointStruct(
-                id=str(uuid.uuid4()),
-                vector=vector,
-                payload=payload
-            )
-            points.append(point)
+        try:
+            for i, (ch, embedding) in enumerate(zip(chunks, embeddings)):
+                vector = embedding.tolist()
+                
+                # Prepare payload
+                payload = {
+                    'text': ch['text'],
+                    **ch['metadata'],
+                    'source_file': uploaded_file.name,
+                    'content_hash': content_hash,
+                    'upload_date': now,
+                    'processed_by': 'admin'
+                }
+                
+                # Create point
+                point = PointStruct(
+                    id=str(uuid.uuid4()),
+                    vector=vector,
+                    payload=payload
+                )
+                points.append(point)
+        except Exception as point_creation_error:
+            if status_text:
+                status_text.error(f"❌ Error creating vector points: {point_creation_error}")
+            return False, f"Point creation failed: {point_creation_error}", content_hash
 
         # Upload points to Qdrant in batches
-        batch_size = 100
-        for i in range(0, len(points), batch_size):
-            batch = points[i:i+batch_size]
-            qdrant_client.upsert(
-                collection_name="legal_regulations",
-                points=batch
-            )
-            
-            # Update progress during upload
-            if progress_bar:
-                upload_progress = 80 + (20 * (i + len(batch)) / len(points))
-                progress_bar.progress(int(upload_progress))
+        try:
+            batch_size = 100
+            for i in range(0, len(points), batch_size):
+                batch = points[i:i+batch_size]
+                qdrant_client.upsert(
+                    collection_name="legal_regulations",
+                    points=batch
+                )
+                
+                # Update progress during upload
+                if progress_bar:
+                    upload_progress = 80 + (20 * (i + len(batch)) / len(points))
+                    progress_bar.progress(int(upload_progress))
+        except Exception as upload_error:
+            if status_text:
+                status_text.error(f"❌ Error uploading to vector database: {upload_error}")
+            return False, f"Database upload failed: {upload_error}", content_hash
         
         if progress_bar:
             progress_bar.progress(100)
