@@ -8,81 +8,112 @@ import io
 import re
 import xml.etree.ElementTree as ET
 import logging
+import html
 
 def robust_xml_parse(text: str) -> List[Dict]:
-    """Parse XML legal documents with robust section extraction"""
+    """Parse XML legal documents with robust section extraction - DEPRECATED"""
+    # This function is now deprecated in favor of general text processing
+    # Keeping for backward compatibility but will return empty list
+    return []
+
+def strip_xml_tags(text: str) -> str:
+    """Strip all XML tags and convert to clean plain text"""
+    try:
+        # First, handle HTML entities
+        text = html.unescape(text)
+        
+        # Remove XML declaration and DTD
+        text = re.sub(r'<\?xml[^>]*\?>', '', text)
+        text = re.sub(r'<!DOCTYPE[^>]*>', '', text)
+        
+        # Remove all XML/HTML tags but preserve their text content
+        text = re.sub(r'<[^>]+>', ' ', text)
+        
+        # Clean up multiple spaces and normalize whitespace
+        text = re.sub(r'\s+', ' ', text)
+        text = re.sub(r'\n\s*\n', '\n\n', text)
+        
+        return text.strip()
+    except Exception as e:
+        print(f"Error stripping XML tags: {e}")
+        return text
+
+def detect_document_format(text: str) -> str:
+    """Detect if document is XML, HTML, or plain text"""
+    text_sample = text.strip()[:1000].lower()
+    
+    if text_sample.startswith('<?xml') or '<cfrdoc' in text_sample or '<code type=' in text_sample:
+        return 'xml'
+    elif '<html' in text_sample or '<body' in text_sample or '<div' in text_sample:
+        return 'html'
+    else:
+        return 'plain_text'
+
+def extract_general_legal_sections(text: str) -> List[Dict]:
+    """Extract legal sections using general patterns that work across document types"""
     legal_blocks = []
     
     try:
-        # Clean up the XML text first
-        xml_text = text.strip()
-        
-        # Handle common HTML/legal entities before parsing
-        xml_text = xml_text.replace('&sect;', '§')
-        xml_text = xml_text.replace('&nbsp;', ' ')
-        xml_text = xml_text.replace('&mdash;', '—')
-        xml_text = xml_text.replace('&ndash;', '–')
-        xml_text = xml_text.replace('&ldquo;', '"')
-        xml_text = xml_text.replace('&rdquo;', '"')
-        xml_text = xml_text.replace('&lsquo;', "'")
-        xml_text = xml_text.replace('&rsquo;', "'")
-        xml_text = xml_text.replace('&hellip;', '…')
-        
-        # Escape unescaped ampersands that are not part of valid XML entities
-        # This regex matches & that are NOT followed by valid entity patterns
-        import re
-        xml_text = re.sub(r'&(?!(?:amp|lt|gt|quot|apos|#\d+|#x[0-9a-fA-F]+);)', '&amp;', xml_text)
-        
-        # If it doesn't start with XML declaration, add a root wrapper
-        if not xml_text.startswith('<?xml') and not xml_text.startswith('<root'):
-            xml_text = f'<root>{xml_text}</root>'
-        
-        # Parse the XML
-        root = ET.fromstring(xml_text)
-        
-        # Find all code elements with type="Section"
-        sections = root.findall('.//code[@type="Section"]')
-        
-        for section in sections:
-            # Extract section number
-            number_elem = section.find('number')
-            section_number = number_elem.text.strip() if number_elem is not None and number_elem.text else ''
+        # Multiple comprehensive patterns for different legal document structures
+        patterns = [
+            # Federal regulations: "§ 100.1" or "Section 100.1"
+            r'(?:^|\n)\s*(?:§|Section)\s+(\d+(?:\.\d+)*)\s*([^\n]*?)\n(.*?)(?=(?:^|\n)\s*(?:§|Section)\s+\d+|\Z)',
             
-            # Extract section name/title
-            name_elem = section.find('name')
-            section_title = name_elem.text.strip() if name_elem is not None and name_elem.text else ''
+            # Parts and Subparts: "Part 100" or "Subpart A"
+            r'(?:^|\n)\s*((?:Part|Subpart)\s+[A-Z0-9]+)\s*[-–—]?\s*([^\n]*?)\n(.*?)(?=(?:^|\n)\s*(?:Part|Subpart)\s+[A-Z0-9]+|\Z)',
             
-            # Extract version if available
-            version_elem = section.find('version')
-            version = version_elem.text.strip() if version_elem is not None and version_elem.text else ''
+            # Numbered sections: "100.1" at start of line
+            r'(?:^|\n)\s*(\d+(?:\.\d+)+)\s+([^\n]*?)\n(.*?)(?=(?:^|\n)\s*\d+(?:\.\d+)+\s+|\Z)',
             
-            # Extract content
-            content_elem = section.find('content')
-            if content_elem is not None:
-                # Get all text content from the content element, including nested elements
-                content_text = ET.tostring(content_elem, encoding='unicode', method='text')
-                content_text = content_text.strip()
+            # Chapter/Title patterns: "Chapter I" or "Title 29"
+            r'(?:^|\n)\s*((?:Chapter|Title)\s+[IVXLCDM0-9]+)\s*[-–—]?\s*([^\n]*?)\n(.*?)(?=(?:^|\n)\s*(?:Chapter|Title)\s+[IVXLCDM0-9]+|\Z)',
+            
+            # Lettered subsections: "(a)" or "a."
+            r'(?:^|\n)\s*(?:\(([a-z])\)|(a-z)\.)\s+([^\n]*?)\n(.*?)(?=(?:^|\n)\s*(?:\([a-z]\)|[a-z]\.)\s+|\Z)',
+            
+            # Numbered subsections: "(1)" or "1."
+            r'(?:^|\n)\s*(?:\((\d+)\)|(\d+)\.)\s+([^\n]*?)\n(.*?)(?=(?:^|\n)\s*(?:\(\d+\)|\d+\.)\s+|\Z)',
+            
+            # Roman numeral subsections: "(i)" or "i."
+            r'(?:^|\n)\s*(?:\(([ivxlcdm]+)\)|([ivxlcdm]+)\.)\s+([^\n]*?)\n(.*?)(?=(?:^|\n)\s*(?:\([ivxlcdm]+\)|[ivxlcdm]+\.)\s+|\Z)',
+            
+            # Generic section headers (words followed by colon or dash)
+            r'(?:^|\n)\s*([A-Z][A-Za-z\s]+)[:–—]\s*([^\n]*?)\n(.*?)(?=(?:^|\n)\s*[A-Z][A-Za-z\s]+[:–—]|\Z)',
+        ]
+        
+        for pattern in patterns:
+            matches = list(re.finditer(pattern, text, re.DOTALL | re.MULTILINE | re.IGNORECASE))
+            if matches:
+                print(f"Found {len(matches)} matches using pattern for legal sections")
+                for match in matches:
+                    groups = match.groups()
+                    # Handle different group structures from different patterns
+                    if len(groups) >= 3:
+                        # Extract number (could be in different group positions)
+                        number = next((g for g in groups[:2] if g and g.strip()), 'Unknown')
+                        # Title is usually the last non-content group
+                        title = groups[-2] if len(groups) > 2 else ''
+                        # Content is always the last group
+                        content = groups[-1]
+                        
+                        if content and content.strip():
+                            legal_blocks.append({
+                                'number': number.strip(),
+                                'title': title.strip() if title else '',
+                                'content': content.strip(),
+                                'version': ''
+                            })
                 
-                if content_text and section_number:
-                    legal_blocks.append({
-                        'number': section_number,
-                        'title': section_title,
-                        'content': content_text,
-                        'version': version
-                    })
+                if legal_blocks:
+                    break  # Use the first pattern that finds matches
         
-        # If we found sections, return them
         if legal_blocks:
-            print(f"Successfully parsed {len(legal_blocks)} sections using enhanced XML parser")
+            print(f"Successfully extracted {len(legal_blocks)} sections using general patterns")
             return legal_blocks
             
-    except ET.ParseError as e:
-        print(f"Enhanced XML parsing failed: {e}")
     except Exception as e:
-        print(f"Unexpected error in enhanced XML parsing: {e}")
+        print(f"Error in general legal section extraction: {e}")
     
-    # Return empty list if XML parsing failed
-    print("Enhanced XML parsing failed, will fall back to regex patterns")
     return []
 
 def detect_jurisdiction(text: str) -> str:
@@ -90,16 +121,15 @@ def detect_jurisdiction(text: str) -> str:
     text_lower = text.lower()
     
     # Check for specific state indicators
-    if any(ny_term in text_lower for ny_term in ['new york', 'ny admin', 'nycrr', 'ny labor law']):
+    if any(fed_term in text_lower for fed_term in ['federal', 'cfr', 'code of federal regulations', 'usc', 'flsa', 'fmla', 'department of labor']):
+        return 'Federal'
+    elif any(ny_term in text_lower for ny_term in ['new york', 'ny admin', 'nycrr', 'ny labor law']):
         return 'NY'
     elif any(nj_term in text_lower for nj_term in ['new jersey', 'nj admin', 'njac', 'nj labor']):
         return 'NJ'
     elif any(ct_term in text_lower for ct_term in ['connecticut', 'ct admin', 'conn. gen. stat', 'ct labor']):
         return 'CT'
-    elif any(fed_term in text_lower for fed_term in ['federal', 'usc', 'cfr', 'flsa', 'fmla', 'department of labor']):
-        return 'Federal'
     else:
-        return 'Multi-State'
 
 def detect_law_type(text: str) -> str:
     """Detect type of legal document"""
@@ -219,54 +249,90 @@ class LegalSemanticChunker:
         """Extract metadata from any legal document format"""
         metadata = {}
         
-        # XML-based metadata
-        if match := re.search(r'statecd="([^"]+)"', text):
-            metadata['state'] = match.group(1)
-        if match := re.search(r'sessionyear="([^"]+)"', text):
-            metadata['year'] = match.group(1)
-        if match := re.search(r'<code type="Title"><number>([^<]+)</number><name>([^<]+)</name>', text):
-            metadata['title_number'] = match.group(1).strip()
-            metadata['title_name'] = match.group(2).strip()
+        # Detect document format first
+        doc_format = detect_document_format(text)
+        metadata['document_format'] = doc_format
         
-        # Plain text metadata patterns
-        if not metadata.get('state'):
-            # Look for state names or codes in various formats
+        # Federal document detection (CFR, USC, etc.)
+        federal_patterns = [
+            r'Code\s+of\s+Federal\s+Regulations',
+            r'CFR',
+            r'Title\s+(\d+)',
+            r'Federal\s+Register',
+            r'U\.S\.C\.',
+            r'United\s+States\s+Code'
+        ]
+        
+        is_federal = any(re.search(pattern, text, re.IGNORECASE) for pattern in federal_patterns)
+        
+        if is_federal:
+            metadata['jurisdiction'] = 'Federal'
+            # Extract title number for federal documents
+            if match := re.search(r'Title\s+(\d+)', text, re.IGNORECASE):
+                metadata['title_number'] = match.group(1)
+            elif match := re.search(r'TITLENUM>Title\s+(\d+)', text):
+                metadata['title_number'] = match.group(1)
+        else:
+            # State document detection
             state_patterns = [
                 r'(New Jersey|Connecticut|New York|NJ|CT|NY)\s+(Administrative|Admin)\s+Code',
                 r'State\s+of\s+(New Jersey|Connecticut|New York)',
-                r'(NJ|CT|NY)\s+Admin'
+                r'(NJ|CT|NY)\s+Admin',
+                r'N\.J\.A\.C\.',
+                r'NYCRR',
+                r'Conn\.\s+Agencies\s+Regs'
             ]
             for pattern in state_patterns:
                 if match := re.search(pattern, text, re.IGNORECASE):
                     state_map = {'New Jersey': 'NJ', 'Connecticut': 'CT', 'New York': 'NY'}
-                    metadata['state'] = state_map.get(match.group(1), match.group(1))
+                    found_state = match.group(1)
+                    metadata['jurisdiction'] = state_map.get(found_state, found_state)
                     break
         
         # Year detection
-        if not metadata.get('year'):
-            year_match = re.search(r'(20\d{2})', text)
-            if year_match:
-                metadata['year'] = year_match.group(1)
+        year_patterns = [
+            r'Revised\s+as\s+of\s+\w+\s+\d+,\s+(20\d{2})',
+            r'as\s+of\s+\w+\s+\d+,\s+(20\d{2})',
+            r'sessionyear="([^"]+)"',
+            r'(20\d{2})'
+        ]
+        for pattern in year_patterns:
+            if match := re.search(pattern, text, re.IGNORECASE):
+                metadata['year'] = match.group(1)
+                break
         
         # Title detection
-        if not metadata.get('title_number'):
+        if not metadata.get('title_number') and not is_federal:
             title_patterns = [
                 r'Title\s+(\d+)',
                 r'TITLE\s+(\d+)',
-                r'title0*(\d+)'
+                r'title0*(\d+)',
+                r'<code type="Title"><number>([^<]+)</number>'
             ]
             for pattern in title_patterns:
                 if match := re.search(pattern, text, re.IGNORECASE):
                     metadata['title_number'] = match.group(1)
                     break
         
+        # Document name/subject detection
+        name_patterns = [
+            r'<SUBJECT>([^<]+)</SUBJECT>',
+            r'SUBJECT>([^<]+)',
+            r'<name>([^<]+)</name>',
+            r'Subject:\s*([^\n]+)'
+        ]
+        for pattern in name_patterns:
+            if match := re.search(pattern, text, re.IGNORECASE):
+                metadata['document_name'] = match.group(1).strip()
+                break
+        
         # Document status detection
         metadata['document_status'] = self._detect_document_status(text)
         
         # Set defaults
-        metadata.setdefault('state', 'Unknown')
+        metadata.setdefault('jurisdiction', 'Unknown')
         metadata.setdefault('year', '2025')
-        metadata.setdefault('title_number', '12')
+        metadata.setdefault('title_number', 'Unknown')
         
         return metadata
 
@@ -291,47 +357,24 @@ class LegalSemanticChunker:
     def _extract_legal_content(self, text: str) -> List[Dict]:
         """Extract pure legal content, filtering XML but preserving structure"""
         
-        # First, try robust XML parsing for structured legal documents
-        xml_blocks = robust_xml_parse(text)
-        if xml_blocks:
-            print(f"Successfully parsed {len(xml_blocks)} sections using XML parser")
-            return xml_blocks
+        # Detect document format
+        doc_format = detect_document_format(text)
         
-        print("XML parsing failed or no sections found, falling back to regex patterns")
+        # If it's XML or HTML, strip tags to get clean text
+        if doc_format in ['xml', 'html']:
+            print(f"Detected {doc_format} document, stripping tags for clean text processing")
+            clean_text = strip_xml_tags(text)
+        else:
+            print("Processing plain text document")
+            clean_text = text
         
-        # Remove XML declaration and DTD
-        content = re.sub(r'<\?xml[^>]*\?>', '', text)
-        content = re.sub(r'<!DOCTYPE[^>]*>', '', content)
+        # Try to extract structured legal sections
+        legal_blocks = extract_general_legal_sections(clean_text)
         
-        legal_blocks = []
-        
-        # Multiple patterns to handle different legal document formats
-        patterns = [
-            # XML Section pattern (CT, NJ, etc.)
-            r'<code type="Section"><number>([^<]+)</number>(?:<version>([^<]+)</version>)?<name>([^<]+)</name><content>(.*?)</content>\s*</code>',
-            # Alternative XML pattern
-            r'<number>([^<]+)</number>.*?<name>([^<]+)</name>.*?<content>(.*?)</content>',
-            # Plain text section patterns
-            r'Section\s+(\d+[.\-\w]*)[:\.]?\s*([^\n]+)\n(.*?)(?=Section\s+\d+|\Z)',
-            r'§\s*(\d+[.\-\w]*)[:\.]?\s*([^\n]+)\n(.*?)(?=§\s*\d+|\Z)',
-            # Numbered regulations
-            r'^(\d+[.\-\w]*)\.\s*([^\n]+)\n(.*?)(?=^\d+[.\-\w]*\.|\Z)',
-        ]
-        
-        for pattern in patterns:
-            matches = re.finditer(pattern, content, re.DOTALL | re.MULTILINE | re.IGNORECASE)
-            for match in matches:
-                groups = match.groups()
-                legal_blocks.append({
-                    'number': groups[0].strip() if groups[0] else '',
-                    'title': groups[-2].strip() if len(groups) > 2 else groups[1].strip() if len(groups) > 1 else '',
-                     'content': self._clean_legal_text(groups[-1]),
-                     'version': groups[1].strip() if len(groups) > 3 and groups[1] else ''
-                })
-        
-        # If no structured content found, try to extract meaningful text blocks
+        # If no structured sections found, fall back to paragraph-based chunking
         if not legal_blocks:
-            paragraphs = [p.strip() for p in content.split('\n\n') if p.strip()]
+            print("No structured sections found, using paragraph-based chunking")
+            paragraphs = [p.strip() for p in clean_text.split('\n\n') if p.strip()]
             for i, para in enumerate(paragraphs):
                 if self._has_legal_significance(para):
                     legal_blocks.append({
@@ -340,6 +383,10 @@ class LegalSemanticChunker:
                         'content': self._clean_legal_text(para),
                         'version': ''
                     })
+        else:
+            # Clean the content of extracted sections
+            for block in legal_blocks:
+                block['content'] = self._clean_legal_text(block['content'])
         
         return legal_blocks
 
@@ -588,11 +635,15 @@ class LegalSemanticChunker:
                 'subsection_index': chunk['subsection_index'],
                 'semantic_type': chunk['semantic_type'],
                 'version': chunk.get('version', ''),
-                'jurisdiction': detect_jurisdiction(chunk['text']),
+                'jurisdiction': doc_metadata.get('jurisdiction', detect_jurisdiction(chunk['text'])),
                 'law_type': detect_law_type(chunk['text']),
                 'industry_specific': detect_industry_specific(chunk['text']),
                 'federal_vs_state': classify_federal_state(chunk['text']),
-                'complexity_level': assess_content_complexity(chunk['text'])
+                'complexity_level': assess_content_complexity(chunk['text']),
+                'document_format': doc_metadata.get('document_format', 'unknown'),
+                'document_name': doc_metadata.get('document_name', ''),
+                'year': doc_metadata.get('year', '2025'),
+                'title_number': doc_metadata.get('title_number', 'Unknown')
             }
             
             # Create final chunk data separately
@@ -609,17 +660,23 @@ class LegalSemanticChunker:
 
     def _create_citation(self, doc_metadata: Dict[str, str], section_number: str) -> str:
         """Create precise legal citation"""
-        state = doc_metadata.get('state', 'Unknown')
+        jurisdiction = doc_metadata.get('jurisdiction', 'Unknown')
         year = doc_metadata.get('year', '2025')
+        title_number = doc_metadata.get('title_number', 'Unknown')
         
-        if state == 'NY':
+        if jurisdiction == 'Federal':
+            if title_number != 'Unknown':
+                return f"{title_number} CFR § {section_number}"
+            else:
+                return f"CFR § {section_number} ({year})"
+        elif jurisdiction == 'NY':
             return f"12 NYCRR § {section_number}"
-        elif state == 'NJ':
+        elif jurisdiction == 'NJ':
             return f"N.J.A.C. § {section_number}"
-        elif state == 'CT':
+        elif jurisdiction == 'CT':
             return f"Conn. Agencies Regs. § {section_number}"
-        elif state != 'Unknown':
-            return f"{state} Admin. Code § {section_number} ({year})"
+        elif jurisdiction != 'Unknown':
+            return f"{jurisdiction} Admin. Code § {section_number} ({year})"
         else:
             return f"Admin. Code § {section_number} ({year})"
 
