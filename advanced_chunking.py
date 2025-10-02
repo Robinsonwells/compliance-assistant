@@ -270,6 +270,24 @@ class LegalSemanticChunker:
         
         return metadata
 
+    def _detect_document_status(self, text: str) -> str:
+        """Detect document status from legal text"""
+        text_lower = text.lower()
+        
+        # Check for explicit status indicators
+        if any(indicator in text_lower for indicator in ['repealed', 'revoked', 'rescinded']):
+            return 'repealed'
+        elif any(indicator in text_lower for indicator in ['proposed', 'draft']):
+            return 'proposed'
+        elif any(indicator in text_lower for indicator in ['withdrawn', 'retracted']):
+            return 'proposed_withdrawn'
+        elif any(indicator in text_lower for indicator in ['reserved', 'placeholder']):
+            return 'reserved'
+        elif any(indicator in text_lower for indicator in ['effective', 'current', 'in force']):
+            return 'current'
+        else:
+            # Default to current if no specific status indicators found
+            return 'current'
     def _extract_legal_content(self, text: str) -> List[Dict]:
         """Extract pure legal content, filtering XML but preserving structure"""
         
