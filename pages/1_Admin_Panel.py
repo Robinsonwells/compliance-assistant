@@ -357,7 +357,32 @@ def process_uploaded_file(uploaded_file, chunker, qdrant_client, embedding_model
         
         # Check if this exact file content has already been processed
         try:
-            # First check if any chunks exist for this file
+            # Check if chunks with this exact content hash already exist
+            existing_with_hash = qdrant_client.scroll(
+                collection_name="legal_regulations",
+                scroll_filter=Filter(
+                    must=[
+                        FieldCondition(
+                            key="source_file",
+                            match=MatchValue(value=uploaded_file.name)
+                        ),
+                        FieldCondition(
+                            key="content_hash",
+                            match=MatchValue(value=content_hash)
+                        )
+                    ]
+                ),
+                limit=1,
+                with_payload=False,
+                with_vectors=False
+            )
+            
+            if existing_with_hash[0]:  # If identical content exists
+                if status_text:
+                    status_text.warning(f"⏭️ Skipping {uploaded_file.name} - identical content already processed")
+                return True, f"Skipped {uploaded_file.name} - already processed with same content", content_hash
+            
+            # Check if there are chunks with same filename but different content
             existing_chunks = qdrant_client.scroll(
                 collection_name="legal_regulations",
                 scroll_filter=Filter(
@@ -373,51 +398,26 @@ def process_uploaded_file(uploaded_file, chunker, qdrant_client, embedding_model
                 with_vectors=False
             )
             
-            if existing_chunks[0]:  # If any chunks exist for this filename
-                # Now check if the content hash matches
-                existing_with_hash = qdrant_client.scroll(
+            if existing_chunks[0]:  # If chunks exist with same filename but different content
+                if status_text:
+                    status_text.info(f"🔄 Found existing chunks for {uploaded_file.name} with different content - replacing...")
+                
+                # Delete existing chunks for this filename
+                qdrant_client.delete(
                     collection_name="legal_regulations",
-                    scroll_filter=Filter(
+                    points_selector=Filter(
                         must=[
                             FieldCondition(
                                 key="source_file",
                                 match=MatchValue(value=uploaded_file.name)
-                            ),
-                            FieldCondition(
-                                key="content_hash",
-                                match=MatchValue(value=content_hash)
                             )
                         ]
-                    ),
-                    limit=1,
-                    with_payload=False,
-                    with_vectors=False
+                    )
                 )
                 
-                if existing_with_hash[0]:  # If identical content exists
-                    if status_text:
-                        status_text.warning(f"⏭️ Skipping {uploaded_file.name} - identical content already processed")
-                    return True, f"Skipped {uploaded_file.name} - already processed with same content", content_hash
-                else:
-                    # Same filename but different content - delete old chunks first
-                    if status_text:
-                        status_text.info(f"🔄 Found existing chunks for {uploaded_file.name} with different content - replacing...")
+                if status_text:
+                    status_text.success(f"✅ Deleted old chunks for {uploaded_file.name}")
                     
-                    # Delete existing chunks for this filename
-                    qdrant_client.delete(
-                        collection_name="legal_regulations",
-                        points_selector=Filter(
-                            must=[
-                                FieldCondition(
-                                    key="source_file",
-                                    match=MatchValue(value=uploaded_file.name)
-                                )
-                            ]
-                        )
-                    )
-                    
-                    if status_text:
-                        status_text.success(f"✅ Deleted old chunks for {uploaded_file.name}")
         except Exception as e:
             # If check fails, continue with processing
             if status_text:
