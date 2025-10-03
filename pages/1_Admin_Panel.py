@@ -355,17 +355,12 @@ def process_uploaded_file(uploaded_file, chunker, qdrant_client, embedding_model
         if status_text:
             status_text.info(f"🔍 Checking if {uploaded_file.name} has already been processed...")
         
-        # Check if this exact file content has already been processed
+        # Check for existing chunks with this exact content hash
         try:
-            # Check if chunks with this exact content hash already exist
-            existing_with_hash = qdrant_client.scroll(
+            existing_result = qdrant_client.scroll(
                 collection_name="legal_regulations",
                 scroll_filter=Filter(
                     must=[
-                        FieldCondition(
-                            key="source_file",
-                            match=MatchValue(value=uploaded_file.name)
-                        ),
                         FieldCondition(
                             key="content_hash",
                             match=MatchValue(value=content_hash)
@@ -373,17 +368,28 @@ def process_uploaded_file(uploaded_file, chunker, qdrant_client, embedding_model
                     ]
                 ),
                 limit=1,
-                with_payload=False,
+                with_payload=True,
                 with_vectors=False
             )
             
-            if existing_with_hash[0]:  # If identical content exists
-                if status_text:
-                    status_text.warning(f"⏭️ Skipping {uploaded_file.name} - identical content already processed")
-                return True, f"Skipped {uploaded_file.name} - already processed with same content", content_hash
+            existing_points, _ = existing_result
+            
+            if existing_points:
+                # Found chunks with identical content hash
+                existing_filename = existing_points[0].payload.get('source_file', 'unknown')
+                if existing_filename == uploaded_file.name:
+                    # Same file, same content - true duplicate
+                    if status_text:
+                        status_text.warning(f"⏭️ Skipping {uploaded_file.name} - identical content already processed")
+                    return True, f"Skipped {uploaded_file.name} - already processed with same content", content_hash
+                else:
+                    # Different filename but same content - still a duplicate
+                    if status_text:
+                        status_text.warning(f"⏭️ Skipping {uploaded_file.name} - identical content exists as {existing_filename}")
+                    return True, f"Skipped {uploaded_file.name} - identical content exists as {existing_filename}", content_hash
             
             # Check if there are chunks with same filename but different content
-            existing_chunks = qdrant_client.scroll(
+            filename_result = qdrant_client.scroll(
                 collection_name="legal_regulations",
                 scroll_filter=Filter(
                     must=[
@@ -398,7 +404,10 @@ def process_uploaded_file(uploaded_file, chunker, qdrant_client, embedding_model
                 with_vectors=False
             )
             
-            if existing_chunks[0]:  # If chunks exist with same filename but different content
+            filename_points, _ = filename_result
+            
+            if filename_points:
+                # Same filename but different content - replace the old version
                 if status_text:
                     status_text.info(f"🔄 Found existing chunks for {uploaded_file.name} with different content - replacing...")
                 
@@ -419,9 +428,11 @@ def process_uploaded_file(uploaded_file, chunker, qdrant_client, embedding_model
                     status_text.success(f"✅ Deleted old chunks for {uploaded_file.name}")
                     
         except Exception as e:
-            # If check fails, continue with processing
+            # If duplicate check fails, log warning but continue with processing
             if status_text:
-                status_text.warning(f"Could not check for duplicates, proceeding with upload: {e}")
+                status_text.warning(f"⚠️ Could not check for duplicates: {e}")
+            print(f"Duplicate check error for {uploaded_file.name}: {e}")
+            # Continue with processing - don't skip the file
         
         if progress_bar:
             progress_bar.progress(10)
