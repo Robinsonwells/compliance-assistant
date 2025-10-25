@@ -95,27 +95,7 @@ def calculate_content_hash(text: str) -> str:
 def is_document_already_processed(filename: str, content_hash: str) -> bool:
     """Check if document with same filename and content hash already exists in Qdrant"""
     try:
-        # Search for points with matching filename AND content hash
-        search_result = qdrant_client.scroll(
-            collection_name="legal_regulations",
-            scroll_filter=Filter(
-                must=[
-                    FieldCondition(key="source_file", match=MatchValue(value=filename)),
-                    FieldCondition(key="content_hash", match=MatchValue(value=content_hash))
-                ]
-            ),
-            limit=1,
-            with_payload=True,
-            with_vectors=False
-        )
-        
-        points, _ = search_result
-        
-        # If we found any points, the document is already processed
-        if points:
-            return True
-        
-        # Double-check by counting points with this filename and hash
+        # Use count method for more efficient existence check
         count_result = qdrant_client.count(
             collection_name="legal_regulations",
             count_filter=Filter(
@@ -126,48 +106,83 @@ def is_document_already_processed(filename: str, content_hash: str) -> bool:
             )
         )
         
-        return count_result.count > 0
+        document_exists = count_result.count > 0
+        
+        if document_exists:
+            st.info(f"📋 Found {count_result.count} existing chunks for {filename} with matching content hash")
+        
+        return document_exists
         
     except Exception as e:
-        st.error(f"Error checking if document exists: {e}")
+        st.warning(f"⚠️ Error checking if document exists: {e}")
         # If we can't check, assume it's not processed to avoid blocking uploads
         return False
 
 def delete_document_from_qdrant(filename: str) -> bool:
     """Delete all chunks of a document from Qdrant"""
     try:
-        # Get all points for this document first
-        scroll_result = qdrant_client.scroll(
-            collection_name="legal_regulations",
-            scroll_filter=Filter(
-                must=[FieldCondition(key="source_file", match=MatchValue(value=filename))]
-            ),
-            limit=10000,  # Large limit to get all points
-            with_payload=False,
-            with_vectors=False
-        )
+        # Get all points for this document using proper pagination
+        all_point_ids = []
+        next_page_offset = None
         
-        points, _ = scroll_result
+        while True:
+            scroll_result = qdrant_client.scroll(
+                collection_name="legal_regulations",
+                scroll_filter=Filter(
+                    must=[FieldCondition(key="source_file", match=MatchValue(value=filename))]
+                ),
+                limit=1000,  # Process in smaller batches for better memory management
+                offset=next_page_offset,
+                with_payload=False,
+                with_vectors=False
+            )
+            
+            points, next_page_offset = scroll_result
+            
+            if not points:
+                break  # No more points to process
+            
+            # Extract point IDs from this batch
+            batch_point_ids = [point.id for point in points]
+            all_point_ids.extend(batch_point_ids)
+            
+            # If no next page offset, we've processed all points
+            if next_page_offset is None:
+                break
         
-        if not points:
+        if not all_point_ids:
             return True  # No points to delete
-        
-        # Extract point IDs
-        point_ids = [point.id for point in points]
         
         # Delete points in batches
         batch_size = 100
-        for i in range(0, len(point_ids), batch_size):
-            batch_ids = point_ids[i:i + batch_size]
+        deleted_count = 0
+        
+        for i in range(0, len(all_point_ids), batch_size):
+            batch_ids = all_point_ids[i:i + batch_size]
             qdrant_client.delete(
                 collection_name="legal_regulations",
                 points_selector=batch_ids
             )
+            deleted_count += len(batch_ids)
         
+        # Verify deletion was successful
+        remaining_count = qdrant_client.count(
+            collection_name="legal_regulations",
+            count_filter=Filter(
+                must=[FieldCondition(key="source_file", match=MatchValue(value=filename))]
+            )
+        ).count
+        
+        if remaining_count > 0:
+            st.warning(f"⚠️ Warning: {remaining_count} chunks of {filename} may still remain in database")
+            return False
+        
+        st.info(f"🗑️ Successfully deleted {deleted_count} chunks from {filename}")
         return True
         
     except Exception as e:
         st.error(f"Error deleting document from Qdrant: {e}")
+        st.error(f"Traceback: {traceback.format_exc()}")
         return False
 
 def get_uploaded_documents() -> List[Dict[str, Any]]:
@@ -218,21 +233,31 @@ def process_and_upload_document(file_content: str, filename: str) -> bool:
         # Calculate content hash for the entire document
         content_hash = calculate_content_hash(file_content)
         
+        st.info(f"🔍 Checking if {filename} already exists...")
+        st.info(f"📊 Content hash: {content_hash[:16]}...")
+        
         # Check if this exact document (same content) already exists
         if is_document_already_processed(filename, content_hash):
             st.warning(f"⏭️ Skipped {filename} - already processed with same content")
             return False
         
+        st.info(f"✅ {filename} is new - proceeding with processing...")
+        
         # Process the document using legal chunker
+        st.info(f"🔄 Processing {filename} into semantic chunks...")
         chunks = legal_chunker.legal_aware_chunking(file_content, max_chunk_size=1200)
         
         if not chunks:
             st.error(f"❌ No valid chunks extracted from {filename}")
             return False
         
+        st.info(f"📝 Extracted {len(chunks)} chunks from {filename}")
+        
         # Generate embeddings and upload to Qdrant
         points = []
         upload_date = datetime.now().isoformat()
+        
+        st.info(f"🧠 Generating embeddings for {len(chunks)} chunks...")
         
         for i, chunk in enumerate(chunks):
             try:
@@ -262,6 +287,8 @@ def process_and_upload_document(file_content: str, filename: str) -> bool:
             st.error(f"❌ No valid points created for {filename}")
             return False
         
+        st.info(f"📤 Uploading {len(points)} points to Qdrant...")
+        
         # Upload to Qdrant in batches
         batch_size = 100
         total_uploaded = 0
@@ -274,12 +301,26 @@ def process_and_upload_document(file_content: str, filename: str) -> bool:
                     points=batch
                 )
                 total_uploaded += len(batch)
+                st.info(f"📊 Uploaded batch {i//batch_size + 1}/{(len(points)-1)//batch_size + 1}")
             except Exception as e:
                 st.error(f"Error uploading batch {i//batch_size + 1}: {e}")
                 continue
         
         if total_uploaded > 0:
             st.success(f"✅ Successfully uploaded {filename} ({total_uploaded} chunks)")
+            
+            # Verify upload was successful
+            verify_count = qdrant_client.count(
+                collection_name="legal_regulations",
+                count_filter=Filter(
+                    must=[
+                        FieldCondition(key="source_file", match=MatchValue(value=filename)),
+                        FieldCondition(key="content_hash", match=MatchValue(value=content_hash))
+                    ]
+                )
+            ).count
+            
+            st.info(f"✅ Verification: {verify_count} chunks confirmed in database")
             return True
         else:
             st.error(f"❌ Failed to upload any chunks from {filename}")
