@@ -75,6 +75,32 @@ def ensure_collection_exists():
     try:
         # Try to get collection info
         collection_info = qdrant_client.get_collection(collection_name)
+        
+        # Ensure payload indexes exist for efficient querying
+        try:
+            from qdrant_client.models import PayloadSchemaType
+            
+            # Create index for source_file field
+            qdrant_client.create_payload_index(
+                collection_name=collection_name,
+                field_name="source_file",
+                field_schema=PayloadSchemaType.KEYWORD
+            )
+            st.info("✅ Created/verified source_file payload index")
+            
+            # Create index for content_hash field
+            qdrant_client.create_payload_index(
+                collection_name=collection_name,
+                field_name="content_hash",
+                field_schema=PayloadSchemaType.KEYWORD
+            )
+            st.info("✅ Created/verified content_hash payload index")
+            
+        except Exception as index_error:
+            # Indexes might already exist, which is fine
+            if "already exists" not in str(index_error).lower():
+                st.warning(f"⚠️ Could not create payload indexes: {index_error}")
+        
         return True
     except Exception:
         # Collection doesn't exist, create it
@@ -83,6 +109,30 @@ def ensure_collection_exists():
                 collection_name=collection_name,
                 vectors_config=VectorParams(size=384, distance=Distance.COSINE),
             )
+            
+            # Create payload indexes for the new collection
+            try:
+                from qdrant_client.models import PayloadSchemaType
+                
+                # Create index for source_file field
+                qdrant_client.create_payload_index(
+                    collection_name=collection_name,
+                    field_name="source_file",
+                    field_schema=PayloadSchemaType.KEYWORD
+                )
+                st.info("✅ Created source_file payload index for new collection")
+                
+                # Create index for content_hash field
+                qdrant_client.create_payload_index(
+                    collection_name=collection_name,
+                    field_name="content_hash",
+                    field_schema=PayloadSchemaType.KEYWORD
+                )
+                st.info("✅ Created content_hash payload index for new collection")
+                
+            except Exception as index_error:
+                st.warning(f"⚠️ Could not create payload indexes for new collection: {index_error}")
+            
             return True
         except Exception as e:
             st.error(f"Failed to create collection: {e}")
@@ -95,6 +145,9 @@ def calculate_content_hash(text: str) -> str:
 def is_document_already_processed(filename: str, content_hash: str) -> bool:
     """Check if document with same filename and content hash already exists in Qdrant"""
     try:
+        st.info(f"🔍 Checking for existing document: {filename}")
+        st.info(f"📊 Looking for content hash: {content_hash[:16]}...")
+        
         # Use count method for more efficient existence check
         count_result = qdrant_client.count(
             collection_name="legal_regulations",
@@ -108,14 +161,20 @@ def is_document_already_processed(filename: str, content_hash: str) -> bool:
         
         document_exists = count_result.count > 0
         
+        st.info(f"📈 Found {count_result.count} existing chunks with matching filename and content hash")
+        st.info(f"🎯 Document exists check result: {document_exists}")
+        
         if document_exists:
             st.info(f"📋 Found {count_result.count} existing chunks for {filename} with matching content hash")
         
         return document_exists
         
     except Exception as e:
+        st.error(f"❌ Error checking if document exists: {e}")
+        st.error(f"🔧 Traceback: {traceback.format_exc()}")
         st.warning(f"⚠️ Error checking if document exists: {e}")
         # If we can't check, assume it's not processed to avoid blocking uploads
+        st.info("🚨 Defaulting to 'not processed' due to error - allowing upload to proceed")
         return False
 
 def delete_document_from_qdrant(filename: str) -> bool:
@@ -237,9 +296,13 @@ def process_and_upload_document(file_content: str, filename: str) -> bool:
         st.info(f"📊 Content hash: {content_hash[:16]}...")
         
         # Check if this exact document (same content) already exists
+        st.info(f"🔄 Calling is_document_already_processed for {filename}...")
         if is_document_already_processed(filename, content_hash):
+            st.info(f"⏭️ Document check returned TRUE - skipping {filename}")
             st.warning(f"⏭️ Skipped {filename} - already processed with same content")
             return False
+        else:
+            st.info(f"✅ Document check returned FALSE - proceeding with {filename}")
         
         st.info(f"✅ {filename} is new - proceeding with processing...")
         
@@ -248,6 +311,9 @@ def process_and_upload_document(file_content: str, filename: str) -> bool:
         chunks = legal_chunker.legal_aware_chunking(file_content, max_chunk_size=1200)
         
         if not chunks:
+            st.error(f"❌ No valid chunks extracted from {filename} - this is unusual")
+            st.info(f"📝 File content length: {len(file_content)} characters")
+            st.info(f"📝 File content preview: {file_content[:200]}...")
             st.error(f"❌ No valid chunks extracted from {filename}")
             return False
         
@@ -280,10 +346,14 @@ def process_and_upload_document(file_content: str, filename: str) -> bool:
                 points.append(point)
                 
             except Exception as e:
+                st.error(f"❌ Error processing chunk {i} from {filename}: {e}")
+                st.error(f"🔧 Chunk content preview: {chunk.get('text', 'No text')[:100]}...")
                 st.error(f"Error processing chunk {i} from {filename}: {e}")
                 continue
         
         if not points:
+            st.error(f"❌ No valid points created for {filename} - this indicates a serious issue")
+            st.info(f"📊 Original chunks count: {len(chunks)}")
             st.error(f"❌ No valid points created for {filename}")
             return False
         
@@ -296,6 +366,7 @@ def process_and_upload_document(file_content: str, filename: str) -> bool:
         for i in range(0, len(points), batch_size):
             batch = points[i:i + batch_size]
             try:
+                st.info(f"📤 Uploading batch {i//batch_size + 1}/{(len(points)-1)//batch_size + 1} ({len(batch)} points)")
                 qdrant_client.upsert(
                     collection_name="legal_regulations",
                     points=batch
@@ -303,6 +374,8 @@ def process_and_upload_document(file_content: str, filename: str) -> bool:
                 total_uploaded += len(batch)
                 st.info(f"📊 Uploaded batch {i//batch_size + 1}/{(len(points)-1)//batch_size + 1}")
             except Exception as e:
+                st.error(f"❌ Error uploading batch {i//batch_size + 1}: {e}")
+                st.error(f"🔧 Batch size: {len(batch)}, Batch preview: {[p.id for p in batch[:3]]}")
                 st.error(f"Error uploading batch {i//batch_size + 1}: {e}")
                 continue
         
@@ -310,6 +383,7 @@ def process_and_upload_document(file_content: str, filename: str) -> bool:
             st.success(f"✅ Successfully uploaded {filename} ({total_uploaded} chunks)")
             
             # Verify upload was successful
+            st.info(f"🔍 Verifying upload success for {filename}...")
             verify_count = qdrant_client.count(
                 collection_name="legal_regulations",
                 count_filter=Filter(
@@ -321,14 +395,23 @@ def process_and_upload_document(file_content: str, filename: str) -> bool:
             ).count
             
             st.info(f"✅ Verification: {verify_count} chunks confirmed in database")
+            
+            if verify_count != total_uploaded:
+                st.warning(f"⚠️ Verification mismatch: uploaded {total_uploaded} but found {verify_count}")
+            else:
+                st.success(f"🎯 Perfect match: {verify_count} chunks uploaded and verified")
+            
             return True
         else:
+            st.error(f"❌ Failed to upload any chunks from {filename} - total_uploaded = {total_uploaded}")
             st.error(f"❌ Failed to upload any chunks from {filename}")
             return False
             
     except Exception as e:
         st.error(f"❌ Error processing {filename}: {e}")
         st.error(f"Traceback: {traceback.format_exc()}")
+        st.error(f"🔧 File content length: {len(file_content) if file_content else 'None'}")
+        st.error(f"🔧 Content hash: {content_hash if 'content_hash' in locals() else 'Not calculated'}")
         return False
 
 def search_legal_database(query: str, limit: int = 5) -> List[Dict[str, Any]]:
