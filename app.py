@@ -603,9 +603,8 @@ def show_knowledge_base():
             st.rerun()
 
     # Only show process button if there are new files and not currently processing
-    elif new_files and not st.session_state.is_processing:
+    elif new_files and not st.session_state.is_processing and not st.session_state.processing_complete:
         if st.button("🚀 Process Documents", use_container_width=True):
-            st.session_state.is_processing = True
             progress_bar = st.progress(0)
             status_text = st.empty()
 
@@ -628,7 +627,7 @@ def show_knowledge_base():
                     # Process and upload
                     if process_and_upload_document(file_content, uploaded_file.name):
                         successful_uploads += 1
-                        # Mark this file as processed
+                        # Mark this file as processed IMMEDIATELY
                         file_id = f"{uploaded_file.name}_{uploaded_file.size}"
                         st.session_state.processed_file_ids.add(file_id)
 
@@ -641,11 +640,8 @@ def show_knowledge_base():
 
             if successful_uploads > 0:
                 st.success(f"🎉 Successfully processed {successful_uploads} documents!")
-
-            # Mark processing as complete and reset processing flag
-            st.session_state.is_processing = False
-            st.session_state.processing_complete = True
-            st.rerun()
+                # Mark processing as complete - this prevents the button from showing again
+                st.session_state.processing_complete = True
 
     elif uploaded_files and not new_files and not st.session_state.processing_complete:
         st.info("ℹ️ These files have already been processed in this session. Clear to upload more.")
