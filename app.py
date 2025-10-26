@@ -139,43 +139,8 @@ def ensure_collection_exists():
             return False
 
 def calculate_content_hash(text: str) -> str:
-    """Calculate SHA-256 hash of content for deduplication"""
+    """Calculate SHA-256 hash of content for tracking purposes"""
     return hashlib.sha256(text.encode('utf-8')).hexdigest()
-
-def is_document_already_processed(filename: str, content_hash: str) -> bool:
-    """Check if document with same filename and content hash already exists in Qdrant"""
-    try:
-        st.info(f"🔍 Checking for existing document: {filename}")
-        st.info(f"📊 Looking for content hash: {content_hash[:16]}...")
-        
-        # Use count method for more efficient existence check
-        count_result = qdrant_client.count(
-            collection_name="legal_regulations",
-            count_filter=Filter(
-                must=[
-                    FieldCondition(key="source_file", match=MatchValue(value=filename)),
-                    FieldCondition(key="content_hash", match=MatchValue(value=content_hash))
-                ]
-            )
-        )
-        
-        document_exists = count_result.count > 0
-        
-        st.info(f"📈 Found {count_result.count} existing chunks with matching filename and content hash")
-        st.info(f"🎯 Document exists check result: {document_exists}")
-        
-        if document_exists:
-            st.info(f"📋 Found {count_result.count} existing chunks for {filename} with matching content hash")
-        
-        return document_exists
-        
-    except Exception as e:
-        st.error(f"❌ Error checking if document exists: {e}")
-        st.error(f"🔧 Traceback: {traceback.format_exc()}")
-        st.warning(f"⚠️ Error checking if document exists: {e}")
-        # If we can't check, assume it's not processed to avoid blocking uploads
-        st.info("🚨 Defaulting to 'not processed' due to error - allowing upload to proceed")
-        return False
 
 def delete_document_from_qdrant(filename: str) -> bool:
     """Delete all chunks of a document from Qdrant"""
@@ -287,24 +252,12 @@ def get_uploaded_documents() -> List[Dict[str, Any]]:
         return []
 
 def process_and_upload_document(file_content: str, filename: str) -> bool:
-    """Process document and upload to Qdrant with improved duplicate detection"""
+    """Process document and upload to Qdrant"""
     try:
-        # Calculate content hash for the entire document
+        # Calculate content hash for tracking purposes
         content_hash = calculate_content_hash(file_content)
-        
-        st.info(f"🔍 Checking if {filename} already exists...")
-        st.info(f"📊 Content hash: {content_hash[:16]}...")
-        
-        # Check if this exact document (same content) already exists
-        st.info(f"🔄 Calling is_document_already_processed for {filename}...")
-        if is_document_already_processed(filename, content_hash):
-            st.info(f"⏭️ Document check returned TRUE - skipping {filename}")
-            st.warning(f"⏭️ Skipped {filename} - already processed with same content")
-            return False
-        else:
-            st.info(f"✅ Document check returned FALSE - proceeding with {filename}")
-        
-        st.info(f"✅ {filename} is new - proceeding with processing...")
+
+        st.info(f"📄 Processing {filename}...")
         
         # Process the document using legal chunker
         st.info(f"🔄 Processing {filename} into semantic chunks...")
@@ -381,26 +334,6 @@ def process_and_upload_document(file_content: str, filename: str) -> bool:
         
         if total_uploaded > 0:
             st.success(f"✅ Successfully uploaded {filename} ({total_uploaded} chunks)")
-            
-            # Verify upload was successful
-            st.info(f"🔍 Verifying upload success for {filename}...")
-            verify_count = qdrant_client.count(
-                collection_name="legal_regulations",
-                count_filter=Filter(
-                    must=[
-                        FieldCondition(key="source_file", match=MatchValue(value=filename)),
-                        FieldCondition(key="content_hash", match=MatchValue(value=content_hash))
-                    ]
-                )
-            ).count
-            
-            st.info(f"✅ Verification: {verify_count} chunks confirmed in database")
-            
-            if verify_count != total_uploaded:
-                st.warning(f"⚠️ Verification mismatch: uploaded {total_uploaded} but found {verify_count}")
-            else:
-                st.success(f"🎯 Perfect match: {verify_count} chunks uploaded and verified")
-            
             return True
         else:
             st.error(f"❌ Failed to upload any chunks from {filename} - total_uploaded = {total_uploaded}")
