@@ -348,6 +348,144 @@ def process_and_upload_document(file_content: str, filename: str) -> bool:
         st.error(f"🔧 Content hash: {content_hash if 'content_hash' in locals() else 'Not calculated'}")
         return False
 
+def process_and_upload_document_with_progress(file_content: str, filename: str, progress_bar, status_text) -> bool:
+    """Process document and upload to Qdrant with enhanced progress tracking"""
+    try:
+        # Calculate content hash for tracking purposes
+        content_hash = calculate_content_hash(file_content)
+        
+        status_text.text(f"📄 Analyzing {filename}...")
+        progress_bar.progress(0.1)
+        
+        # Process the document using legal chunker
+        status_text.text(f"🔄 Extracting semantic chunks from {filename}...")
+        chunks = legal_chunker.legal_aware_chunking(file_content, max_chunk_size=1200)
+        
+        if not chunks:
+            st.error(f"❌ No valid chunks extracted from {filename}")
+            st.info(f"📝 File content length: {len(file_content)} characters")
+            st.info(f"📝 File content preview: {file_content[:200]}...")
+            return False
+        
+        progress_bar.progress(0.2)
+        status_text.text(f"📝 Extracted {len(chunks)} chunks from {filename}")
+        
+        # Process chunks in batches to reduce memory usage for large documents
+        batch_size = 100  # Process 100 chunks at a time
+        total_chunks = len(chunks)
+        total_uploaded = 0
+        upload_date = datetime.now().isoformat()
+        total_batches = (total_chunks + batch_size - 1) // batch_size
+        
+        status_text.text(f"🧠 Processing {total_chunks} chunks in {total_batches} batches...")
+        
+        # Process chunks in batches to manage memory usage
+        for batch_start in range(0, total_chunks, batch_size):
+            batch_end = min(batch_start + batch_size, total_chunks)
+            batch_chunks = chunks[batch_start:batch_end]
+            batch_number = (batch_start // batch_size) + 1
+            
+            # Update progress based on batch completion
+            batch_progress = 0.2 + (0.8 * (batch_number - 1) / total_batches)
+            progress_bar.progress(batch_progress)
+            status_text.text(f"🔄 Processing batch {batch_number}/{total_batches} ({len(batch_chunks)} chunks)")
+            
+            try:
+                # Extract texts for this batch only
+                status_text.text(f"📝 Extracting text from batch {batch_number}/{total_batches}...")
+                batch_texts = [ch['text'] for ch in batch_chunks]
+                
+                # Generate embeddings for this batch
+                status_text.text(f"🧠 Generating embeddings for batch {batch_number}/{total_batches}...")
+                try:
+                    batch_embeddings = embedding_model.encode(batch_texts, show_progress_bar=False)
+                except Exception as embedding_error:
+                    st.error(f"❌ Embedding generation failed for batch {batch_number}: {embedding_error}")
+                    st.error(f"🔧 Batch texts length: {len(batch_texts)}")
+                    st.error(f"🔧 Sample text length: {len(batch_texts[0]) if batch_texts else 'No texts'}")
+                    continue
+                
+                # Create points for this batch
+                status_text.text(f"📦 Creating data points for batch {batch_number}/{total_batches}...")
+                batch_points = []
+                for i, (ch, embedding) in enumerate(zip(batch_chunks, batch_embeddings)):
+                    try:
+                        vector = embedding.tolist()
+                        
+                        # Create point
+                        point = PointStruct(
+                            id=str(uuid.uuid4()),
+                            vector=vector,
+                            payload={
+                                **ch['metadata'],
+                                'text': ch['text'],
+                                'source_file': filename,
+                                'chunk_index': batch_start + i,
+                                'upload_date': upload_date,
+                                'content_hash': content_hash
+                            }
+                        )
+                        batch_points.append(point)
+                    except Exception as point_error:
+                        st.error(f"❌ Point creation failed for chunk {i} in batch {batch_number}: {point_error}")
+                        continue
+                
+                if not batch_points:
+                    st.error(f"❌ No valid points created for batch {batch_number}")
+                    continue
+                
+                # Upload this batch to Qdrant
+                status_text.text(f"☁️ Uploading batch {batch_number}/{total_batches} to database...")
+                try:
+                    qdrant_client.upsert(
+                        collection_name="legal_regulations",
+                        points=batch_points
+                    )
+                    
+                    batch_uploaded = len(batch_points)
+                    total_uploaded += batch_uploaded
+                    
+                    # Update progress
+                    batch_progress = 0.2 + (0.8 * batch_number / total_batches)
+                    progress_bar.progress(batch_progress)
+                    status_text.text(f"✅ Uploaded batch {batch_number}/{total_batches} ({total_uploaded}/{total_chunks} chunks total)")
+                    
+                except Exception as upload_error:
+                    st.error(f"❌ Qdrant upload failed for batch {batch_number}: {upload_error}")
+                    st.error(f"🔧 Batch points count: {len(batch_points)}")
+                    st.error(f"🔧 Upload error details: {traceback.format_exc()}")
+                    continue
+                
+                # Clear batch variables to free memory
+                del batch_texts, batch_embeddings, batch_points
+                
+            except Exception as batch_error:
+                st.error(f"❌ Critical error in batch {batch_number}: {batch_error}")
+                st.error(f"🔧 Batch size: {len(batch_chunks)}")
+                st.error(f"🔧 Batch error details: {traceback.format_exc()}")
+                
+                # Try to continue with next batch
+                continue
+        
+        # Final progress update
+        progress_bar.progress(1.0)
+        
+        if total_uploaded > 0:
+            status_text.text(f"✅ Successfully uploaded {filename} ({total_uploaded}/{total_chunks} chunks)")
+            st.success(f"✅ Successfully uploaded {filename} ({total_uploaded} chunks)")
+            return True
+        else:
+            status_text.text(f"❌ Failed to upload any chunks from {filename}")
+            st.error(f"❌ Failed to upload any chunks from {filename} - total_uploaded = {total_uploaded}")
+            return False
+            
+    except Exception as e:
+        st.error(f"❌ Critical error processing {filename}: {e}")
+        st.error(f"🔧 Error details: {traceback.format_exc()}")
+        st.error(f"🔧 File content length: {len(file_content) if file_content else 'None'}")
+        st.error(f"🔧 Content hash: {content_hash if 'content_hash' in locals() else 'Not calculated'}")
+        return False
+
 def search_legal_database(query: str, limit: int = 5) -> List[Dict[str, Any]]:
     """Search the legal database using semantic similarity"""
     try:
