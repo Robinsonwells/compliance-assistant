@@ -566,28 +566,55 @@ def show_legal_assistant():
 def show_knowledge_base():
     """Display knowledge base management interface"""
     st.markdown("### 📚 Knowledge Base Management")
-    
+
+    # Initialize session state for tracking processed files and processing status
+    if "processed_file_ids" not in st.session_state:
+        st.session_state.processed_file_ids = set()
+    if "is_processing" not in st.session_state:
+        st.session_state.is_processing = False
+    if "processing_complete" not in st.session_state:
+        st.session_state.processing_complete = False
+
     # Upload section
     st.markdown("#### 📤 Upload Documents")
-    
+
     uploaded_files = st.file_uploader(
         "Upload legal documents (PDF, DOCX, TXT, XML)",
         type=['pdf', 'docx', 'txt', 'xml'],
         accept_multiple_files=True,
-        help="Upload employment law documents for NY, NJ, and CT"
+        help="Upload employment law documents for NY, NJ, and CT",
+        key="doc_uploader"
     )
-    
+
+    # Check if files are new (not already processed in this session)
+    new_files = []
     if uploaded_files:
+        for uploaded_file in uploaded_files:
+            file_id = f"{uploaded_file.name}_{uploaded_file.size}"
+            if file_id not in st.session_state.processed_file_ids:
+                new_files.append(uploaded_file)
+
+    # Show processing complete message and clear button
+    if st.session_state.processing_complete:
+        st.success("✅ Processing complete! Upload new files or clear to continue.")
+        if st.button("🔄 Clear and Upload More", use_container_width=True):
+            st.session_state.processed_file_ids.clear()
+            st.session_state.processing_complete = False
+            st.rerun()
+
+    # Only show process button if there are new files and not currently processing
+    elif new_files and not st.session_state.is_processing:
         if st.button("🚀 Process Documents", use_container_width=True):
+            st.session_state.is_processing = True
             progress_bar = st.progress(0)
             status_text = st.empty()
-            
+
             successful_uploads = 0
-            total_files = len(uploaded_files)
-            
-            for i, uploaded_file in enumerate(uploaded_files):
+            total_files = len(new_files)
+
+            for i, uploaded_file in enumerate(new_files):
                 status_text.text(f"Processing file {i+1}/{total_files}: {uploaded_file.name}")
-                
+
                 try:
                     # Extract text based on file type
                     if uploaded_file.type == "application/pdf":
@@ -597,21 +624,31 @@ def show_knowledge_base():
                     else:
                         # Text or XML file
                         file_content = str(uploaded_file.read(), "utf-8")
-                    
+
                     # Process and upload
                     if process_and_upload_document(file_content, uploaded_file.name):
                         successful_uploads += 1
-                    
+                        # Mark this file as processed
+                        file_id = f"{uploaded_file.name}_{uploaded_file.size}"
+                        st.session_state.processed_file_ids.add(file_id)
+
                 except Exception as e:
                     st.error(f"❌ Error processing {uploaded_file.name}: {e}")
-                
+
                 progress_bar.progress((i + 1) / total_files)
-            
+
             status_text.text(f"✅ Completed! {successful_uploads}/{total_files} files processed successfully.")
-            
+
             if successful_uploads > 0:
                 st.success(f"🎉 Successfully processed {successful_uploads} documents!")
-                st.rerun()  # Refresh to show updated document list
+
+            # Mark processing as complete and reset processing flag
+            st.session_state.is_processing = False
+            st.session_state.processing_complete = True
+            st.rerun()
+
+    elif uploaded_files and not new_files and not st.session_state.processing_complete:
+        st.info("ℹ️ These files have already been processed in this session. Clear to upload more.")
     
     # Document management section
     st.markdown("#### 📋 Uploaded Documents")
