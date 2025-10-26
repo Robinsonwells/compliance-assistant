@@ -272,64 +272,65 @@ def process_and_upload_document(file_content: str, filename: str) -> bool:
         
         st.info(f"📝 Extracted {len(chunks)} chunks from {filename}")
         
-        # Generate embeddings and upload to Qdrant
-        points = []
+        # Process chunks in batches to reduce memory usage for large documents
+        batch_size = 100  # Process 100 chunks at a time
+        total_chunks = len(chunks)
+        total_uploaded = 0
         upload_date = datetime.now().isoformat()
         
-        st.info(f"🧠 Generating embeddings for {len(chunks)} chunks...")
+        st.info(f"🧠 Processing {total_chunks} chunks in batches of {batch_size}...")
         
-        for i, chunk in enumerate(chunks):
+        # Process chunks in batches to manage memory usage
+        for batch_start in range(0, total_chunks, batch_size):
+            batch_end = min(batch_start + batch_size, total_chunks)
+            batch_chunks = chunks[batch_start:batch_end]
+            batch_number = (batch_start // batch_size) + 1
+            total_batches = (total_chunks + batch_size - 1) // batch_size
+            
+            st.info(f"🔄 Processing batch {batch_number}/{total_batches} ({len(batch_chunks)} chunks)")
+            
             try:
-                # Generate embedding
-                embedding = embedding_model.encode(chunk['text']).tolist()
+                # Extract texts for this batch only
+                batch_texts = [ch['text'] for ch in batch_chunks]
                 
-                # Create point
-                point = PointStruct(
-                    id=str(uuid.uuid4()),
-                    vector=embedding,
-                    payload={
-                        **chunk['metadata'],
-                        'text': chunk['text'],
-                        'source_file': filename,
-                        'chunk_index': i,
-                        'upload_date': upload_date,
-                        'content_hash': content_hash  # Store the document hash
-                    }
-                )
-                points.append(point)
+                # Generate embeddings for this batch
+                batch_embeddings = embedding_model.encode(batch_texts, show_progress_bar=False)
                 
-            except Exception as e:
-                st.error(f"❌ Error processing chunk {i} from {filename}: {e}")
-                st.error(f"🔧 Chunk content preview: {chunk.get('text', 'No text')[:100]}...")
-                st.error(f"Error processing chunk {i} from {filename}: {e}")
-                continue
-        
-        if not points:
-            st.error(f"❌ No valid points created for {filename} - this indicates a serious issue")
-            st.info(f"📊 Original chunks count: {len(chunks)}")
-            st.error(f"❌ No valid points created for {filename}")
-            return False
-        
-        st.info(f"📤 Uploading {len(points)} points to Qdrant...")
-        
-        # Upload to Qdrant in batches
-        batch_size = 100
-        total_uploaded = 0
-        
-        for i in range(0, len(points), batch_size):
-            batch = points[i:i + batch_size]
-            try:
-                st.info(f"📤 Uploading batch {i//batch_size + 1}/{(len(points)-1)//batch_size + 1} ({len(batch)} points)")
+                # Create points for this batch
+                batch_points = []
+                for i, (ch, embedding) in enumerate(zip(batch_chunks, batch_embeddings)):
+                    vector = embedding.tolist()
+                    
+                    # Create point
+                    point = PointStruct(
+                        id=str(uuid.uuid4()),
+                        vector=vector,
+                        payload={
+                            **ch['metadata'],
+                            'text': ch['text'],
+                            'source_file': filename,
+                            'chunk_index': batch_start + i,
+                            'upload_date': upload_date,
+                            'content_hash': content_hash  # Store the document hash
+                        }
+                    )
+                    batch_points.append(point)
+                
+                # Upload this batch to Qdrant
                 qdrant_client.upsert(
                     collection_name="legal_regulations",
-                    points=batch
+                    points=batch_points
                 )
-                total_uploaded += len(batch)
-                st.info(f"📊 Uploaded batch {i//batch_size + 1}/{(len(points)-1)//batch_size + 1}")
-            except Exception as e:
-                st.error(f"❌ Error uploading batch {i//batch_size + 1}: {e}")
-                st.error(f"🔧 Batch size: {len(batch)}, Batch preview: {[p.id for p in batch[:3]]}")
-                st.error(f"Error uploading batch {i//batch_size + 1}: {e}")
+                
+                total_uploaded += len(batch_points)
+                st.info(f"✅ Uploaded batch {batch_number}/{total_batches} ({total_uploaded}/{total_chunks} chunks total)")
+                
+                # Clear batch variables to free memory
+                del batch_texts, batch_embeddings, batch_points
+                
+            except Exception as batch_error:
+                st.error(f"❌ Error processing batch {batch_number}: {batch_error}")
+                st.error(f"🔧 Batch size: {len(batch_chunks)}")
                 continue
         
         if total_uploaded > 0:

@@ -201,7 +201,20 @@ def assess_content_complexity(text: str) -> str:
 def extract_pdf_text(file_obj) -> str:
     """Extract text from PDF file"""
     try:
-        pdf_reader = PyPDF2.PdfReader(io.BytesIO(file_obj.read()))
+        # Handle both file objects and BytesIO objects
+        if hasattr(file_obj, 'read'):
+            if hasattr(file_obj, 'seek'):
+                file_obj.seek(0)  # Reset position if it's a seekable file
+            content = file_obj.read()
+            if isinstance(content, bytes):
+                pdf_reader = PyPDF2.PdfReader(io.BytesIO(content))
+            else:
+                # If it's already a BytesIO object
+                pdf_reader = PyPDF2.PdfReader(file_obj)
+        else:
+            # If it's raw bytes
+            pdf_reader = PyPDF2.PdfReader(io.BytesIO(file_obj))
+            
         text = ""
         for page in pdf_reader.pages:
             text += page.extract_text() + "\n"
@@ -212,7 +225,20 @@ def extract_pdf_text(file_obj) -> str:
 def extract_docx_text(file_obj) -> str:
     """Extract text from DOCX file"""
     try:
-        doc = docx.Document(io.BytesIO(file_obj.read()))
+        # Handle both file objects and BytesIO objects
+        if hasattr(file_obj, 'read'):
+            if hasattr(file_obj, 'seek'):
+                file_obj.seek(0)  # Reset position if it's a seekable file
+            content = file_obj.read()
+            if isinstance(content, bytes):
+                doc = docx.Document(io.BytesIO(content))
+            else:
+                # If it's already a BytesIO object
+                doc = docx.Document(file_obj)
+        else:
+            # If it's raw bytes
+            doc = docx.Document(io.BytesIO(file_obj))
+            
         text = ""
         for paragraph in doc.paragraphs:
             text += paragraph.text + "\n"

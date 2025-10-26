@@ -389,9 +389,13 @@ def process_uploaded_file(uploaded_file, chunker, qdrant_client, embedding_model
         
         t = uploaded_file.type
         if t == "application/pdf":
-            text = extract_pdf_text(uploaded_file)
+            # Create BytesIO object from file content for consistent processing
+            file_io = io.BytesIO(file_content)
+            text = extract_pdf_text(file_io)
         elif t == "application/vnd.openxmlformats-officedocument.wordprocessingml.document":
-            text = extract_docx_text(uploaded_file)
+            # Create BytesIO object from file content for consistent processing
+            file_io = io.BytesIO(file_content)
+            text = extract_docx_text(file_io)
         elif t == "text/plain":
             text = file_content.decode("utf-8")
         else:
@@ -424,82 +428,88 @@ def process_uploaded_file(uploaded_file, chunker, qdrant_client, embedding_model
         if status_text:
             status_text.info(f"📦 Created {len(chunks)} chunks from {uploaded_file.name}")
 
-        # Collect all chunk texts for batch embedding generation
-        chunk_texts = [ch['text'] for ch in chunks]
+        # Process chunks in batches to reduce memory usage for large documents
+        batch_size = 100  # Process 100 chunks at a time
+        total_chunks = len(chunks)
+        total_uploaded = 0
+        now = datetime.now().isoformat()
         
         if progress_bar:
             progress_bar.progress(60)
         if status_text:
-            status_text.info(f"🧠 Generating embeddings for {len(chunks)} chunks...")
+            status_text.info(f"🧠 Processing {total_chunks} chunks in batches of {batch_size}...")
         
-        # Generate embeddings locally in batch
-        try:
-            embeddings = embedding_model.encode(chunk_texts, show_progress_bar=True)
-        except Exception as embedding_error:
+        # Process chunks in batches to manage memory usage
+        for batch_start in range(0, total_chunks, batch_size):
+            batch_end = min(batch_start + batch_size, total_chunks)
+            batch_chunks = chunks[batch_start:batch_end]
+            batch_number = (batch_start // batch_size) + 1
+            total_batches = (total_chunks + batch_size - 1) // batch_size
+            
             if status_text:
-                status_text.error(f"❌ Error generating embeddings: {embedding_error}")
-            return False, f"Embedding generation failed: {embedding_error}", content_hash
-        
-        if progress_bar:
-            progress_bar.progress(80)
-        if status_text:
-            status_text.info(f"📤 Uploading {len(chunks)} chunks to vector database...")
-        
-        # Prepare points for Qdrant
-        points = []
-        now = datetime.now().isoformat()
-        
-        try:
-            for i, (ch, embedding) in enumerate(zip(chunks, embeddings)):
-                vector = embedding.tolist()
+                status_text.info(f"🔄 Processing batch {batch_number}/{total_batches} ({len(batch_chunks)} chunks)")
+            
+            try:
+                # Extract texts for this batch only
+                batch_texts = [ch['text'] for ch in batch_chunks]
                 
-                # Prepare payload
-                payload = {
-                    'text': ch['text'],
-                    **ch['metadata'],
-                    'source_file': uploaded_file.name,
-                    'content_hash': content_hash,
-                    'upload_date': now,
-                    'processed_by': 'admin'
-                }
+                # Generate embeddings for this batch
+                batch_embeddings = embedding_model.encode(batch_texts, show_progress_bar=False)
                 
-                # Create point
-                point = PointStruct(
-                    id=str(uuid.uuid4()),
-                    vector=vector,
-                    payload=payload
-                )
-                points.append(point)
-        except Exception as point_creation_error:
-            if status_text:
-                status_text.error(f"❌ Error creating vector points: {point_creation_error}")
-            return False, f"Point creation failed: {point_creation_error}", content_hash
-
-        # Upload points to Qdrant in batches
-        try:
-            batch_size = 100
-            for i in range(0, len(points), batch_size):
-                batch = points[i:i+batch_size]
+                # Create points for this batch
+                batch_points = []
+                for i, (ch, embedding) in enumerate(zip(batch_chunks, batch_embeddings)):
+                    vector = embedding.tolist()
+                    
+                    # Prepare payload
+                    payload = {
+                        'text': ch['text'],
+                        **ch['metadata'],
+                        'source_file': uploaded_file.name,
+                        'content_hash': content_hash,
+                        'upload_date': now,
+                        'processed_by': 'admin'
+                    }
+                    
+                    # Create point
+                    point = PointStruct(
+                        id=str(uuid.uuid4()),
+                        vector=vector,
+                        payload=payload
+                    )
+                    batch_points.append(point)
+                
+                # Upload this batch to Qdrant
                 qdrant_client.upsert(
                     collection_name="legal_regulations",
-                    points=batch
+                    points=batch_points
                 )
                 
-                # Update progress during upload
+                total_uploaded += len(batch_points)
+                
+                # Update progress
                 if progress_bar:
-                    upload_progress = 80 + (20 * (i + len(batch)) / len(points))
-                    progress_bar.progress(int(upload_progress))
-        except Exception as upload_error:
-            if status_text:
-                status_text.error(f"❌ Error uploading to vector database: {upload_error}")
-            return False, f"Database upload failed: {upload_error}", content_hash
+                    # Progress from 60% to 95% based on batches processed
+                    batch_progress = 60 + (35 * (batch_end / total_chunks))
+                    progress_bar.progress(int(batch_progress))
+                
+                if status_text:
+                    status_text.info(f"✅ Uploaded batch {batch_number}/{total_batches} ({total_uploaded}/{total_chunks} chunks total)")
+                
+                # Clear batch variables to free memory
+                del batch_texts, batch_embeddings, batch_points
+                
+            except Exception as batch_error:
+                if status_text:
+                    status_text.error(f"❌ Error processing batch {batch_number}: {batch_error}")
+                return False, f"Batch processing failed at batch {batch_number}: {batch_error}", content_hash
         
         if progress_bar:
             progress_bar.progress(100)
         if status_text:
-            status_text.success(f"✅ Successfully processed {len(chunks)} chunks from {uploaded_file.name}")
+            status_text.success(f"✅ Successfully processed {total_uploaded} chunks from {uploaded_file.name}")
         
-        return True, f"Processed {len(chunks)} chunks from {uploaded_file.name}", content_hash
+        return True, f"Processed {total_uploaded} chunks from {uploaded_file.name}", content_hash
 
     except Exception as e:
         if status_text:
