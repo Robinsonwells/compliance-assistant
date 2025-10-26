@@ -11,6 +11,7 @@ from sentence_transformers import SentenceTransformer
 from qdrant_client import QdrantClient
 from qdrant_client.models import Distance, VectorParams, PointStruct, Filter, FieldCondition, MatchValue
 from advanced_chunking import LegalSemanticChunker, extract_pdf_text, extract_docx_text
+from integrated_processor import IntegratedDocumentProcessor
 import time
 
 # Load custom CSS
@@ -342,7 +343,7 @@ def admin_login():
         return False
     return True
 
-def process_uploaded_file(uploaded_file, chunker, qdrant_client, embedding_model, progress_bar=None, status_text=None):
+def process_uploaded_file_legacy(uploaded_file, chunker, qdrant_client, embedding_model, progress_bar=None, status_text=None):
     """Process uploaded file with progress tracking and idempotency"""
     try:
         # Read file content once and calculate hash for idempotency
@@ -744,109 +745,108 @@ def main():
             if uploads and st.button("🚀 Process All Documents", disabled=st.session_state.is_processing):
                 st.session_state.is_processing = True
                 try:
-                    try:
-                        with st.status("🔄 Processing documents...", expanded=True) as status:
-                            total_files = len(uploads)
-                            processed_count = 0
-                            skipped_count = 0
-                            error_count = 0
+                    # Initialize integrated processor
+                    integrated_processor = IntegratedDocumentProcessor(
+                        chunker=chunker,
+                        embedding_model=embedding_model,
+                        qdrant_client=coll,
+                        chunk_batch_size=500,
+                        embedding_batch_size=500,
+                        upload_batch_size=100
+                    )
 
-                            st.write(f"📋 **Processing Queue:** {total_files} files")
-                            st.write("---")
+                    total_files = len(uploads)
+                    processed_count = 0
+                    skipped_count = 0
+                    error_count = 0
 
-                            for i, uploaded_file in enumerate(uploads, 1):
-                                st.write(f"**File {i}/{total_files}: {uploaded_file.name}**")
+                    st.markdown(f"### 📋 Processing Queue: {total_files} files")
+                    st.markdown("---")
 
-                                # Create progress bar and status text for this file
-                                file_progress = st.progress(0)
-                                file_status = st.empty()
+                    for i, uploaded_file in enumerate(uploads, 1):
+                        st.markdown(f"## File {i} of {total_files}")
 
-                                # Check if already processed in this session
-                                file_content = uploaded_file.read()
-                                file_hash = hashlib.md5(file_content).hexdigest()
-                                uploaded_file.seek(0)
+                        # Create dedicated container for this file's processing UI
+                        file_container = st.container()
 
-                                if file_hash in st.session_state.processed_files_this_session:
+                        # Check if already processed in this session
+                        file_content = uploaded_file.read()
+                        file_hash = hashlib.md5(file_content).hexdigest()
+                        uploaded_file.seek(0)
+
+                        if file_hash in st.session_state.processed_files_this_session:
+                            skipped_count += 1
+                            with file_container:
+                                st.warning(f"⏭️ Already processed {uploaded_file.name} in this session")
+                            if i < total_files:
+                                st.markdown("---")
+                            continue
+
+                        try:
+                            # Process file with comprehensive UI
+                            success, message, content_hash = integrated_processor.process_file_with_ui(
+                                uploaded_file,
+                                file_container
+                            )
+
+                            if success:
+                                if "Skipped" in message:
                                     skipped_count += 1
-                                    file_status.warning(f"⏭️ Already processed {uploaded_file.name} in this session")
-                                    file_progress.empty()
-                                    if i < total_files:
-                                        st.write("---")
-                                    continue
-
-                                try:
-                                    # Process the file with progress tracking
-                                    success, message, content_hash = process_uploaded_file(
-                                        uploaded_file, chunker, coll, embedding_model,
-                                        progress_bar=file_progress, status_text=file_status
-                                    )
-
-                                    if success:
-                                        if "Skipped" in message:
-                                            skipped_count += 1
-                                            file_status.warning(f"⏭️ {message}")
-                                        else:
-                                            processed_count += 1
-                                            # Track successful processing in session state
-                                            st.session_state.processed_files_this_session.add(file_hash)
-                                            file_status.success(f"✅ {message}")
-                                    else:
-                                        error_count += 1
-                                        file_status.error(f"❌ {message}")
-
-                                except Exception as e:
-                                    error_count += 1
-                                    file_status.error(f"❌ Unexpected error processing {uploaded_file.name}: {e}")
-                                    st.error(f"🚨 Critical error during file processing: {str(e)}")
-                                    st.info("Your session remains active. You can continue with other files.")
-
-                                # Clear the progress bar after processing
-                                file_progress.empty()
-
-                                # Add separator between files (except for the last one)
-                                if i < total_files:
-                                    st.write("---")
-
-                            # Update final status
-                            if error_count == 0:
-                                if skipped_count == total_files:
-                                    status.update(label="⏭️ All documents were already processed", state="complete")
-                                elif skipped_count > 0:
-                                    status.update(label=f"✅ Processing complete! {processed_count} processed, {skipped_count} skipped", state="complete")
                                 else:
-                                    status.update(label=f"✅ All {processed_count} documents processed successfully!", state="complete")
+                                    processed_count += 1
+                                    st.session_state.processed_files_this_session.add(file_hash)
                             else:
-                                status.update(label=f"⚠️ Processing complete with issues: {processed_count} processed, {skipped_count} skipped, {error_count} errors", state="error")
+                                error_count += 1
 
-                            st.write("🎉 **Batch processing finished!**")
+                        except Exception as e:
+                            error_count += 1
+                            with file_container:
+                                st.error(f"❌ Unexpected error processing {uploaded_file.name}: {e}")
+                                st.info("Your session remains active. You can continue with other files.")
 
-                            # Summary
-                            col1, col2, col3, col4 = st.columns(4)
-                            with col1:
-                                st.metric("Total Files", total_files)
-                            with col2:
-                                st.metric("Processed", processed_count, delta=processed_count if processed_count > 0 else None)
-                            with col3:
-                                st.metric("Skipped", skipped_count, delta=skipped_count if skipped_count > 0 else None)
-                            with col4:
-                                st.metric("Errors", error_count, delta=error_count if error_count > 0 else None, delta_color="inverse")
+                        # Add separator between files
+                        if i < total_files:
+                            st.markdown("---")
+                            st.markdown("---")
 
-                        # Recommend audit after upload
-                        if processed_count > 0:
-                            st.info("💡 **Recommendation:** Run a Data Quality Audit above to verify the uploaded documents have correct status metadata.")
+                    # Final summary
+                    st.markdown("---")
+                    st.markdown("## 🎉 Batch Processing Complete!")
 
-                        # Increment upload key to clear file uploader and reset session tracking
-                        st.session_state.upload_key += 1
-                        st.session_state.processed_files_this_session.clear()
+                    col1, col2, col3, col4 = st.columns(4)
+                    with col1:
+                        st.metric("Total Files", total_files)
+                    with col2:
+                        st.metric("Processed", processed_count, delta=processed_count if processed_count > 0 else None)
+                    with col3:
+                        st.metric("Skipped", skipped_count, delta=skipped_count if skipped_count > 0 else None)
+                    with col4:
+                        st.metric("Errors", error_count, delta=error_count if error_count > 0 else None, delta_color="inverse")
 
-                        # Refresh the page to clear the file uploader and update the file list
-                        time.sleep(2)  # Give user time to see the final status
-                        st.rerun()
+                    if error_count == 0:
+                        if skipped_count == total_files:
+                            st.info("⏭️ All documents were already processed")
+                        else:
+                            st.success(f"✅ Successfully processed {processed_count} documents!")
+                    else:
+                        st.warning(f"⚠️ Processing complete with {error_count} errors")
 
-                    except Exception as e:
-                        st.error(f"🚨 Critical error during document processing: {str(e)}")
-                        st.error("Your session remains active. Please try again or contact your system administrator.")
-                        st.info("💡 Tip: Try uploading fewer files at once if you continue to experience issues.")
+                    # Recommend audit after upload
+                    if processed_count > 0:
+                        st.info("💡 **Recommendation:** Run a Data Quality Audit above to verify the uploaded documents have correct status metadata.")
+
+                    # Increment upload key to clear file uploader and reset session tracking
+                    st.session_state.upload_key += 1
+                    st.session_state.processed_files_this_session.clear()
+
+                    # Refresh the page to clear the file uploader and update the file list
+                    time.sleep(3)  # Give user time to see the final status
+                    st.rerun()
+
+                except Exception as e:
+                    st.error(f"🚨 Critical error during document processing: {str(e)}")
+                    st.error("Your session remains active. Please try again or contact your system administrator.")
+                    st.info("💡 Tip: Try uploading fewer files at once if you continue to experience issues.")
                 finally:
                     st.session_state.is_processing = False
 
