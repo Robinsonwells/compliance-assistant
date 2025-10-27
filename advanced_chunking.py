@@ -10,6 +10,103 @@ import xml.etree.ElementTree as ET
 import logging
 import html
 
+def iterative_pdf_extraction(file_obj, page_batch_size: int = 5):
+    """Extract text from PDF file page by page in batches"""
+    try:
+        # Handle both file objects and BytesIO objects
+        if hasattr(file_obj, 'read'):
+            if hasattr(file_obj, 'seek'):
+                file_obj.seek(0)  # Reset position if it's a seekable file
+            content = file_obj.read()
+            if isinstance(content, bytes):
+                pdf_reader = PyPDF2.PdfReader(io.BytesIO(content))
+            else:
+                # If it's already a BytesIO object
+                pdf_reader = PyPDF2.PdfReader(file_obj)
+        else:
+            # If it's raw bytes
+            pdf_reader = PyPDF2.PdfReader(io.BytesIO(file_obj))
+        
+        total_pages = len(pdf_reader.pages)
+        
+        # Yield pages in batches
+        for start_page in range(0, total_pages, page_batch_size):
+            end_page = min(start_page + page_batch_size, total_pages)
+            batch_text = ""
+            
+            for page_num in range(start_page, end_page):
+                try:
+                    page_text = pdf_reader.pages[page_num].extract_text()
+                    batch_text += page_text + "\n"
+                except Exception as e:
+                    print(f"Error extracting page {page_num}: {e}")
+                    continue
+            
+            if batch_text.strip():
+                yield {
+                    'content': batch_text.strip(),
+                    'batch_info': f"Pages {start_page + 1}-{end_page} of {total_pages}",
+                    'progress': end_page / total_pages
+                }
+                
+    except Exception as e:
+        raise Exception(f"Error reading PDF: {str(e)}")
+
+def iterative_docx_extraction(file_obj, paragraph_batch_size: int = 50):
+    """Extract text from DOCX file paragraph by paragraph in batches"""
+    try:
+        # Handle both file objects and BytesIO objects
+        if hasattr(file_obj, 'read'):
+            if hasattr(file_obj, 'seek'):
+                file_obj.seek(0)  # Reset position if it's a seekable file
+            content = file_obj.read()
+            if isinstance(content, bytes):
+                doc = docx.Document(io.BytesIO(content))
+            else:
+                # If it's already a BytesIO object
+                doc = docx.Document(file_obj)
+        else:
+            # If it's raw bytes
+            doc = docx.Document(io.BytesIO(file_obj))
+        
+        paragraphs = [p.text for p in doc.paragraphs if p.text.strip()]
+        total_paragraphs = len(paragraphs)
+        
+        # Yield paragraphs in batches
+        for start_para in range(0, total_paragraphs, paragraph_batch_size):
+            end_para = min(start_para + paragraph_batch_size, total_paragraphs)
+            batch_text = "\n".join(paragraphs[start_para:end_para])
+            
+            if batch_text.strip():
+                yield {
+                    'content': batch_text.strip(),
+                    'batch_info': f"Paragraphs {start_para + 1}-{end_para} of {total_paragraphs}",
+                    'progress': end_para / total_paragraphs
+                }
+                
+    except Exception as e:
+        raise Exception(f"Error reading DOCX: {str(e)}")
+
+def iterative_text_extraction(file_content: str, chunk_size: int = 50000):
+    """Extract text from large text/XML files in chunks"""
+    try:
+        total_length = len(file_content)
+        
+        # Yield text in chunks
+        for start_pos in range(0, total_length, chunk_size):
+            end_pos = min(start_pos + chunk_size, total_length)
+            chunk_text = file_content[start_pos:end_pos]
+            
+            if chunk_text.strip():
+                yield {
+                    'content': chunk_text.strip(),
+                    'batch_info': f"Characters {start_pos + 1}-{end_pos} of {total_length}",
+                    'progress': end_pos / total_length
+                }
+                
+    except Exception as e:
+        raise Exception(f"Error processing text: {str(e)}")
+
 def robust_xml_parse(text: str) -> List[Dict]:
     """Parse XML legal documents with robust section extraction - DEPRECATED"""
     # This function is now deprecated in favor of general text processing

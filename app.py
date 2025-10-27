@@ -13,10 +13,14 @@ load_dotenv()
 
 # Import custom modules
 from user_management import UserManager
+from processing_manager import ProcessingSessionManager
 from advanced_chunking import (
     LegalSemanticChunker, 
     extract_pdf_text, 
     extract_docx_text,
+    iterative_pdf_extraction,
+    iterative_docx_extraction,
+    iterative_text_extraction,
     strip_xml_tags,
     detect_document_format
 )
@@ -43,6 +47,9 @@ try:
     
     # Initialize user manager
     user_manager = UserManager()
+    
+    # Initialize processing session manager
+    processing_manager = ProcessingSessionManager()
     
     # Initialize legal chunker
     legal_chunker = LegalSemanticChunker(os.getenv("OPENAI_API_KEY", ""))
@@ -208,6 +215,207 @@ def delete_document_from_qdrant(filename: str) -> bool:
         st.error(f"Error deleting document from Qdrant: {e}")
         st.error(f"Traceback: {traceback.format_exc()}")
         return False
+def process_and_upload_document_iterative(uploaded_file, filename: str, progress_bar, status_text) -> bool:
+    """Process document iteratively with Supabase tracking to handle large files"""
+    session_id = None
+    
+    try:
+        # Calculate file hash and size
+        if hasattr(uploaded_file, 'read'):
+            if hasattr(uploaded_file, 'seek'):
+                uploaded_file.seek(0)
+            file_content_bytes = uploaded_file.read()
+            if hasattr(uploaded_file, 'seek'):
+                uploaded_file.seek(0)  # Reset for later use
+        else:
+            file_content_bytes = uploaded_file
+        
+        file_size = len(file_content_bytes)
+        file_hash = hashlib.sha256(file_content_bytes).hexdigest()
+        
+        # Create processing session
+        session_id = processing_manager.create_session(filename, file_size, file_hash)
+        status_text.text(f"📄 Created processing session for {filename}")
+        progress_bar.progress(0.05)
+        
+        # Determine file type and set up iterative extraction
+        file_type = uploaded_file.type if hasattr(uploaded_file, 'type') else 'text/plain'
+        
+        total_chunks_uploaded = 0
+        batch_number = 0
+        upload_date = datetime.now().isoformat()
+        
+        # Update session to extraction phase
+        processing_manager.update_session_progress(
+            session_id, 0, 'extracting_content', 
+            metadata={'file_type': file_type, 'file_size_mb': file_size / (1024 * 1024)}
+        )
+        
+        # Choose appropriate iterative extraction method
+        if file_type == "application/pdf":
+            status_text.text(f"📖 Processing PDF: {filename} (iterative extraction)")
+            content_generator = iterative_pdf_extraction(uploaded_file, page_batch_size=3)
+        elif file_type == "application/vnd.openxmlformats-officedocument.wordprocessingml.document":
+            status_text.text(f"📝 Processing DOCX: {filename} (iterative extraction)")
+            content_generator = iterative_docx_extraction(uploaded_file, paragraph_batch_size=30)
+        else:
+            # Text or XML file
+            if isinstance(file_content_bytes, bytes):
+                file_content_str = file_content_bytes.decode('utf-8')
+            else:
+                file_content_str = str(file_content_bytes)
+            status_text.text(f"📄 Processing text file: {filename} (iterative extraction)")
+            content_generator = iterative_text_extraction(file_content_str, chunk_size=30000)
+        
+        # Process content in batches
+        for content_batch in content_generator:
+            batch_number += 1
+            batch_content = content_batch['content']
+            batch_info = content_batch['batch_info']
+            extraction_progress = content_batch['progress']
+            
+            status_text.text(f"🔄 Processing {batch_info}...")
+            
+            # Update progress (extraction phase takes 20% of total progress)
+            current_progress = 0.05 + (extraction_progress * 0.2)
+            progress_bar.progress(current_progress)
+            
+            try:
+                # Chunk the content using legal chunker
+                status_text.text(f"⚖️ Legal chunking for {batch_info}...")
+                chunks = legal_chunker.legal_aware_chunking(batch_content, max_chunk_size=1200)
+                
+                if not chunks:
+                    status_text.text(f"⚠️ No valid chunks from {batch_info}, skipping...")
+                    continue
+                
+                # Update session with chunking progress
+                processing_manager.update_session_progress(
+                    session_id, total_chunks_uploaded, 'chunking_content',
+                    metadata={
+                        'current_batch': batch_number,
+                        'batch_info': batch_info,
+                        'chunks_in_batch': len(chunks)
+                    }
+                )
+                
+                # Process chunks in smaller sub-batches for memory efficiency
+                sub_batch_size = 50  # Process 50 chunks at a time
+                batch_chunks_uploaded = 0
+                
+                for sub_batch_start in range(0, len(chunks), sub_batch_size):
+                    sub_batch_end = min(sub_batch_start + sub_batch_size, len(chunks))
+                    sub_batch_chunks = chunks[sub_batch_start:sub_batch_end]
+                    
+                    status_text.text(f"🧠 Generating embeddings for {batch_info} (sub-batch {sub_batch_start//sub_batch_size + 1})...")
+                    
+                    # Extract texts for embedding
+                    sub_batch_texts = [ch['text'] for ch in sub_batch_chunks]
+                    
+                    # Generate embeddings
+                    try:
+                        sub_batch_embeddings = embedding_model.encode(sub_batch_texts, show_progress_bar=False)
+                    except Exception as embedding_error:
+                        st.error(f"❌ Embedding generation failed for {batch_info}: {embedding_error}")
+                        continue
+                    
+                    # Create points for Qdrant
+                    sub_batch_points = []
+                    for i, (ch, embedding) in enumerate(zip(sub_batch_chunks, sub_batch_embeddings)):
+                        try:
+                            vector = embedding.tolist()
+                            
+                            point = PointStruct(
+                                id=str(uuid.uuid4()),
+                                vector=vector,
+                                payload={
+                                    **ch['metadata'],
+                                    'text': ch['text'],
+                                    'source_file': filename,
+                                    'chunk_index': total_chunks_uploaded + batch_chunks_uploaded + i,
+                                    'upload_date': upload_date,
+                                    'content_hash': file_hash,
+                                    'batch_info': batch_info,
+                                    'processing_session_id': session_id
+                                }
+                            )
+                            sub_batch_points.append(point)
+                        except Exception as point_error:
+                            st.error(f"❌ Point creation failed: {point_error}")
+                            continue
+                    
+                    if not sub_batch_points:
+                        continue
+                    
+                    # Upload to Qdrant
+                    status_text.text(f"☁️ Uploading {len(sub_batch_points)} chunks to database...")
+                    try:
+                        qdrant_client.upsert(
+                            collection_name="legal_regulations",
+                            points=sub_batch_points
+                        )
+                        
+                        batch_chunks_uploaded += len(sub_batch_points)
+                        total_chunks_uploaded += len(sub_batch_points)
+                        
+                        # Update session progress
+                        processing_manager.update_session_progress(
+                            session_id, total_chunks_uploaded, 'uploading_chunks',
+                            metadata={
+                                'current_batch': batch_number,
+                                'batch_info': batch_info,
+                                'total_batches_processed': batch_number
+                            }
+                        )
+                        
+                        # Create checkpoint
+                        processing_manager.create_checkpoint(
+                            session_id, 'batch_completed', total_chunks_uploaded, batch_number,
+                            {'batch_info': batch_info, 'chunks_in_batch': batch_chunks_uploaded}
+                        )
+                        
+                        status_text.text(f"✅ Uploaded batch from {batch_info} ({total_chunks_uploaded} total chunks)")
+                        
+                        # Update progress (remaining 75% for processing and uploading)
+                        processing_progress = 0.25 + (extraction_progress * 0.75)
+                        progress_bar.progress(processing_progress)
+                        
+                    except Exception as upload_error:
+                        st.error(f"❌ Upload failed for {batch_info}: {upload_error}")
+                        continue
+                    
+                    # Clear memory
+                    del sub_batch_texts, sub_batch_embeddings, sub_batch_points
+                
+                # Clear batch memory
+                del chunks
+                
+            except Exception as batch_error:
+                st.error(f"❌ Error processing {batch_info}: {batch_error}")
+                continue
+        
+        # Complete the session
+        if total_chunks_uploaded > 0:
+            processing_manager.complete_session(session_id, total_chunks_uploaded)
+            progress_bar.progress(1.0)
+            status_text.text(f"✅ Successfully processed {filename} ({total_chunks_uploaded} chunks)")
+            st.success(f"🎉 Successfully processed {filename} ({total_chunks_uploaded} chunks)")
+            return True
+        else:
+            processing_manager.fail_session(session_id, "No chunks were successfully uploaded")
+            st.error(f"❌ No chunks were uploaded from {filename}")
+            return False
+            
+    except Exception as e:
+        error_msg = f"Critical error processing {filename}: {e}"
+        st.error(f"❌ {error_msg}")
+        st.error(f"🔧 Error details: {traceback.format_exc()}")
+        
+        if session_id:
+            processing_manager.fail_session(session_id, error_msg)
+        
+        return False
+
 
 def get_uploaded_documents() -> List[Dict[str, Any]]:
     """Get list of uploaded documents from Qdrant"""
