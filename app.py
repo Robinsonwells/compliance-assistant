@@ -949,46 +949,85 @@ def show_knowledge_base():
             st.session_state.processing_complete = False
             st.rerun()
 
-    # Only show process button if there are new files and not currently processing
-    elif new_files and not st.session_state.is_processing and not st.session_state.processing_complete:
-        if st.button("🚀 Process Documents", use_container_width=True):
-            progress_bar = st.progress(0)
-            status_text = st.empty()
+    # New iterative processing button for large files
+    if new_files and not st.session_state.is_processing and not st.session_state.processing_complete:
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            if st.button("🚀 Process Documents (Standard)", use_container_width=True):
+                progress_bar = st.progress(0)
+                status_text = st.empty()
 
-            successful_uploads = 0
-            total_files = len(new_files)
+                successful_uploads = 0
+                total_files = len(new_files)
 
-            for i, uploaded_file in enumerate(new_files):
-                status_text.text(f"Processing file {i+1}/{total_files}: {uploaded_file.name}")
+                for i, uploaded_file in enumerate(new_files):
+                    status_text.text(f"Processing file {i+1}/{total_files}: {uploaded_file.name}")
 
-                try:
-                    # Extract text based on file type
-                    if uploaded_file.type == "application/pdf":
-                        file_content = extract_pdf_text(uploaded_file)
-                    elif uploaded_file.type == "application/vnd.openxmlformats-officedocument.wordprocessingml.document":
-                        file_content = extract_docx_text(uploaded_file)
-                    else:
-                        # Text or XML file
-                        file_content = str(uploaded_file.read(), "utf-8")
+                    try:
+                        # Extract text based on file type
+                        if uploaded_file.type == "application/pdf":
+                            file_content = extract_pdf_text(uploaded_file)
+                        elif uploaded_file.type == "application/vnd.openxmlformats-officedocument.wordprocessingml.document":
+                            file_content = extract_docx_text(uploaded_file)
+                        else:
+                            # Text or XML file
+                            file_content = str(uploaded_file.read(), "utf-8")
 
-                    # Process and upload
-                    if process_and_upload_document(file_content, uploaded_file.name):
-                        successful_uploads += 1
-                        # Mark this file as processed IMMEDIATELY
-                        file_id = f"{uploaded_file.name}_{uploaded_file.size}"
-                        st.session_state.processed_file_ids.add(file_id)
+                        # Process and upload
+                        if process_and_upload_document(file_content, uploaded_file.name):
+                            successful_uploads += 1
+                            # Mark this file as processed IMMEDIATELY
+                            file_id = f"{uploaded_file.name}_{uploaded_file.size}"
+                            st.session_state.processed_file_ids.add(file_id)
 
-                except Exception as e:
-                    st.error(f"❌ Error processing {uploaded_file.name}: {e}")
+                    except Exception as e:
+                        st.error(f"❌ Error processing {uploaded_file.name}: {e}")
 
-                progress_bar.progress((i + 1) / total_files)
+                    progress_bar.progress((i + 1) / total_files)
 
-            status_text.text(f"✅ Completed! {successful_uploads}/{total_files} files processed successfully.")
+                status_text.text(f"✅ Completed! {successful_uploads}/{total_files} files processed successfully.")
 
-            if successful_uploads > 0:
-                st.success(f"🎉 Successfully processed {successful_uploads} documents!")
-                # Mark processing as complete - this prevents the button from showing again
-                st.session_state.processing_complete = True
+                if successful_uploads > 0:
+                    st.success(f"🎉 Successfully processed {successful_uploads} documents!")
+                    # Mark processing as complete - this prevents the button from showing again
+                    st.session_state.processing_complete = True
+        
+        with col2:
+            if st.button("🔄 Process Documents (Iterative - Large Files)", use_container_width=True):
+                st.session_state.is_processing = True
+                progress_bar = st.progress(0)
+                status_text = st.empty()
+
+                successful_uploads = 0
+                total_files = len(new_files)
+
+                for i, uploaded_file in enumerate(new_files):
+                    status_text.text(f"Processing file {i+1}/{total_files}: {uploaded_file.name} (iterative mode)")
+
+                    try:
+                        # Use iterative processing
+                        if process_and_upload_document_iterative(uploaded_file, uploaded_file.name, progress_bar, status_text):
+                            successful_uploads += 1
+                            # Mark this file as processed IMMEDIATELY
+                            file_id = f"{uploaded_file.name}_{uploaded_file.size}"
+                            st.session_state.processed_file_ids.add(file_id)
+
+                    except Exception as e:
+                        st.error(f"❌ Error processing {uploaded_file.name}: {e}")
+
+                    # Update overall progress
+                    overall_progress = (i + 1) / total_files
+                    progress_bar.progress(overall_progress)
+
+                status_text.text(f"✅ Completed! {successful_uploads}/{total_files} files processed successfully.")
+
+                if successful_uploads > 0:
+                    st.success(f"🎉 Successfully processed {successful_uploads} documents!")
+                    # Mark processing as complete - this prevents the button from showing again
+                    st.session_state.processing_complete = True
+                
+                st.session_state.is_processing = False
 
     elif uploaded_files and not new_files and not st.session_state.processing_complete:
         st.info("ℹ️ These files have already been processed in this session. Clear to upload more.")
@@ -996,9 +1035,47 @@ def show_knowledge_base():
     # Document management section
     st.markdown("#### 📋 Uploaded Documents")
     
+    # Show processing sessions
+    processing_sessions = processing_manager.get_all_processing_sessions()
+    
+    if processing_sessions:
+        st.markdown("##### 🔄 Processing Sessions")
+        for session in processing_sessions:
+            status_emoji = {
+                'processing': '🔄',
+                'completed': '✅', 
+                'failed': '❌'
+            }.get(session['status'], '❓')
+            
+            with st.expander(f"{status_emoji} {session['file_name']} - {session['status'].title()} ({session['chunks_uploaded']} chunks)"):
+                col1, col2 = st.columns([3, 1])
+                
+                with col1:
+                    st.write(f"**Status:** {session['status'].title()}")
+                    st.write(f"**Current Phase:** {session['current_phase']}")
+                    st.write(f"**File Size:** {session['file_size'] / (1024*1024):.1f} MB")
+                    st.write(f"**Chunks Uploaded:** {session['chunks_uploaded']}")
+                    if session['total_chunks_expected']:
+                        progress_pct = (session['chunks_uploaded'] / session['total_chunks_expected']) * 100
+                        st.write(f"**Progress:** {progress_pct:.1f}%")
+                    st.write(f"**Started:** {session['start_time']}")
+                    if session['end_time']:
+                        st.write(f"**Completed:** {session['end_time']}")
+                    if session['error_message']:
+                        st.error(f"**Error:** {session['error_message']}")
+                
+                with col2:
+                    if st.button(f"🗑️ Delete Session", key=f"delete_session_{session['id']}"):
+                        if processing_manager.delete_session(session['id']):
+                            st.success(f"✅ Deleted session for {session['file_name']}")
+                            st.rerun()
+                        else:
+                            st.error(f"❌ Failed to delete session")
+    
     documents = get_uploaded_documents()
     
     if documents:
+        st.markdown("##### 📚 Uploaded Documents")
         for doc in documents:
             with st.expander(f"📄 {doc['filename']} ({doc['chunk_count']} chunks)"):
                 col1, col2 = st.columns([3, 1])
