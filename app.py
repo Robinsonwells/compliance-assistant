@@ -842,17 +842,14 @@ def show_main_application():
             logout_user()
     
     # Main tabs
-    tab1, tab2 = st.tabs(["💬 Legal Assistant", "📚 Knowledge Base"])
+    tab1 = st.tabs(["💬 Legal Assistant"])
     
-    with tab1:
+    with tab1[0]:
         show_legal_assistant_content()
     
     with tab2:
         show_knowledge_base()
     
-    # Chat input must be outside tabs - only show when on Legal Assistant tab
-    if 'active_tab' not in st.session_state:
-        st.session_state.active_tab = 0
     
     # Handle chat input outside of tabs
     if prompt := st.chat_input("Ask about employment law in NY, NJ, or CT..."):
