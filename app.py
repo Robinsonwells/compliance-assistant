@@ -812,38 +812,6 @@ def main():
 
 def show_login_page():
     """Display login page"""
-    st.markdown('<div class="main-container">', unsafe_allow_html=True)
-    
-    # Header
-    st.markdown("""
-    <div class="login-card">
-        <h1>⚖️ PEO Compliance Assistant</h1>
-        <p>Access employment law guidance for NY, NJ, and CT</p>
-    </div>
-    """, unsafe_allow_html=True)
-    
-    # Login form
-    with st.form("login_form"):
-        st.markdown("### 🔐 Access Required")
-        access_code = st.text_input(
-            "Enter your access code:",
-            type="password",
-            placeholder="Enter your unique access code"
-        )
-        
-        submitted = st.form_submit_button("Access System", use_container_width=True)
-        
-        if submitted:
-            if access_code:
-                if authenticate_user(access_code):
-                    st.success("✅ Access granted! Redirecting...")
-                    st.rerun()
-                else:
-                    st.error("❌ Invalid access code. Please check your code and try again.")
-            else:
-                st.warning("⚠️ Please enter your access code.")
-    
-    st.markdown('</div>', unsafe_allow_html=True)
 
 def show_main_application():
     """Display main application interface"""
