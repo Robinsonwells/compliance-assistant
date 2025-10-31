@@ -61,7 +61,7 @@ except Exception as e:
 # Page configuration
 st.set_page_config(
     page_title="PEO Compliance Assistant",
-    page_icon="⚖️",
+    page_icon="",
     layout="wide",
     initial_sidebar_state="expanded"
 )
@@ -200,10 +200,10 @@ def delete_document_from_qdrant(filename: str) -> bool:
         ).count
         
         if remaining_count > 0:
-            st.warning(f"⚠️ Warning: {remaining_count} chunks of {filename} may still remain in database")
+            st.warning(f"Warning: {remaining_count} chunks of {filename} may still remain in database")
             return False
         
-        st.info(f"🗑️ Successfully deleted {deleted_count} chunks from {filename}")
+        st.info(f"Successfully deleted {deleted_count} chunks from {filename}")
         return True
         
     except Exception as e:
@@ -230,7 +230,7 @@ def process_and_upload_document_iterative(uploaded_file, filename: str, progress
         
         # Create processing session
         session_id = processing_manager.create_session(filename, file_size, file_hash)
-        status_text.text(f"📄 Created processing session for {filename}")
+        status_text.text(f"Created processing session for {filename}")
         progress_bar.progress(0.05)
         
         # Determine file type and set up iterative extraction
@@ -248,10 +248,10 @@ def process_and_upload_document_iterative(uploaded_file, filename: str, progress
         
         # Choose appropriate iterative extraction method
         if file_type == "application/pdf":
-            status_text.text(f"📖 Processing PDF: {filename} (iterative extraction)")
+            status_text.text(f"Processing PDF: {filename} (iterative extraction)")
             content_generator = iterative_pdf_extraction(uploaded_file, page_batch_size=3)
         elif file_type == "application/vnd.openxmlformats-officedocument.wordprocessingml.document":
-            status_text.text(f"📝 Processing DOCX: {filename} (iterative extraction)")
+            status_text.text(f"Processing DOCX: {filename} (iterative extraction)")
             content_generator = iterative_docx_extraction(uploaded_file, paragraph_batch_size=30)
         else:
             # Text or XML file
@@ -259,7 +259,7 @@ def process_and_upload_document_iterative(uploaded_file, filename: str, progress
                 file_content_str = file_content_bytes.decode('utf-8')
             else:
                 file_content_str = str(file_content_bytes)
-            status_text.text(f"📄 Processing text file: {filename} (iterative extraction)")
+            status_text.text(f"Processing text file: {filename} (iterative extraction)")
             content_generator = iterative_text_extraction(file_content_str, chunk_size=30000)
         
         # Process content in batches
@@ -269,7 +269,7 @@ def process_and_upload_document_iterative(uploaded_file, filename: str, progress
             batch_info = content_batch['batch_info']
             extraction_progress = content_batch['progress']
             
-            status_text.text(f"🔄 Processing {batch_info}...")
+            status_text.text(f"Processing {batch_info}...")
             
             # Update progress (extraction phase takes 20% of total progress)
             current_progress = 0.05 + (extraction_progress * 0.2)
@@ -277,11 +277,11 @@ def process_and_upload_document_iterative(uploaded_file, filename: str, progress
             
             try:
                 # Chunk the content using legal chunker
-                status_text.text(f"⚖️ Legal chunking for {batch_info}...")
+                status_text.text(f"Legal chunking for {batch_info}...")
                 chunks = legal_chunker.legal_aware_chunking(batch_content, max_chunk_size=1200)
                 
                 if not chunks:
-                    status_text.text(f"⚠️ No valid chunks from {batch_info}, skipping...")
+                    status_text.text(f"No valid chunks from {batch_info}, skipping...")
                     continue
                 
                 # Update session with chunking progress
@@ -302,7 +302,7 @@ def process_and_upload_document_iterative(uploaded_file, filename: str, progress
                     sub_batch_end = min(sub_batch_start + sub_batch_size, len(chunks))
                     sub_batch_chunks = chunks[sub_batch_start:sub_batch_end]
                     
-                    status_text.text(f"🧠 Generating embeddings for {batch_info} (sub-batch {sub_batch_start//sub_batch_size + 1})...")
+                    status_text.text(f"Generating embeddings for {batch_info} (sub-batch {sub_batch_start//sub_batch_size + 1})...")
                     
                     # Extract texts for embedding
                     sub_batch_texts = [ch['text'] for ch in sub_batch_chunks]
@@ -311,7 +311,7 @@ def process_and_upload_document_iterative(uploaded_file, filename: str, progress
                     try:
                         sub_batch_embeddings = embedding_model.encode(sub_batch_texts, show_progress_bar=False)
                     except Exception as embedding_error:
-                        st.error(f"❌ Embedding generation failed for {batch_info}: {embedding_error}")
+                        st.error(f"Embedding generation failed for {batch_info}: {embedding_error}")
                         continue
                     
                     # Create points for Qdrant
@@ -336,14 +336,14 @@ def process_and_upload_document_iterative(uploaded_file, filename: str, progress
                             )
                             sub_batch_points.append(point)
                         except Exception as point_error:
-                            st.error(f"❌ Point creation failed: {point_error}")
+                            st.error(f"Point creation failed: {point_error}")
                             continue
                     
                     if not sub_batch_points:
                         continue
                     
                     # Upload to Qdrant
-                    status_text.text(f"☁️ Uploading {len(sub_batch_points)} chunks to database...")
+                    status_text.text(f"Uploading {len(sub_batch_points)} chunks to database...")
                     try:
                         qdrant_client.upsert(
                             collection_name="legal_regulations",
@@ -369,14 +369,14 @@ def process_and_upload_document_iterative(uploaded_file, filename: str, progress
                             {'batch_info': batch_info, 'chunks_in_batch': batch_chunks_uploaded}
                         )
                         
-                        status_text.text(f"✅ Uploaded batch from {batch_info} ({total_chunks_uploaded} total chunks)")
+                        status_text.text(f"Uploaded batch from {batch_info} ({total_chunks_uploaded} total chunks)")
                         
                         # Update progress (remaining 75% for processing and uploading)
                         processing_progress = 0.25 + (extraction_progress * 0.75)
                         progress_bar.progress(processing_progress)
                         
                     except Exception as upload_error:
-                        st.error(f"❌ Upload failed for {batch_info}: {upload_error}")
+                        st.error(f"Upload failed for {batch_info}: {upload_error}")
                         continue
                     
                     # Clear memory
@@ -386,25 +386,25 @@ def process_and_upload_document_iterative(uploaded_file, filename: str, progress
                 del chunks
                 
             except Exception as batch_error:
-                st.error(f"❌ Error processing {batch_info}: {batch_error}")
+                st.error(f"Error processing {batch_info}: {batch_error}")
                 continue
         
         # Complete the session
         if total_chunks_uploaded > 0:
             processing_manager.complete_session(session_id, total_chunks_uploaded)
             progress_bar.progress(1.0)
-            status_text.text(f"✅ Successfully processed {filename} ({total_chunks_uploaded} chunks)")
-            st.success(f"🎉 Successfully processed {filename} ({total_chunks_uploaded} chunks)")
+            status_text.text(f"Successfully processed {filename} ({total_chunks_uploaded} chunks)")
+            st.success(f"Successfully processed {filename} ({total_chunks_uploaded} chunks)")
             return True
         else:
             processing_manager.fail_session(session_id, "No chunks were successfully uploaded")
-            st.error(f"❌ No chunks were uploaded from {filename}")
+            st.error(f"No chunks were uploaded from {filename}")
             return False
             
     except Exception as e:
         error_msg = f"Critical error processing {filename}: {e}"
-        st.error(f"❌ {error_msg}")
-        st.error(f"🔧 Error details: {traceback.format_exc()}")
+        st.error(f"{error_msg}")
+        st.error(f"Error details: {traceback.format_exc()}")
         
         if session_id:
             processing_manager.fail_session(session_id, error_msg)
@@ -481,7 +481,7 @@ def process_and_upload_document(file_content: str, filename: str) -> bool:
         total_uploaded = 0
         upload_date = datetime.now().isoformat()
         
-        st.info(f"🧠 Processing {total_chunks} chunks in batches of {batch_size}...")
+        st.info(f"Processing {total_chunks} chunks in batches of {batch_size}...")
         
         # Process chunks in batches to manage memory usage
         for batch_start in range(0, total_chunks, batch_size):
@@ -490,7 +490,7 @@ def process_and_upload_document(file_content: str, filename: str) -> bool:
             batch_number = (batch_start // batch_size) + 1
             total_batches = (total_chunks + batch_size - 1) // batch_size
             
-            st.info(f"🔄 Processing batch {batch_number}/{total_batches} ({len(batch_chunks)} chunks)")
+            st.info(f"Processing batch {batch_number}/{total_batches} ({len(batch_chunks)} chunks)")
             
             try:
                 # Extract texts for this batch only
@@ -526,29 +526,29 @@ def process_and_upload_document(file_content: str, filename: str) -> bool:
                 )
                 
                 total_uploaded += len(batch_points)
-                st.info(f"✅ Uploaded batch {batch_number}/{total_batches} ({total_uploaded}/{total_chunks} chunks total)")
+                st.info(f"Uploaded batch {batch_number}/{total_batches} ({total_uploaded}/{total_chunks} chunks total)")
                 
                 # Clear batch variables to free memory
                 del batch_texts, batch_embeddings, batch_points
                 
             except Exception as batch_error:
-                st.error(f"❌ Error processing batch {batch_number}: {batch_error}")
-                st.error(f"🔧 Batch size: {len(batch_chunks)}")
+                st.error(f"Error processing batch {batch_number}: {batch_error}")
+                st.error(f"Batch size: {len(batch_chunks)}")
                 continue
         
         if total_uploaded > 0:
-            st.success(f"✅ Successfully uploaded {filename} ({total_uploaded} chunks)")
+            st.success(f"Successfully uploaded {filename} ({total_uploaded} chunks)")
             return True
         else:
-            st.error(f"❌ Failed to upload any chunks from {filename} - total_uploaded = {total_uploaded}")
-            st.error(f"❌ Failed to upload any chunks from {filename}")
+            st.error(f"Failed to upload any chunks from {filename} - total_uploaded = {total_uploaded}")
+            st.error(f"Failed to upload any chunks from {filename}")
             return False
             
     except Exception as e:
-        st.error(f"❌ Error processing {filename}: {e}")
+        st.error(f"Error processing {filename}: {e}")
         st.error(f"Traceback: {traceback.format_exc()}")
-        st.error(f"🔧 File content length: {len(file_content) if file_content else 'None'}")
-        st.error(f"🔧 Content hash: {content_hash if 'content_hash' in locals() else 'Not calculated'}")
+        st.error(f"File content length: {len(file_content) if file_content else 'None'}")
+        st.error(f"Content hash: {content_hash if 'content_hash' in locals() else 'Not calculated'}")
         return False
 
 def process_and_upload_document_with_progress(file_content: str, filename: str, progress_bar, status_text) -> bool:
@@ -557,21 +557,21 @@ def process_and_upload_document_with_progress(file_content: str, filename: str, 
         # Calculate content hash for tracking purposes
         content_hash = calculate_content_hash(file_content)
         
-        status_text.text(f"📄 Analyzing {filename}...")
+        status_text.text(f"Analyzing {filename}...")
         progress_bar.progress(0.1)
         
         # Process the document using legal chunker
-        status_text.text(f"🔄 Extracting semantic chunks from {filename}...")
+        status_text.text(f"Extracting semantic chunks from {filename}...")
         chunks = legal_chunker.legal_aware_chunking(file_content, max_chunk_size=1200)
         
         if not chunks:
-            st.error(f"❌ No valid chunks extracted from {filename}")
-            st.info(f"📝 File content length: {len(file_content)} characters")
-            st.info(f"📝 File content preview: {file_content[:200]}...")
+            st.error(f"No valid chunks extracted from {filename}")
+            st.info(f"File content length: {len(file_content)} characters")
+            st.info(f"File content preview: {file_content[:200]}...")
             return False
         
-        progress_bar.progress(0.2)
-        status_text.text(f"📝 Extracted {len(chunks)} chunks from {filename}")
+        st.info(f"Extracted {len(chunks)} chunks from {filename}")
+        status_text.text(f"Extracted {len(chunks)} chunks from {filename}")
         
         # Process chunks in batches to reduce memory usage for large documents
         batch_size = 100  # Process 100 chunks at a time
@@ -580,7 +580,7 @@ def process_and_upload_document_with_progress(file_content: str, filename: str, 
         upload_date = datetime.now().isoformat()
         total_batches = (total_chunks + batch_size - 1) // batch_size
         
-        status_text.text(f"🧠 Processing {total_chunks} chunks in {total_batches} batches...")
+        status_text.text(f"Processing {total_chunks} chunks in {total_batches} batches...")
         
         # Process chunks in batches to manage memory usage
         for batch_start in range(0, total_chunks, batch_size):
@@ -591,25 +591,25 @@ def process_and_upload_document_with_progress(file_content: str, filename: str, 
             # Update progress based on batch completion
             batch_progress = 0.2 + (0.8 * (batch_number - 1) / total_batches)
             progress_bar.progress(batch_progress)
-            status_text.text(f"🔄 Processing batch {batch_number}/{total_batches} ({len(batch_chunks)} chunks)")
+            status_text.text(f"Processing batch {batch_number}/{total_batches} ({len(batch_chunks)} chunks)")
             
             try:
                 # Extract texts for this batch only
-                status_text.text(f"📝 Extracting text from batch {batch_number}/{total_batches}...")
+                status_text.text(f"Extracting text from batch {batch_number}/{total_batches}...")
                 batch_texts = [ch['text'] for ch in batch_chunks]
                 
                 # Generate embeddings for this batch
-                status_text.text(f"🧠 Generating embeddings for batch {batch_number}/{total_batches}...")
+                status_text.text(f"Generating embeddings for batch {batch_number}/{total_batches}...")
                 try:
                     batch_embeddings = embedding_model.encode(batch_texts, show_progress_bar=False)
                 except Exception as embedding_error:
-                    st.error(f"❌ Embedding generation failed for batch {batch_number}: {embedding_error}")
-                    st.error(f"🔧 Batch texts length: {len(batch_texts)}")
-                    st.error(f"🔧 Sample text length: {len(batch_texts[0]) if batch_texts else 'No texts'}")
+                    st.error(f"Embedding generation failed for batch {batch_number}: {embedding_error}")
+                    st.error(f"Batch texts length: {len(batch_texts)}")
+                    st.error(f"Sample text length: {len(batch_texts[0]) if batch_texts else 'No texts'}")
                     continue
                 
                 # Create points for this batch
-                status_text.text(f"📦 Creating data points for batch {batch_number}/{total_batches}...")
+                status_text.text(f"Creating data points for batch {batch_number}/{total_batches}...")
                 batch_points = []
                 for i, (ch, embedding) in enumerate(zip(batch_chunks, batch_embeddings)):
                     try:
@@ -630,15 +630,15 @@ def process_and_upload_document_with_progress(file_content: str, filename: str, 
                         )
                         batch_points.append(point)
                     except Exception as point_error:
-                        st.error(f"❌ Point creation failed for chunk {i} in batch {batch_number}: {point_error}")
+                        st.error(f"Point creation failed for chunk {i} in batch {batch_number}: {point_error}")
                         continue
                 
                 if not batch_points:
-                    st.error(f"❌ No valid points created for batch {batch_number}")
+                    st.error(f"No valid points created for batch {batch_number}")
                     continue
                 
                 # Upload this batch to Qdrant
-                status_text.text(f"☁️ Uploading batch {batch_number}/{total_batches} to database...")
+                status_text.text(f"Uploading batch {batch_number}/{total_batches} to database...")
                 try:
                     qdrant_client.upsert(
                         collection_name="legal_regulations",
@@ -651,21 +651,21 @@ def process_and_upload_document_with_progress(file_content: str, filename: str, 
                     # Update progress
                     batch_progress = 0.2 + (0.8 * batch_number / total_batches)
                     progress_bar.progress(batch_progress)
-                    status_text.text(f"✅ Uploaded batch {batch_number}/{total_batches} ({total_uploaded}/{total_chunks} chunks total)")
+                    status_text.text(f"Uploaded batch {batch_number}/{total_batches} ({total_uploaded}/{total_chunks} chunks total)")
                     
                 except Exception as upload_error:
-                    st.error(f"❌ Qdrant upload failed for batch {batch_number}: {upload_error}")
-                    st.error(f"🔧 Batch points count: {len(batch_points)}")
-                    st.error(f"🔧 Upload error details: {traceback.format_exc()}")
+                    st.error(f"Qdrant upload failed for batch {batch_number}: {upload_error}")
+                    st.error(f"Batch points count: {len(batch_points)}")
+                    st.error(f"Upload error details: {traceback.format_exc()}")
                     continue
                 
                 # Clear batch variables to free memory
                 del batch_texts, batch_embeddings, batch_points
                 
             except Exception as batch_error:
-                st.error(f"❌ Critical error in batch {batch_number}: {batch_error}")
-                st.error(f"🔧 Batch size: {len(batch_chunks)}")
-                st.error(f"🔧 Batch error details: {traceback.format_exc()}")
+                st.error(f"Critical error in batch {batch_number}: {batch_error}")
+                st.error(f"Batch size: {len(batch_chunks)}")
+                st.error(f"Batch error details: {traceback.format_exc()}")
                 
                 # Try to continue with next batch
                 continue
@@ -674,19 +674,19 @@ def process_and_upload_document_with_progress(file_content: str, filename: str, 
         progress_bar.progress(1.0)
         
         if total_uploaded > 0:
-            status_text.text(f"✅ Successfully uploaded {filename} ({total_uploaded}/{total_chunks} chunks)")
-            st.success(f"✅ Successfully uploaded {filename} ({total_uploaded} chunks)")
+            status_text.text(f"Successfully uploaded {filename} ({total_uploaded}/{total_chunks} chunks)")
+            st.success(f"Successfully uploaded {filename} ({total_uploaded} chunks)")
             return True
         else:
-            status_text.text(f"❌ Failed to upload any chunks from {filename}")
-            st.error(f"❌ Failed to upload any chunks from {filename} - total_uploaded = {total_uploaded}")
+            status_text.text(f"Failed to upload any chunks from {filename}")
+            st.error(f"Failed to upload any chunks from {filename} - total_uploaded = {total_uploaded}")
             return False
             
     except Exception as e:
-        st.error(f"❌ Critical error processing {filename}: {e}")
-        st.error(f"🔧 Error details: {traceback.format_exc()}")
-        st.error(f"🔧 File content length: {len(file_content) if file_content else 'None'}")
-        st.error(f"🔧 Content hash: {content_hash if 'content_hash' in locals() else 'Not calculated'}")
+        st.error(f"Critical error processing {filename}: {e}")
+        st.error(f"Error details: {traceback.format_exc()}")
+        st.error(f"File content length: {len(file_content) if file_content else 'None'}")
+        st.error(f"Content hash: {content_hash if 'content_hash' in locals() else 'Not calculated'}")
         return False
 
 def search_legal_database(query: str, limit: int = 5) -> List[Dict[str, Any]]:
@@ -809,7 +809,7 @@ def main():
 
 def show_login_page():
     """Display login page"""
-    st.title("🔐 PEO Compliance Assistant")
+    st.title("PEO Compliance Assistant")
     st.markdown("### Access Required")
     
     # Create a simple login form
@@ -821,14 +821,14 @@ def show_login_page():
         if submit_button:
             if access_code:
                 if authenticate_user(access_code):
-                    st.success("✅ Access granted! Redirecting...")
+                    st.success("Access granted! Redirecting...")
                     st.rerun()
                 else:
-                    st.error("❌ Invalid access code. Please try again.")
+                    st.error("Invalid access code. Please try again.")
             else:
-                st.error("❌ Please enter an access code.")
+                st.error("Please enter an access code.")
     
-    st.info("💡 Contact your administrator if you need an access code.")
+    st.info("Contact your administrator if you need an access code.")
 
 def show_main_application():
     """Display main application interface"""
@@ -836,11 +836,11 @@ def show_main_application():
     # Header
     col1, col2 = st.columns([3, 1])
     with col1:
-        st.title("⚖️ PEO Compliance Assistant")
+        st.title("PEO Compliance Assistant")
         st.markdown("*Comprehensive employment law guidance for all 50 U.S. states and federal law*")
     
     with col2:
-        if st.button("🚪 Logout", use_container_width=True):
+        if st.button("Logout", use_container_width=True):
             logout_user()
     
     # Show legal assistant content directly
@@ -852,7 +852,7 @@ def show_main_application():
 
 def show_legal_assistant_content():
     """Display legal assistant chat interface content (without chat input)"""
-    st.markdown("### 💬 Ask Your Legal Question")
+    st.markdown("### Ask Your Legal Question")
     
     # Initialize chat history
     if "messages" not in st.session_state:
@@ -890,7 +890,7 @@ def handle_chat_input(prompt):
     st.rerun()
 def show_knowledge_base():
     """Display knowledge base management interface"""
-    st.markdown("### 📚 Knowledge Base Management")
+    st.markdown("### Knowledge Base Management")
 
     # Initialize session state for tracking processed files and processing status
     if "processed_file_ids" not in st.session_state:
@@ -901,7 +901,7 @@ def show_knowledge_base():
         st.session_state.processing_complete = False
 
     # Upload section
-    st.markdown("#### 📤 Upload Documents")
+    st.markdown("#### Upload Documents")
 
     uploaded_files = st.file_uploader(
         "Upload legal documents (PDF, DOCX, TXT, XML)",
@@ -921,8 +921,8 @@ def show_knowledge_base():
 
     # Show processing complete message and clear button
     if st.session_state.processing_complete:
-        st.success("✅ Processing complete! Upload new files or clear to continue.")
-        if st.button("🔄 Clear and Upload More", use_container_width=True):
+        st.success("Processing complete! Upload new files or clear to continue.")
+        if st.button("Clear and Upload More", use_container_width=True):
             st.session_state.processed_file_ids.clear()
             st.session_state.processing_complete = False
             st.rerun()
@@ -932,7 +932,7 @@ def show_knowledge_base():
         col1, col2 = st.columns(2)
         
         with col1:
-            if st.button("🚀 Process Documents (Standard)", use_container_width=True):
+            if st.button("Process Documents (Standard)", use_container_width=True):
                 progress_bar = st.progress(0)
                 status_text = st.empty()
 
@@ -960,19 +960,19 @@ def show_knowledge_base():
                             st.session_state.processed_file_ids.add(file_id)
 
                     except Exception as e:
-                        st.error(f"❌ Error processing {uploaded_file.name}: {e}")
+                        st.error(f"Error processing {uploaded_file.name}: {e}")
 
                     progress_bar.progress((i + 1) / total_files)
 
-                status_text.text(f"✅ Completed! {successful_uploads}/{total_files} files processed successfully.")
+                status_text.text(f"Completed! {successful_uploads}/{total_files} files processed successfully.")
 
                 if successful_uploads > 0:
-                    st.success(f"🎉 Successfully processed {successful_uploads} documents!")
+                    st.success(f"Successfully processed {successful_uploads} documents!")
                     # Mark processing as complete - this prevents the button from showing again
                     st.session_state.processing_complete = True
         
         with col2:
-            if st.button("🔄 Process Documents (Iterative - Large Files)", use_container_width=True):
+            if st.button("Process Documents (Iterative - Large Files)", use_container_width=True):
                 st.session_state.is_processing = True
                 progress_bar = st.progress(0)
                 status_text = st.empty()
@@ -992,38 +992,38 @@ def show_knowledge_base():
                             st.session_state.processed_file_ids.add(file_id)
 
                     except Exception as e:
-                        st.error(f"❌ Error processing {uploaded_file.name}: {e}")
+                        st.error(f"Error processing {uploaded_file.name}: {e}")
 
                     # Update overall progress
                     overall_progress = (i + 1) / total_files
                     progress_bar.progress(overall_progress)
 
-                status_text.text(f"✅ Completed! {successful_uploads}/{total_files} files processed successfully.")
+                status_text.text(f"Completed! {successful_uploads}/{total_files} files processed successfully.")
 
                 if successful_uploads > 0:
-                    st.success(f"🎉 Successfully processed {successful_uploads} documents!")
+                    st.success(f"Successfully processed {successful_uploads} documents!")
                     # Mark processing as complete - this prevents the button from showing again
                     st.session_state.processing_complete = True
                 
                 st.session_state.is_processing = False
 
     elif uploaded_files and not new_files and not st.session_state.processing_complete:
-        st.info("ℹ️ These files have already been processed in this session. Clear to upload more.")
+        st.info("These files have already been processed in this session. Clear to upload more.")
     
     # Document management section
-    st.markdown("#### 📋 Uploaded Documents")
+    st.markdown("#### Uploaded Documents")
     
     # Show processing sessions
     processing_sessions = processing_manager.get_all_processing_sessions()
     
     if processing_sessions:
-        st.markdown("##### 🔄 Processing Sessions")
+        st.markdown("##### Processing Sessions")
         for session in processing_sessions:
             status_emoji = {
-                'processing': '🔄',
-                'completed': '✅', 
-                'failed': '❌'
-            }.get(session['status'], '❓')
+                'processing': 'Processing',
+                'completed': 'Completed', 
+                'failed': 'Failed'
+            }.get(session['status'], 'Unknown')
             
             with st.expander(f"{status_emoji} {session['file_name']} - {session['status'].title()} ({session['chunks_uploaded']} chunks)"):
                 col1, col2 = st.columns([3, 1])
@@ -1043,19 +1043,19 @@ def show_knowledge_base():
                         st.error(f"**Error:** {session['error_message']}")
                 
                 with col2:
-                    if st.button(f"🗑️ Delete Session", key=f"delete_session_{session['id']}"):
+                    if st.button(f"Delete Session", key=f"delete_session_{session['id']}"):
                         if processing_manager.delete_session(session['id']):
-                            st.success(f"✅ Deleted session for {session['file_name']}")
+                            st.success(f"Deleted session for {session['file_name']}")
                             st.rerun()
                         else:
-                            st.error(f"❌ Failed to delete session")
+                            st.error(f"Failed to delete session")
     
     documents = get_uploaded_documents()
     
     if documents:
-        st.markdown("##### 📚 Uploaded Documents")
+        st.markdown("##### Uploaded Documents")
         for doc in documents:
-            with st.expander(f"📄 {doc['filename']} ({doc['chunk_count']} chunks)"):
+            with st.expander(f"{doc['filename']} ({doc['chunk_count']} chunks)"):
                 col1, col2 = st.columns([3, 1])
                 
                 with col1:
@@ -1065,14 +1065,14 @@ def show_knowledge_base():
                     st.write(f"**Content Hash:** {doc['content_hash'][:16]}...")
                 
                 with col2:
-                    if st.button(f"🗑️ Delete", key=f"delete_{doc['filename']}"):
+                    if st.button(f"Delete", key=f"delete_{doc['filename']}"):
                         if delete_document_from_qdrant(doc['filename']):
-                            st.success(f"✅ Deleted {doc['filename']}")
+                            st.success(f"Deleted {doc['filename']}")
                             st.rerun()
                         else:
-                            st.error(f"❌ Failed to delete {doc['filename']}")
+                            st.error(f"Failed to delete {doc['filename']}")
     else:
-        st.info("📭 No documents uploaded yet. Upload some legal documents to get started!")
+        st.info("No documents uploaded yet. Upload some legal documents to get started!")
 
 if __name__ == "__main__":
     main()
