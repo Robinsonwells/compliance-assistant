@@ -812,6 +812,26 @@ def main():
 
 def show_login_page():
     """Display login page"""
+    st.title("🔐 PEO Compliance Assistant")
+    st.markdown("### Access Required")
+    
+    # Create a simple login form
+    with st.form("login_form"):
+        st.write("Please enter your access code to continue:")
+        access_code = st.text_input("Access Code", type="password")
+        submit_button = st.form_submit_button("Access System")
+        
+        if submit_button:
+            if access_code:
+                if authenticate_user(access_code):
+                    st.success("✅ Access granted! Redirecting...")
+                    st.rerun()
+                else:
+                    st.error("❌ Invalid access code. Please try again.")
+            else:
+                st.error("❌ Please enter an access code.")
+    
+    st.info("💡 Contact your administrator if you need an access code.")
 
 def show_main_application():
     """Display main application interface"""
