@@ -844,12 +844,11 @@ def show_main_application():
     # Main tabs
     tab1, tab2 = st.tabs(["💬 Legal Assistant", "📚 Knowledge Base"])
     
-    with tab1[0]:
+    with tab1:
         show_legal_assistant_content()
     
     with tab2:
         show_knowledge_base()
-    
     
     # Handle chat input outside of tabs
     if prompt := st.chat_input("Ask about employment law in NY, NJ, or CT..."):
