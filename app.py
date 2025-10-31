@@ -855,15 +855,23 @@ def show_main_application():
     tab1, tab2 = st.tabs(["💬 Legal Assistant", "📚 Knowledge Base"])
     
     with tab1:
-        show_legal_assistant()
+        show_legal_assistant_content()
     
     with tab2:
         show_knowledge_base()
     
+    # Chat input must be outside tabs - only show when on Legal Assistant tab
+    if 'active_tab' not in st.session_state:
+        st.session_state.active_tab = 0
+    
+    # Handle chat input outside of tabs
+    if prompt := st.chat_input("Ask about employment law in NY, NJ, or CT..."):
+        handle_chat_input(prompt)
+    
     st.markdown('</div>', unsafe_allow_html=True)
 
-def show_legal_assistant():
-    """Display legal assistant chat interface"""
+def show_legal_assistant_content():
+    """Display legal assistant chat interface content (without chat input)"""
     st.markdown("### 💬 Ask Your Legal Question")
     
     # Initialize chat history
@@ -874,30 +882,32 @@ def show_legal_assistant():
     for message in st.session_state.messages:
         with st.chat_message(message["role"]):
             st.markdown(message["content"])
-    
-    # Chat input
-    if prompt := st.chat_input("Ask about employment law in NY, NJ, or CT..."):
-        # Add user message to chat history
-        st.session_state.messages.append({"role": "user", "content": prompt})
-        
-        # Display user message
-        with st.chat_message("user"):
-            st.markdown(prompt)
-        
-        # Generate and display assistant response
-        with st.chat_message("assistant"):
-            with st.spinner("Searching legal database..."):
-                # Search for relevant legal information
-                search_results = search_legal_database(prompt, limit=5)
-                
-                # Generate response
-                response = generate_legal_response(prompt, search_results)
-                
-                st.markdown(response)
-                
-                # Add assistant response to chat history
-                st.session_state.messages.append({"role": "assistant", "content": response})
 
+def handle_chat_input(prompt):
+    """Handle chat input and generate response"""
+    # Add user message to chat history
+    st.session_state.messages.append({"role": "user", "content": prompt})
+    
+    # Display user message
+    with st.chat_message("user"):
+        st.markdown(prompt)
+    
+    # Generate and display assistant response
+    with st.chat_message("assistant"):
+        with st.spinner("Searching legal database..."):
+            # Search for relevant legal information
+            search_results = search_legal_database(prompt, limit=5)
+            
+            # Generate response
+            response = generate_legal_response(prompt, search_results)
+            
+            st.markdown(response)
+            
+            # Add assistant response to chat history
+            st.session_state.messages.append({"role": "assistant", "content": response})
+    
+    # Rerun to update the display
+    st.rerun()
 def show_knowledge_base():
     """Display knowledge base management interface"""
     st.markdown("### 📚 Knowledge Base Management")
