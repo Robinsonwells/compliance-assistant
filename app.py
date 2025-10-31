@@ -842,7 +842,7 @@ def show_main_application():
             logout_user()
     
     # Main tabs
-    tab1 = st.tabs(["💬 Legal Assistant"])
+    tab1, tab2 = st.tabs(["💬 Legal Assistant", "📚 Knowledge Base"])
     
     with tab1[0]:
         show_legal_assistant_content()
