@@ -841,14 +841,8 @@ def show_main_application():
         if st.button("🚪 Logout", use_container_width=True):
             logout_user()
     
-    # Main tabs
-    tab1, tab2 = st.tabs(["💬 Legal Assistant", "📚 Knowledge Base"])
-    
-    with tab1:
-        show_legal_assistant_content()
-    
-    with tab2:
-        show_knowledge_base()
+    # Show legal assistant content directly
+    show_legal_assistant_content()
     
     # Handle chat input outside of tabs
     if prompt := st.chat_input("Ask about employment law in NY, NJ, or CT..."):
