@@ -93,7 +93,6 @@ def ensure_collection_exists():
                 field_name="source_file",
                 field_schema=PayloadSchemaType.KEYWORD
             )
-            st.info("✅ Created/verified source_file payload index")
             
             # Create index for content_hash field
             qdrant_client.create_payload_index(
@@ -101,12 +100,11 @@ def ensure_collection_exists():
                 field_name="content_hash",
                 field_schema=PayloadSchemaType.KEYWORD
             )
-            st.info("✅ Created/verified content_hash payload index")
             
         except Exception as index_error:
             # Indexes might already exist, which is fine
             if "already exists" not in str(index_error).lower():
-                st.warning(f"⚠️ Could not create payload indexes: {index_error}")
+                pass  # Silently handle index creation issues
         
         return True
     except Exception:
@@ -127,7 +125,6 @@ def ensure_collection_exists():
                     field_name="source_file",
                     field_schema=PayloadSchemaType.KEYWORD
                 )
-                st.info("✅ Created source_file payload index for new collection")
                 
                 # Create index for content_hash field
                 qdrant_client.create_payload_index(
@@ -135,14 +132,12 @@ def ensure_collection_exists():
                     field_name="content_hash",
                     field_schema=PayloadSchemaType.KEYWORD
                 )
-                st.info("✅ Created content_hash payload index for new collection")
                 
             except Exception as index_error:
-                st.warning(f"⚠️ Could not create payload indexes for new collection: {index_error}")
+                pass  # Silently handle index creation issues
             
             return True
         except Exception as e:
-            st.error(f"Failed to create collection: {e}")
             return False
 
 def calculate_content_hash(text: str) -> str:
@@ -835,17 +830,12 @@ def show_login_page():
 
 def show_main_application():
     """Display main application interface"""
-    st.markdown('<div class="main-container">', unsafe_allow_html=True)
     
     # Header
     col1, col2 = st.columns([3, 1])
     with col1:
-        st.markdown("""
-        <div class="dashboard-header">
-            <h1>⚖️ PEO Compliance Assistant</h1>
-            <p>Employment law guidance for New York, New Jersey, and Connecticut</p>
-        </div>
-        """, unsafe_allow_html=True)
+        st.title("⚖️ PEO Compliance Assistant")
+        st.markdown("*Employment law guidance for New York, New Jersey, and Connecticut*")
     
     with col2:
         if st.button("🚪 Logout", use_container_width=True):
@@ -867,8 +857,6 @@ def show_main_application():
     # Handle chat input outside of tabs
     if prompt := st.chat_input("Ask about employment law in NY, NJ, or CT..."):
         handle_chat_input(prompt)
-    
-    st.markdown('</div>', unsafe_allow_html=True)
 
 def show_legal_assistant_content():
     """Display legal assistant chat interface content (without chat input)"""
