@@ -837,7 +837,7 @@ def show_main_application():
     col1, col2 = st.columns([3, 1])
     with col1:
         st.title("⚖️ PEO Compliance Assistant")
-        st.markdown("*Employment law guidance for New York, New Jersey, and Connecticut*")
+        st.markdown("*Comprehensive employment law guidance for all 50 U.S. states and federal law*")
     
     with col2:
         if st.button("🚪 Logout", use_container_width=True):
@@ -847,7 +847,7 @@ def show_main_application():
     show_legal_assistant_content()
     
     # Handle chat input outside of tabs
-    if prompt := st.chat_input("Ask about employment law in NY, NJ, or CT..."):
+    if prompt := st.chat_input("Ask about employment law in any U.S. state or federal law..."):
         handle_chat_input(prompt)
 
 def show_legal_assistant_content():
@@ -907,7 +907,7 @@ def show_knowledge_base():
         "Upload legal documents (PDF, DOCX, TXT, XML)",
         type=['pdf', 'docx', 'txt', 'xml'],
         accept_multiple_files=True,
-        help="Upload employment law documents for NY, NJ, and CT",
+        help="Upload employment law documents for any U.S. state or federal law",
         key="doc_uploader"
     )
 
