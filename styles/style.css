@@ -400,16 +400,16 @@ button[data-testid="baseButton-primary"] div {
   color: inherit !important;
 }
 
-/* Chat Input Container - Full Width - Clean Modern Design */
+/* Chat Input Container - Premium Glassmorphic Design */
 [data-testid="stChatInput"] {
   position: fixed !important;
-  bottom: 1.5rem !important;
+  bottom: 2rem !important;
   left: 21rem !important;
   right: 0 !important;
   width: calc(100vw - 21rem) !important;
   max-width: calc(100vw - 21rem) !important;
   margin: 0 !important;
-  padding: 0 2rem !important;
+  padding: 0 3rem !important;
   background: transparent !important;
   border-top: none !important;
   box-shadow: none !important;
@@ -419,7 +419,7 @@ button[data-testid="baseButton-primary"] div {
 
 /* Chat Input Inner Container - Wrapper for textarea and button */
 [data-testid="stChatInput"] > div {
-  max-width: 1200px !important;
+  max-width: 1000px !important;
   margin: 0 auto !important;
   padding: 0 !important;
   width: 100% !important;
@@ -431,61 +431,91 @@ button[data-testid="baseButton-primary"] div {
 [data-testid="stChatInput"] > div > div {
   position: relative !important;
   width: 100% !important;
+  background: linear-gradient(135deg, rgba(36, 41, 46, 0.95) 0%, rgba(48, 54, 61, 0.95) 100%) !important;
+  backdrop-filter: blur(20px) saturate(180%) !important;
+  -webkit-backdrop-filter: blur(20px) saturate(180%) !important;
+  border-radius: 28px !important;
+  padding: 8px !important;
+  box-shadow:
+    0 8px 32px rgba(0, 0, 0, 0.6),
+    0 0 0 1px rgba(255, 255, 255, 0.1) inset,
+    0 1px 2px rgba(255, 255, 255, 0.15) inset !important;
+  transition: all 0.4s cubic-bezier(0.25, 0.46, 0.45, 0.94) !important;
 }
 
-/* Chat Input Text Area - With integrated button space */
+/* Chat Input Text Area - Elevated Premium Design */
 [data-testid="stChatInput"] textarea {
-  background-color: var(--bg-secondary) !important;
-  border: 2px solid var(--border-light) !important;
-  border-radius: 24px !important;
-  padding: 1rem 4.5rem 1rem 1.5rem !important;
+  background: rgba(30, 36, 43, 0.6) !important;
+  border: 2px solid rgba(255, 255, 255, 0.08) !important;
+  border-radius: 22px !important;
+  padding: 1.125rem 5rem 1.125rem 1.75rem !important;
   font-size: 1.0625rem !important;
   color: var(--text-primary) !important;
   font-family: inherit !important;
   letter-spacing: -0.022em !important;
-  line-height: 1.5 !important;
-  transition: all 0.3s cubic-bezier(0.25, 0.46, 0.45, 0.94) !important;
+  line-height: 1.6 !important;
+  transition: all 0.4s cubic-bezier(0.25, 0.46, 0.45, 0.94) !important;
   resize: none !important;
-  min-height: 56px !important;
-  max-height: 200px !important;
+  min-height: 60px !important;
+  max-height: 240px !important;
   width: 100% !important;
   box-sizing: border-box !important;
-  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.4) !important;
+  box-shadow:
+    0 4px 16px rgba(0, 0, 0, 0.3) inset,
+    0 1px 2px rgba(255, 255, 255, 0.05) !important;
+  font-weight: 400 !important;
 }
 
-/* Chat Input Focus State - Smooth modern focus */
+/* Chat Input Focus State - Stunning Glow Effect */
 [data-testid="stChatInput"] textarea:focus {
-  background-color: var(--bg-tertiary) !important;
-  border-color: var(--primary-blue) !important;
-  box-shadow: 0 0 0 3px rgba(0, 122, 255, 0.15), 0 6px 32px rgba(0, 0, 0, 0.5) !important;
+  background: rgba(26, 31, 38, 0.8) !important;
+  border-color: rgba(0, 122, 255, 0.6) !important;
+  box-shadow:
+    0 0 0 4px rgba(0, 122, 255, 0.12),
+    0 4px 20px rgba(0, 0, 0, 0.4) inset,
+    0 8px 40px rgba(0, 122, 255, 0.25) !important;
   outline: none !important;
+  transform: translateY(-1px) !important;
+}
+
+/* Focused container glow */
+[data-testid="stChatInput"] > div > div:has(textarea:focus) {
+  box-shadow:
+    0 12px 48px rgba(0, 122, 255, 0.3),
+    0 0 0 1px rgba(0, 122, 255, 0.3) inset,
+    0 1px 2px rgba(255, 255, 255, 0.2) inset !important;
+  transform: translateY(-2px) scale(1.005) !important;
 }
 
 /* Chat Input Placeholder */
 [data-testid="stChatInput"] textarea::placeholder {
-  color: var(--text-muted) !important;
+  color: rgba(139, 148, 158, 0.7) !important;
   font-size: 1rem !important;
-  opacity: 0.8 !important;
+  opacity: 1 !important;
+  font-weight: 400 !important;
 }
 
-/* Chat Input Send Button - Positioned INSIDE the textarea on the right */
+/* Chat Input Send Button - Premium Floating Design */
 [data-testid="stChatInput"] button {
   position: absolute !important;
-  right: 0.5rem !important;
-  bottom: 0.5rem !important;
-  background: var(--primary-blue) !important;
+  right: 12px !important;
+  bottom: 12px !important;
+  background: linear-gradient(135deg, #007AFF 0%, #0056CC 100%) !important;
   color: var(--white) !important;
   border: none !important;
   border-radius: 50% !important;
   padding: 0 !important;
   font-weight: 600 !important;
-  transition: all 0.2s cubic-bezier(0.25, 0.46, 0.45, 0.94) !important;
-  box-shadow: 0 2px 8px rgba(0, 122, 255, 0.4) !important;
+  transition: all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1) !important;
+  box-shadow:
+    0 4px 16px rgba(0, 122, 255, 0.5),
+    0 2px 8px rgba(0, 122, 255, 0.3),
+    0 0 0 1px rgba(255, 255, 255, 0.1) inset !important;
   cursor: pointer !important;
-  height: 40px !important;
-  width: 40px !important;
-  min-height: 40px !important;
-  min-width: 40px !important;
+  height: 46px !important;
+  width: 46px !important;
+  min-height: 46px !important;
+  min-width: 46px !important;
   display: flex !important;
   align-items: center !important;
   justify-content: center !important;
@@ -498,30 +528,36 @@ button[data-testid="baseButton-primary"] div {
 [data-testid="stChatInput"] button span {
   color: var(--white) !important;
   fill: var(--white) !important;
-  width: 20px !important;
-  height: 20px !important;
+  width: 22px !important;
+  height: 22px !important;
+  filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.3)) !important;
 }
 
-/* Chat Input Send Button Hover - Subtle lift effect */
+/* Chat Input Send Button Hover - Dynamic lift effect */
 [data-testid="stChatInput"] button:hover {
-  background: var(--primary-blue-dark) !important;
-  transform: scale(1.05) !important;
-  box-shadow: 0 4px 12px rgba(0, 122, 255, 0.5) !important;
+  background: linear-gradient(135deg, #0056CC 0%, #004499 100%) !important;
+  transform: scale(1.1) translateY(-2px) !important;
+  box-shadow:
+    0 8px 24px rgba(0, 122, 255, 0.6),
+    0 4px 12px rgba(0, 122, 255, 0.4),
+    0 0 0 1px rgba(255, 255, 255, 0.2) inset !important;
 }
 
-/* Chat Input Send Button Active - Press down effect */
+/* Chat Input Send Button Active - Satisfying press effect */
 [data-testid="stChatInput"] button:active {
-  transform: scale(0.95) !important;
-  box-shadow: 0 2px 6px rgba(0, 122, 255, 0.4) !important;
+  transform: scale(0.95) translateY(0) !important;
+  box-shadow:
+    0 2px 8px rgba(0, 122, 255, 0.5),
+    0 1px 4px rgba(0, 122, 255, 0.3) !important;
 }
 
 /* Disabled send button state */
 [data-testid="stChatInput"] button:disabled {
-  background: var(--gray-600) !important;
+  background: linear-gradient(135deg, var(--gray-700) 0%, var(--gray-800) 100%) !important;
   cursor: not-allowed !important;
-  opacity: 0.5 !important;
+  opacity: 0.4 !important;
   transform: none !important;
-  box-shadow: none !important;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2) !important;
 }
 
 /* Ensure main content has bottom padding for fixed chat input */
