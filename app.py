@@ -191,35 +191,45 @@ def show_login_page():
 
 def show_main_application():
     """Display main application interface"""
-    
-    # Header
-    col1, col2 = st.columns([3, 1])
-    with col1:
-        st.title("PEO Compliance Assistant")
-        st.markdown("*Comprehensive employment law guidance for all 50 U.S. states and federal law*")
-    
-    with col2:
-        if st.button("Logout", use_container_width=True):
+
+    # Optimized header for mobile-first design
+    header_col1, header_col2 = st.columns([4, 1])
+    with header_col1:
+        st.markdown("<h1 style='margin-bottom: 4px;'>PEO Compliance Assistant</h1>", unsafe_allow_html=True)
+        st.caption("Comprehensive employment law guidance for all 50 U.S. states and federal law")
+
+    with header_col2:
+        if st.button("↗", key="logout_btn", help="Logout", use_container_width=True):
             logout_user()
-    
+
+    # Add visual separator
+    st.markdown("<hr style='margin: 16px 0; border: none; border-top: 1px solid var(--border-light);'>", unsafe_allow_html=True)
+
     # Show legal assistant content directly
     show_legal_assistant_content()
-    
+
     # Handle chat input outside of tabs
     if prompt := st.chat_input("Ask about employment law in any U.S. state or federal law..."):
         handle_chat_input(prompt)
 
 def show_legal_assistant_content():
     """Display legal assistant chat interface content (without chat input)"""
-    st.markdown("### Legal Assistant")
-    
     # Initialize chat history
     if "messages" not in st.session_state:
         st.session_state.messages = []
-    
-    # Display chat messages
-    for message in st.session_state.messages:
-        with st.chat_message(message["role"]):
+
+    # Show welcome message if no messages
+    if len(st.session_state.messages) == 0:
+        st.markdown("""
+        <div style='text-align: center; padding: 32px 16px; color: var(--text-muted);'>
+            <h3 style='color: var(--text-secondary); margin-bottom: 8px;'>Welcome to Legal Assistant</h3>
+            <p>Ask me anything about employment law across all 50 U.S. states and federal regulations.</p>
+        </div>
+        """, unsafe_allow_html=True)
+
+    # Display chat messages with optimized rendering
+    for idx, message in enumerate(st.session_state.messages):
+        with st.chat_message(message["role"], avatar="👤" if message["role"] == "user" else "⚖️"):
             st.markdown(message["content"])
 
 def handle_chat_input(prompt):
