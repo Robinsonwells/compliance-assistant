@@ -458,9 +458,9 @@ button[data-testid="baseButton-primary"] div {
   }
 }
 
-/* ===== CHAT INPUT BAR - COMPLETE FIX ===== */
+/* ===== CHAT INPUT BAR - ULTRA CLEAN VERSION (iMessage Style) ===== */
 
-/* Main container - floating at bottom with proper spacing */
+/* Main container - NO BORDERS OR OUTLINES (transparent wrapper) */
 [data-testid="stChatInput"] {
   position: fixed !important;
   bottom: 20px !important;
@@ -470,57 +470,72 @@ button[data-testid="baseButton-primary"] div {
   margin: 0 auto !important;
   z-index: 10000 !important;
 
-  background: var(--bg-secondary) !important;
+  /* CRITICAL: Completely transparent container with no styling */
+  background: transparent !important;
   border: none !important;
   border-top: none !important;
-  border-radius: 28px !important;
-  padding: 8px !important;
+  border-bottom: none !important;
+  border-left: none !important;
+  border-right: none !important;
+  outline: none !important;
+  box-shadow: none !important;
 
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4) !important;
+  padding: 0 !important;
+  border-radius: 0 !important;
   transform: none !important;
 }
 
-/* Remove any pseudo-elements that might create lines */
+/* Remove any pseudo-elements that might create lines/borders */
 [data-testid="stChatInput"]::before,
 [data-testid="stChatInput"]::after {
   display: none !important;
+  content: none !important;
+  border: none !important;
 }
 
-/* Inner container with proper flex layout */
+/* Inner container - also completely clean */
 [data-testid="stChatInput"] > div {
   position: relative !important;
   display: flex !important;
   align-items: center !important;
   min-height: 56px !important;
   border: none !important;
+  outline: none !important;
   margin: 0 !important;
   padding: 0 !important;
   width: 100% !important;
+  background: transparent !important;
+  box-shadow: none !important;
 }
 
-/* Form wrapper - clean container */
+/* Form wrapper - also clean (no styling at all) */
 [data-testid="stChatInput"] > div > div {
   position: relative !important;
   width: 100% !important;
   background: transparent !important;
   border: none !important;
+  outline: none !important;
   border-radius: 0 !important;
   padding: 0 !important;
   box-shadow: none !important;
+  margin: 0 !important;
   backdrop-filter: none !important;
   -webkit-backdrop-filter: none !important;
 }
 
-/* Textarea styling with proper spacing for button */
+/* Textarea - THIS is where ALL the styling goes (iMessage style) */
 [data-testid="stChatInput"] textarea {
   background: var(--bg-tertiary) !important;
   border: 1px solid var(--border-light) !important;
   border-radius: 24px !important;
   color: var(--text-primary) !important;
-  font-size: 15px !important;
+  font-size: 16px !important;
   line-height: 1.5 !important;
-  padding: 14px 60px 14px 20px !important;
-  min-height: 40px !important;
+
+  /* CRITICAL: Padding for button INSIDE the textarea */
+  padding: 12px 52px 12px 16px !important;
+
+  min-height: 44px !important;
   max-height: 120px !important;
   outline: none !important;
   resize: none !important;
@@ -530,51 +545,64 @@ button[data-testid="baseButton-primary"] div {
   font-weight: 400 !important;
   transition: all 200ms ease-out !important;
   -webkit-appearance: none !important;
+
+  /* Shadow on textarea (not container) */
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.15) !important;
 }
 
-/* Textarea focus state - NO RED LINE, clean blue glow */
+/* Textarea focus - clean blue glow, NO red line */
 [data-testid="stChatInput"] textarea:focus,
 [data-testid="stChatInput"] textarea:focus-visible {
   border: 2px solid var(--primary-blue) !important;
   outline: none !important;
   outline-offset: 0 !important;
-  box-shadow: 0 0 0 3px rgba(52, 120, 246, 0.15) !important;
-  padding: 13px 59px 13px 19px !important; /* Adjust for 2px border */
+  box-shadow: 0 0 0 3px rgba(0, 122, 255, 0.15), 0 4px 20px rgba(0, 0, 0, 0.2) !important;
+
+  /* Adjust padding for 2px border */
+  padding: 11px 51px 11px 15px !important;
   background: var(--bg-tertiary) !important;
 }
 
-/* Remove any focus styles from parent containers */
+/* Remove focus from parent containers */
 [data-testid="stChatInput"]:focus-within {
   outline: none !important;
   border: none !important;
+  box-shadow: none !important;
+  background: transparent !important;
 }
 
 /* Ensure no validation states create red lines */
 [data-testid="stChatInput"] textarea:invalid {
   border: 1px solid var(--border-light) !important;
-  box-shadow: none !important;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.15) !important;
 }
 
 /* Textarea placeholder */
 [data-testid="stChatInput"] textarea::placeholder {
   color: var(--text-muted) !important;
-  font-size: 15px !important;
+  font-size: 16px !important;
   opacity: 0.7 !important;
   font-weight: 400 !important;
 }
 
-/* Submit button - properly contained within input box */
+/* Submit button - INSIDE the textarea like iMessage/WhatsApp */
 [data-testid="stChatInput"] button,
 [data-testid="stChatInput"] button[kind="primary"],
 [data-testid="stChatInput"] button[kind="secondary"] {
   position: absolute !important;
-  right: 8px !important;
-  top: 8px !important;
-  bottom: 8px !important;
-  transform: none !important;
-  height: auto !important;
-  min-height: 40px !important;
-  width: 40px !important;
+
+  /* Position INSIDE the textarea (not outside) */
+  right: 6px !important;
+  top: 50% !important;
+  transform: translateY(-50%) !important;
+
+  /* Smaller size to fit inside nicely */
+  height: 32px !important;
+  width: 32px !important;
+  min-height: 32px !important;
+  min-width: 32px !important;
+  max-height: 32px !important;
+  max-width: 32px !important;
 
   background: var(--primary-blue) !important;
   border: none !important;
@@ -587,22 +615,23 @@ button[data-testid="baseButton-primary"] div {
 
   cursor: pointer !important;
   transition: all 0.2s ease !important;
-  box-shadow: 0 2px 8px rgba(0, 122, 255, 0.3) !important;
+  box-shadow: 0 2px 6px rgba(0, 122, 255, 0.3) !important;
 
   margin: 0 !important;
   padding: 0 !important;
   z-index: 10 !important;
   -webkit-tap-highlight-color: transparent !important;
+  overflow: visible !important;
 }
 
-/* Button icon styling */
+/* Button icon styling - smaller to fit */
 [data-testid="stChatInput"] button svg,
 [data-testid="stChatInput"] button img,
 [data-testid="stChatInput"] button span {
   color: white !important;
   fill: white !important;
-  width: 20px !important;
-  height: 20px !important;
+  width: 16px !important;
+  height: 16px !important;
 }
 
 /* Button hover state - desktop only */
@@ -611,8 +640,8 @@ button[data-testid="baseButton-primary"] div {
   [data-testid="stChatInput"] button[kind="primary"]:hover,
   [data-testid="stChatInput"] button[kind="secondary"]:hover {
     background: var(--primary-blue-dark) !important;
-    transform: scale(1.05) !important;
-    box-shadow: 0 4px 12px rgba(0, 122, 255, 0.4) !important;
+    transform: translateY(-50%) scale(1.08) !important;
+    box-shadow: 0 3px 10px rgba(0, 122, 255, 0.4) !important;
   }
 }
 
@@ -620,7 +649,7 @@ button[data-testid="baseButton-primary"] div {
 [data-testid="stChatInput"] button:active,
 [data-testid="stChatInput"] button[kind="primary"]:active,
 [data-testid="stChatInput"] button[kind="secondary"]:active {
-  transform: scale(0.92) !important;
+  transform: translateY(-50%) scale(0.95) !important;
   box-shadow: 0 1px 4px rgba(0, 122, 255, 0.3) !important;
 }
 
@@ -631,8 +660,36 @@ button[data-testid="baseButton-primary"] div {
   background: var(--gray-600) !important;
   cursor: not-allowed !important;
   opacity: 0.5 !important;
-  transform: none !important;
+  transform: translateY(-50%) !important;
   box-shadow: none !important;
+}
+
+/* Mobile adjustments */
+@media (max-width: 767px) {
+  [data-testid="stChatInput"] textarea {
+    font-size: 16px !important; /* Prevent iOS zoom */
+    padding: 10px 48px 10px 14px !important;
+    min-height: 42px !important;
+  }
+
+  [data-testid="stChatInput"] textarea:focus {
+    padding: 9px 47px 9px 13px !important;
+  }
+
+  [data-testid="stChatInput"] button {
+    right: 6px !important;
+    height: 30px !important;
+    width: 30px !important;
+    min-height: 30px !important;
+    min-width: 30px !important;
+    max-height: 30px !important;
+    max-width: 30px !important;
+  }
+
+  [data-testid="stChatInput"] button svg {
+    width: 14px !important;
+    height: 14px !important;
+  }
 }
 
 /* ===== SIDEBAR AND LAYOUT ADJUSTMENTS ===== */
