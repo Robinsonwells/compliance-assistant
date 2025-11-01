@@ -458,33 +458,44 @@ button[data-testid="baseButton-primary"] div {
   }
 }
 
-/* ===== FIXED INPUT BAR - MOBILE-FIRST DESIGN ===== */
+/* ===== CHAT INPUT BAR - COMPLETE FIX ===== */
 
-/* Chat Input Container - Fixed bottom with safe area support */
+/* Main container - floating at bottom with proper spacing */
 [data-testid="stChatInput"] {
   position: fixed !important;
-  bottom: 0 !important;
-  left: 0 !important;
-  right: 0 !important;
-  width: 100% !important;
-  margin: 0 !important;
-  padding: 8px 16px !important;
-  padding-bottom: max(8px, env(safe-area-inset-bottom)) !important;
-  background: var(--bg-primary) !important;
-  border-top: 1px solid var(--border-light) !important;
-  box-shadow: 0 -2px 10px rgba(0, 0, 0, 0.1) !important;
-  z-index: 9999 !important;
+  bottom: 20px !important;
+  left: 20px !important;
+  right: 20px !important;
+  max-width: 900px !important;
+  margin: 0 auto !important;
+  z-index: 10000 !important;
+
+  background: var(--bg-secondary) !important;
+  border: none !important;
+  border-top: none !important;
+  border-radius: 28px !important;
+  padding: 8px !important;
+
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4) !important;
   transform: none !important;
 }
 
-/* Chat Input Inner Container */
+/* Remove any pseudo-elements that might create lines */
+[data-testid="stChatInput"]::before,
+[data-testid="stChatInput"]::after {
+  display: none !important;
+}
+
+/* Inner container with proper flex layout */
 [data-testid="stChatInput"] > div {
-  max-width: 100% !important;
+  position: relative !important;
+  display: flex !important;
+  align-items: center !important;
+  min-height: 56px !important;
+  border: none !important;
   margin: 0 !important;
   padding: 0 !important;
   width: 100% !important;
-  position: relative !important;
-  display: block !important;
 }
 
 /* Form wrapper - clean container */
@@ -492,6 +503,7 @@ button[data-testid="baseButton-primary"] div {
   position: relative !important;
   width: 100% !important;
   background: transparent !important;
+  border: none !important;
   border-radius: 0 !important;
   padding: 0 !important;
   box-shadow: none !important;
@@ -499,127 +511,183 @@ button[data-testid="baseButton-primary"] div {
   -webkit-backdrop-filter: none !important;
 }
 
-/* Chat Input Text Area - Mobile optimized */
+/* Textarea styling with proper spacing for button */
 [data-testid="stChatInput"] textarea {
   background: var(--bg-tertiary) !important;
   border: 1px solid var(--border-light) !important;
-  border-radius: 28px !important;
-  padding: 14px 60px 14px 16px !important;
-  font-size: 16px !important; /* Prevents iOS zoom on focus */
+  border-radius: 24px !important;
   color: var(--text-primary) !important;
-  font-family: inherit !important;
-  letter-spacing: normal !important;
-  line-height: 1.4 !important;
-  transition: all 200ms ease-out !important;
-  resize: none !important;
-  min-height: 56px !important;
+  font-size: 15px !important;
+  line-height: 1.5 !important;
+  padding: 14px 60px 14px 20px !important;
+  min-height: 40px !important;
   max-height: 120px !important;
+  outline: none !important;
+  resize: none !important;
   width: 100% !important;
   box-sizing: border-box !important;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1) !important;
+  font-family: inherit !important;
   font-weight: 400 !important;
+  transition: all 200ms ease-out !important;
   -webkit-appearance: none !important;
 }
 
-/* Chat Input Focus State - Clean and simple */
-[data-testid="stChatInput"] textarea:focus {
-  background: var(--bg-secondary) !important;
+/* Textarea focus state - NO RED LINE, clean blue glow */
+[data-testid="stChatInput"] textarea:focus,
+[data-testid="stChatInput"] textarea:focus-visible {
   border: 2px solid var(--primary-blue) !important;
-  padding: 13px 59px 13px 15px !important; /* Adjust for 2px border */
-  box-shadow: 0 0 0 3px rgba(0, 122, 255, 0.15) !important;
   outline: none !important;
-  transform: none !important;
+  outline-offset: 0 !important;
+  box-shadow: 0 0 0 3px rgba(52, 120, 246, 0.15) !important;
+  padding: 13px 59px 13px 19px !important; /* Adjust for 2px border */
+  background: var(--bg-tertiary) !important;
 }
 
-/* Chat Input Placeholder */
+/* Remove any focus styles from parent containers */
+[data-testid="stChatInput"]:focus-within {
+  outline: none !important;
+  border: none !important;
+}
+
+/* Ensure no validation states create red lines */
+[data-testid="stChatInput"] textarea:invalid {
+  border: 1px solid var(--border-light) !important;
+  box-shadow: none !important;
+}
+
+/* Textarea placeholder */
 [data-testid="stChatInput"] textarea::placeholder {
   color: var(--text-muted) !important;
-  font-size: 16px !important;
+  font-size: 15px !important;
   opacity: 0.7 !important;
   font-weight: 400 !important;
 }
 
-/* Chat Input Send Button - Mobile optimized */
+/* Submit button - properly contained within input box */
 [data-testid="stChatInput"] button,
 [data-testid="stChatInput"] button[kind="primary"],
 [data-testid="stChatInput"] button[kind="secondary"] {
   position: absolute !important;
-  right: 12px !important;
-  top: 50% !important;
-  transform: translateY(-50%) !important;
+  right: 8px !important;
+  top: 8px !important;
+  bottom: 8px !important;
+  transform: none !important;
+  height: auto !important;
+  min-height: 40px !important;
+  width: 40px !important;
+
   background: var(--primary-blue) !important;
-  color: var(--white) !important;
   border: none !important;
   border-radius: 50% !important;
-  padding: 0 !important;
-  margin: 0 !important;
-  font-weight: 600 !important;
-  transition: all 150ms ease-out !important;
-  box-shadow: 0 2px 8px rgba(0, 122, 255, 0.3) !important;
-  cursor: pointer !important;
-  height: 48px !important;
-  width: 48px !important;
-  min-height: 48px !important;
-  min-width: 48px !important;
-  max-height: 48px !important;
-  max-width: 48px !important;
+  color: white !important;
+
   display: flex !important;
   align-items: center !important;
   justify-content: center !important;
+
+  cursor: pointer !important;
+  transition: all 0.2s ease !important;
+  box-shadow: 0 2px 8px rgba(0, 122, 255, 0.3) !important;
+
+  margin: 0 !important;
+  padding: 0 !important;
   z-index: 10 !important;
-  overflow: visible !important;
   -webkit-tap-highlight-color: transparent !important;
 }
 
-/* Send button icon styling */
+/* Button icon styling */
 [data-testid="stChatInput"] button svg,
 [data-testid="stChatInput"] button img,
 [data-testid="stChatInput"] button span {
-  color: var(--white) !important;
-  fill: var(--white) !important;
-  width: 24px !important;
-  height: 24px !important;
+  color: white !important;
+  fill: white !important;
+  width: 20px !important;
+  height: 20px !important;
 }
 
-/* Chat Input Send Button Hover - Desktop only */
+/* Button hover state - desktop only */
 @media (hover: hover) and (pointer: fine) {
   [data-testid="stChatInput"] button:hover,
   [data-testid="stChatInput"] button[kind="primary"]:hover,
   [data-testid="stChatInput"] button[kind="secondary"]:hover {
     background: var(--primary-blue-dark) !important;
-    transform: translateY(-50%) scale(1.05) !important;
+    transform: scale(1.05) !important;
     box-shadow: 0 4px 12px rgba(0, 122, 255, 0.4) !important;
   }
 }
 
-/* Chat Input Send Button Active - Touch feedback */
+/* Button active state - touch feedback */
 [data-testid="stChatInput"] button:active,
 [data-testid="stChatInput"] button[kind="primary"]:active,
 [data-testid="stChatInput"] button[kind="secondary"]:active {
-  transform: translateY(-50%) scale(0.92) !important;
+  transform: scale(0.92) !important;
   box-shadow: 0 1px 4px rgba(0, 122, 255, 0.3) !important;
 }
 
-/* Disabled send button state */
+/* Disabled button state */
 [data-testid="stChatInput"] button:disabled,
 [data-testid="stChatInput"] button[kind="primary"]:disabled,
 [data-testid="stChatInput"] button[kind="secondary"]:disabled {
   background: var(--gray-600) !important;
   cursor: not-allowed !important;
   opacity: 0.5 !important;
-  transform: translateY(-50%) !important;
+  transform: none !important;
   box-shadow: none !important;
 }
 
-/* Ensure main content has bottom padding for fixed chat input */
+/* ===== SIDEBAR AND LAYOUT ADJUSTMENTS ===== */
+
+/* Force sidebar to stay below chat input */
+[data-testid="stSidebar"],
+.css-1d391kg {
+  z-index: 999 !important;
+  padding-bottom: 100px !important;
+}
+
+/* Ensure main content has bottom padding for floating chat input */
 [data-testid="stMain"] {
-  padding-bottom: 88px !important; /* Height of fixed input bar */
+  padding-bottom: 120px !important; /* Extra space for floating input */
   margin-left: 0 !important;
 }
 
-/* Sidebar adjustment for chat input */
-.css-1d391kg, [data-testid="stSidebar"] {
-  padding-bottom: 140px !important;
+/* Responsive adjustments for chat input */
+@media (max-width: 767px) {
+  [data-testid="stChatInput"] {
+    bottom: max(12px, env(safe-area-inset-bottom)) !important;
+    left: 12px !important;
+    right: 12px !important;
+    max-width: 100% !important;
+    border-radius: 24px !important;
+  }
+
+  [data-testid="stMain"] {
+    padding-bottom: 96px !important;
+  }
+}
+
+/* Tablet and desktop: center input and adjust for sidebar */
+@media (min-width: 768px) {
+  [data-testid="stChatInput"] {
+    left: 50% !important;
+    right: auto !important;
+    transform: translateX(-50%) !important;
+  }
+}
+
+/* Desktop: adjust for expanded sidebar */
+@media (min-width: 1024px) {
+  /* When sidebar is visible and expanded */
+  section[data-testid="stSidebar"][aria-expanded="true"] ~ div [data-testid="stChatInput"],
+  section[data-testid="stSidebar"]:not([aria-expanded="false"]) ~ div [data-testid="stChatInput"] {
+    left: calc(50% + 10.5rem) !important; /* Half sidebar width offset */
+    transform: translateX(-50%) !important;
+  }
+
+  /* When sidebar is collapsed */
+  section[data-testid="stSidebar"][aria-expanded="false"] ~ div [data-testid="stChatInput"] {
+    left: 50% !important;
+    transform: translateX(-50%) !important;
+  }
 }
 
 /* Enhanced Legal Question Input Area */
@@ -1546,35 +1614,7 @@ a:focus:not(:focus-visible) {
   }
 }
 
-/* ===== SIDEBAR STATE ADAPTATIONS ===== */
-
-/* Chat input remains centered regardless of sidebar state */
-[data-testid="stSidebar"][aria-expanded="false"] ~ [data-testid="stMain"] [data-testid="stChatInput"],
-.css-1d391kg[aria-expanded="false"] ~ [data-testid="stMain"] [data-testid="stChatInput"] {
-  left: 50% !important;
-  transform: translateX(-50%) !important;
-  width: min(900px, calc(100vw - 4rem)) !important;
-  max-width: 900px !important;
-}
-
-/* Fallback for collapsed sidebar using different selectors */
-body:has([data-testid="stSidebar"]:not([aria-expanded="true"])) [data-testid="stChatInput"] {
-  left: 50% !important;
-  transform: translateX(-50%) !important;
-  width: min(900px, calc(100vw - 4rem)) !important;
-  max-width: 900px !important;
-}
-
-/* Additional fallback - when sidebar width is minimal */
-@media screen {
-  body:has([data-testid="stSidebar"][style*="width: 0"]) [data-testid="stChatInput"],
-  body:has(.css-1d391kg[style*="width: 0"]) [data-testid="stChatInput"] {
-    left: 50% !important;
-    transform: translateX(-50%) !important;
-    width: min(900px, calc(100vw - 4rem)) !important;
-    max-width: 900px !important;
-  }
-}
+/* Sidebar adaptations now handled in main chat input section above */
 
 /* ===== HIGH DPI DISPLAY OPTIMIZATIONS ===== */
 @media (-webkit-min-device-pixel-ratio: 2), (min-resolution: 192dpi) {
