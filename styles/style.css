@@ -496,16 +496,19 @@ button[data-testid="baseButton-primary"] div {
 }
 
 /* Chat Input Send Button - Premium Floating Design */
-[data-testid="stChatInput"] button {
+[data-testid="stChatInput"] button,
+[data-testid="stChatInput"] button[kind="primary"],
+[data-testid="stChatInput"] button[kind="secondary"] {
   position: absolute !important;
-  right: 8px !important;
-  bottom: 50% !important;
-  transform: translateY(50%) !important;
+  right: 10px !important;
+  top: 50% !important;
+  transform: translateY(-50%) !important;
   background: linear-gradient(135deg, #007AFF 0%, #0056CC 100%) !important;
   color: var(--white) !important;
   border: none !important;
   border-radius: 50% !important;
   padding: 0 !important;
+  margin: 0 !important;
   font-weight: 600 !important;
   transition: all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1) !important;
   box-shadow:
@@ -513,14 +516,17 @@ button[data-testid="baseButton-primary"] div {
     0 2px 8px rgba(0, 122, 255, 0.3),
     0 0 0 1px rgba(255, 255, 255, 0.1) inset !important;
   cursor: pointer !important;
-  height: 40px !important;
-  width: 40px !important;
-  min-height: 40px !important;
-  min-width: 40px !important;
+  height: 38px !important;
+  width: 38px !important;
+  min-height: 38px !important;
+  min-width: 38px !important;
+  max-height: 38px !important;
+  max-width: 38px !important;
   display: flex !important;
   align-items: center !important;
   justify-content: center !important;
   z-index: 10 !important;
+  overflow: visible !important;
 }
 
 /* Send button icon styling */
@@ -535,9 +541,11 @@ button[data-testid="baseButton-primary"] div {
 }
 
 /* Chat Input Send Button Hover - Dynamic lift effect */
-[data-testid="stChatInput"] button:hover {
+[data-testid="stChatInput"] button:hover,
+[data-testid="stChatInput"] button[kind="primary"]:hover,
+[data-testid="stChatInput"] button[kind="secondary"]:hover {
   background: linear-gradient(135deg, #0056CC 0%, #004499 100%) !important;
-  transform: translateY(50%) scale(1.05) !important;
+  transform: translateY(-50%) scale(1.08) !important;
   box-shadow:
     0 8px 24px rgba(0, 122, 255, 0.6),
     0 4px 12px rgba(0, 122, 255, 0.4),
@@ -545,19 +553,23 @@ button[data-testid="baseButton-primary"] div {
 }
 
 /* Chat Input Send Button Active - Satisfying press effect */
-[data-testid="stChatInput"] button:active {
-  transform: translateY(50%) scale(0.95) !important;
+[data-testid="stChatInput"] button:active,
+[data-testid="stChatInput"] button[kind="primary"]:active,
+[data-testid="stChatInput"] button[kind="secondary"]:active {
+  transform: translateY(-50%) scale(0.95) !important;
   box-shadow:
     0 2px 8px rgba(0, 122, 255, 0.5),
     0 1px 4px rgba(0, 122, 255, 0.3) !important;
 }
 
 /* Disabled send button state */
-[data-testid="stChatInput"] button:disabled {
+[data-testid="stChatInput"] button:disabled,
+[data-testid="stChatInput"] button[kind="primary"]:disabled,
+[data-testid="stChatInput"] button[kind="secondary"]:disabled {
   background: linear-gradient(135deg, var(--gray-700) 0%, var(--gray-800) 100%) !important;
   cursor: not-allowed !important;
   opacity: 0.4 !important;
-  transform: none !important;
+  transform: translateY(-50%) !important;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2) !important;
 }
 
@@ -1350,9 +1362,19 @@ body:has([data-testid="stSidebar"]:not([aria-expanded="true"])) [data-testid="st
     width: 36px !important;
     min-height: 36px !important;
     min-width: 36px !important;
+    max-height: 36px !important;
+    max-width: 36px !important;
     right: 8px !important;
-    bottom: 50% !important;
-    transform: translateY(50%) !important;
+    top: 50% !important;
+    transform: translateY(-50%) !important;
+  }
+
+  [data-testid="stChatInput"] button:hover {
+    transform: translateY(-50%) scale(1.05) !important;
+  }
+
+  [data-testid="stChatInput"] button:active {
+    transform: translateY(-50%) scale(0.95) !important;
   }
   
   /* Enhanced mobile sidebar */
