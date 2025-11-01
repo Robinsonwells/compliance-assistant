@@ -591,10 +591,10 @@ button[data-testid="baseButton-primary"] div {
 [data-testid="stChatInput"] button[kind="secondary"] {
   position: absolute !important;
 
-  /* Position INSIDE the textarea (not outside) */
+  /* Position INSIDE the textarea - aligned to bottom */
   right: 6px !important;
-  top: 50% !important;
-  transform: translateY(-50%) !important;
+  bottom: 6px !important;
+  transform: none !important;
 
   /* Smaller size to fit inside nicely */
   height: 32px !important;
@@ -640,7 +640,7 @@ button[data-testid="baseButton-primary"] div {
   [data-testid="stChatInput"] button[kind="primary"]:hover,
   [data-testid="stChatInput"] button[kind="secondary"]:hover {
     background: var(--primary-blue-dark) !important;
-    transform: translateY(-50%) scale(1.08) !important;
+    transform: scale(1.08) !important;
     box-shadow: 0 3px 10px rgba(0, 122, 255, 0.4) !important;
   }
 }
@@ -649,7 +649,7 @@ button[data-testid="baseButton-primary"] div {
 [data-testid="stChatInput"] button:active,
 [data-testid="stChatInput"] button[kind="primary"]:active,
 [data-testid="stChatInput"] button[kind="secondary"]:active {
-  transform: translateY(-50%) scale(0.95) !important;
+  transform: scale(0.95) !important;
   box-shadow: 0 1px 4px rgba(0, 122, 255, 0.3) !important;
 }
 
@@ -660,7 +660,7 @@ button[data-testid="baseButton-primary"] div {
   background: var(--gray-600) !important;
   cursor: not-allowed !important;
   opacity: 0.5 !important;
-  transform: translateY(-50%) !important;
+  transform: none !important;
   box-shadow: none !important;
 }
 
