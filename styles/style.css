@@ -285,14 +285,14 @@ p {
 /* Chat Input Bar - Fixed at Bottom */
 [data-testid="stChatInput"] {
   position: fixed !important;
-  bottom: 80px !important;
+  bottom: 20px !important;
   left: 0px !important;
   right: 0px !important;
   background: var(--bg-primary) !important;
   border: none !important;
   border-bottom: none !important;
   padding: 8px var(--space-lg) 8px var(--space-lg) !important;
-  z-index: var(--z-fixed) !important;
+  z-index: 10000 !important;
   backdrop-filter: none !important;
   box-shadow: 0 -2px 10px rgba(0, 0, 0, 0.1) !important;
   padding-bottom: max(var(--space-sm), env(safe-area-inset-bottom)) !important;
@@ -300,6 +300,12 @@ p {
   margin: 0 var(--space-lg) !important;
   left: var(--space-lg) !important;
   right: var(--space-lg) !important;
+  pointer-events: auto !important;
+  max-width: 900px !important;
+  margin: 0 auto !important;
+  left: 50% !important;
+  transform: translateX(-50%) !important;
+  right: auto !important;
 }
 
 /* Ensure no unwanted borders or lines */
@@ -313,10 +319,13 @@ p {
 /* Remove Streamlit's default bottom border */
 [data-testid="stChatInput"] > div {
   border-bottom: none !important;
+  pointer-events: auto !important;
 }
 
 [data-testid="stChatInput"] form {
   border-bottom: none !important;
+  pointer-events: auto !important;
+  position: relative !important;
 }
 
 /* Override all Streamlit border color changes - AGGRESSIVE */
@@ -331,6 +340,7 @@ p {
 [data-testid="stChatInput"] div[data-baseweb] {
   border-bottom: none !important;
   border-bottom-color: transparent !important;
+  pointer-events: auto !important;
 }
 
 [data-testid="stChatInput"]:focus-within,
@@ -344,6 +354,7 @@ p {
 [data-testid="stChatInput"]:focus-within div[data-baseweb] {
   border-bottom: none !important;
   border-bottom-color: transparent !important;
+  pointer-events: auto !important;
 }
 
 /* Chat Input Field */
@@ -360,6 +371,8 @@ p {
   font-family: var(--font-family) !important;
   line-height: 1.4 !important;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1) !important;
+  pointer-events: auto !important;
+  cursor: text !important;
 }
 
 [data-testid="stChatInput"] textarea:focus {
@@ -368,6 +381,7 @@ p {
   outline-offset: 0 !important;
   box-shadow: none !important;
   padding: 14px 60px 14px var(--space-lg) !important;
+  pointer-events: auto !important;
 }
 
 /* AGGRESSIVE FOCUS STATE OVERRIDES - Force grey colors */
@@ -380,6 +394,7 @@ p {
   outline-color: transparent !important;
   box-shadow: none !important;
   background: var(--bg-tertiary) !important;
+  pointer-events: auto !important;
 }
 
 /* Override Streamlit's dynamic focus classes */
@@ -391,6 +406,7 @@ p {
   border-color: var(--border-light) !important;
   outline: none !important;
   box-shadow: none !important;
+  pointer-events: auto !important;
 }
 
 /* Prevent ANY blue or red colors on focus */
@@ -400,6 +416,7 @@ p {
   border-color: var(--border-light) !important;
   outline-color: transparent !important;
   box-shadow: none !important;
+  pointer-events: auto !important;
 }
 
 [data-testid="stChatInput"] textarea::placeholder {
@@ -411,8 +428,8 @@ p {
 [data-testid="stChatInput"] button {
   position: absolute !important;
   right: 6px !important;
-  top: 10% !important;
-  transform: translateY(-10%) !important;
+  top: 50% !important;
+  transform: translateY(-50%) !important;
   background: var(--primary-blue) !important;
   border: none !important;
   border-radius: var(--radius-full) !important;
@@ -425,21 +442,26 @@ p {
   cursor: pointer !important;
   transition: all 0.15s ease-out !important;
   box-shadow: 0 2px 8px rgba(9, 105, 218, 0.3) !important;
+  pointer-events: auto !important;
+  z-index: 10001 !important;
 }
 
 [data-testid="stChatInput"] button:hover {
   background: var(--primary-blue-dark) !important;
   transform: translateY(-50%) scale(1.05) !important;
+  pointer-events: auto !important;
 }
 
 [data-testid="stChatInput"] button:active {
   transform: translateY(-50%) scale(0.92) !important;
+  pointer-events: auto !important;
 }
 
 [data-testid="stChatInput"] button svg {
   width: 24px !important;
   height: 24px !important;
   color: white !important;
+  pointer-events: none !important;
 }
 
 /* ===== RESPONSIVE CHAT DESIGN ===== */
