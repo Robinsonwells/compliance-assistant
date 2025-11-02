@@ -300,22 +300,22 @@ st.markdown("""
 /* Chat Send Button */
 [data-testid="stChatInput"] button {
   position: absolute !important;
-  right: 12px !important;
+  right: 8px !important;
   top: 50% !important;
   transform: translateY(-50%) !important;
   background: var(--primary-blue) !important;
   border: none !important;
   border-radius: var(--radius-full) !important;
-  width: 40px !important;
-  height: 40px !important;
-  min-height: 40px !important;
+  width: 36px !important;
+  height: 36px !important;
+  min-height: 36px !important;
   display: flex !important;
   align-items: center !important;
   justify-content: center !important;
   cursor: pointer !important;
   transition: all 0.15s ease-out !important;
   box-shadow: 0 2px 8px rgba(9, 105, 218, 0.3) !important;
-  z-index: 10 !important;
+  z-index: 1000 !important;
 }
 
 [data-testid="stChatInput"] button:hover {
@@ -335,7 +335,30 @@ st.markdown("""
 
 /* Ensure text box has padding for the button */
 [data-testid="stChatInput"] textarea {
-  padding-right: 60px !important;
+  padding-right: 52px !important;
+  position: relative !important;
+}
+
+/* Force the button container to be positioned relative */
+[data-testid="stChatInput"] > div,
+[data-testid="stChatInput"] form,
+[data-testid="stChatInput"] form > div {
+  position: relative !important;
+}
+
+/* Override any Streamlit positioning on the button */
+[data-testid="stChatInput"] button[kind="primary"],
+[data-testid="stChatInput"] button[type="submit"],
+[data-testid="stChatInput"] [data-testid*="submit"],
+[data-testid="stChatInput"] [class*="submit"],
+[data-testid="stChatInput"] [class*="Send"] {
+  position: absolute !important;
+  right: 8px !important;
+  top: 50% !important;
+  transform: translateY(-50%) !important;
+  width: 36px !important;
+  height: 36px !important;
+  z-index: 1000 !important;
 }
 
 /* ===== RESPONSIVE CHAT DESIGN ===== */
@@ -343,23 +366,34 @@ st.markdown("""
 /* Mobile (320px - 767px) */
 @media (max-width: 767px) {
   [data-testid="stChatInput"] textarea {
-    padding: 9px 47px 9px 13px !important;
+    padding: 9px 44px 9px 13px !important;
   }
   
   [data-testid="stChatInput"] textarea:focus {
-    padding: 9px 47px 9px 13px !important;
+    padding: 9px 44px 9px 13px !important;
   }
   
   [data-testid="stChatInput"] button {
-    width: 32px !important;
-    height: 32px !important;
-    min-height: 32px !important;
+    width: 30px !important;
+    height: 30px !important;
+    min-height: 30px !important;
     right: 6px !important;
   }
   
   [data-testid="stChatInput"] button svg {
     width: 16px !important;
     height: 16px !important;
+  }
+  
+  /* Mobile button overrides */
+  [data-testid="stChatInput"] button[kind="primary"],
+  [data-testid="stChatInput"] button[type="submit"],
+  [data-testid="stChatInput"] [data-testid*="submit"],
+  [data-testid="stChatInput"] [class*="submit"],
+  [data-testid="stChatInput"] [class*="Send"] {
+    width: 30px !important;
+    height: 30px !important;
+    right: 6px !important;
   }
 }
 </style>
