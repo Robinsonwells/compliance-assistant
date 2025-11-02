@@ -301,3 +301,63 @@ st.markdown("""
 
 if __name__ == "__main__":
     main()
+
+# Force CSS override after Streamlit loads - this runs every time the page renders
+st.markdown("""
+<style>
+/* NUCLEAR OPTION - Override ALL possible Streamlit focus states */
+[data-testid="stChatInput"] *,
+[data-testid="stChatInput"] textarea,
+[data-testid="stChatInput"] input,
+[data-testid="stChatInput"] [role="textbox"],
+[data-testid="stChatInput"] [contenteditable],
+div[data-baseweb="textarea"],
+div[data-baseweb="input"] {
+  border: 1px solid #30363d !important;
+  outline: none !important;
+  box-shadow: none !important;
+}
+
+/* Force focus states to stay grey */
+[data-testid="stChatInput"] *:focus,
+[data-testid="stChatInput"] *:focus-visible,
+[data-testid="stChatInput"] *:focus-within,
+[data-testid="stChatInput"] textarea:focus,
+[data-testid="stChatInput"] input:focus,
+[data-testid="stChatInput"] [role="textbox"]:focus,
+[data-testid="stChatInput"] [contenteditable]:focus,
+div[data-baseweb="textarea"]:focus,
+div[data-baseweb="input"]:focus,
+[data-testid="stChatInput"] .focused,
+[data-testid="stChatInput"] [class*="focus"],
+[data-testid="stChatInput"] [class*="Focus"],
+[data-testid="stChatInput"] [aria-expanded="true"] {
+  border: 1px solid #30363d !important;
+  border-color: #30363d !important;
+  outline: none !important;
+  outline-color: transparent !important;
+  box-shadow: none !important;
+  background: #21262d !important;
+}
+
+/* Kill any bottom borders that might turn red */
+[data-testid="stChatInput"],
+[data-testid="stChatInput"] *,
+[data-testid="stChatInput"] > div,
+[data-testid="stChatInput"] > div > div,
+[data-testid="stChatInput"] form,
+[data-testid="stChatInput"] textarea {
+  border-bottom: 1px solid #30363d !important;
+  border-bottom-color: #30363d !important;
+}
+
+[data-testid="stChatInput"]:focus-within,
+[data-testid="stChatInput"] *:focus,
+[data-testid="stChatInput"] > div:focus-within,
+[data-testid="stChatInput"] form:focus-within,
+[data-testid="stChatInput"] textarea:focus {
+  border-bottom: 1px solid #30363d !important;
+  border-bottom-color: #30363d !important;
+}
+</style>
+""", unsafe_allow_html=True)
