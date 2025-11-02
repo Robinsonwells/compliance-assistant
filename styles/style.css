@@ -340,7 +340,7 @@ p {
 [data-testid="stChatInput"] button {
   position: absolute !important;
   right: 6px !important;
-  top: 50% !important;
+  top: 10% !important;
   transform: translateY(-10%) !important;
   background: var(--primary-blue) !important;
   border: none !important;
