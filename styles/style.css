@@ -363,10 +363,10 @@ p {
 }
 
 [data-testid="stChatInput"] textarea:focus {
-  border: 2px solid var(--border-medium) !important;
+  border: 2px solid var(--border-light) !important;
   outline: none !important;
   outline-offset: 0 !important;
-  box-shadow: 0 0 0 3px rgba(68, 76, 86, 0.15) !important;
+  box-shadow: 0 0 0 3px rgba(48, 54, 61, 0.15) !important;
   padding: 13px 59px 13px 15px !important;
 }
 
@@ -728,6 +728,11 @@ p {
     outline-width: 3px !important;
     outline-offset: 3px !important;
   }
+  
+  [data-testid="stChatInput"] textarea:focus {
+    border: 2px solid var(--border-light) !important;
+    box-shadow: 0 0 0 3px rgba(48, 54, 61, 0.15) !important;
+  }
 }
 
 /* ===== MOTION PREFERENCES ===== */
@@ -921,6 +926,31 @@ p {
 @font-face {
   font-family: 'Inter';
   font-display: swap;
+}
+
+/* Force remove bottom border on chat input - loaded last to override Streamlit */
+[data-testid="stChatInput"],
+[data-testid="stChatInput"] > div,
+[data-testid="stChatInput"] > div > div,
+[data-testid="stChatInput"] form,
+[data-testid="stChatInput"] form > div,
+[data-testid="stChatInput"] textarea {
+  border-bottom: 0px solid transparent !important;
+  border-bottom-width: 0 !important;
+  border-bottom-style: none !important;
+  border-bottom-color: var(--border-light) !important;
+}
+
+[data-testid="stChatInput"]:focus-within,
+[data-testid="stChatInput"]:focus-within > div,
+[data-testid="stChatInput"]:focus-within > div > div,
+[data-testid="stChatInput"]:focus-within form,
+[data-testid="stChatInput"]:focus-within form > div,
+[data-testid="stChatInput"]:focus-within textarea {
+  border-bottom: 0px solid transparent !important;
+  border-bottom-width: 0 !important;
+  border-bottom-style: none !important;
+  border-bottom-color: var(--border-light) !important;
 }
 
 /* ===== END OF STYLES ===== */
