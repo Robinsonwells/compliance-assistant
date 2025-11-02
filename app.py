@@ -313,12 +313,36 @@ st.markdown("""
 [data-testid="stChatInput"] [contenteditable],
 div[data-baseweb="textarea"],
 div[data-baseweb="input"] {
-  border: 1px solid #30363d !important;
+  border: none !important;
+  outline: none !important;
+  box-shadow: none !important;
+  background: #21262d !important;
+}
+
+/* Remove ALL borders and outlines in default state */
+[data-testid="stChatInput"] textarea,
+[data-testid="stChatInput"] input,
+[data-testid="stChatInput"] [role="textbox"],
+[data-testid="stChatInput"] div[data-baseweb="textarea"],
+[data-testid="stChatInput"] div[data-baseweb="input"],
+[data-testid="stChatInput"] [contenteditable] {
+  border: none !important;
+  outline: none !important;
+  box-shadow: none !important;
+  background: #21262d !important;
+}
+
+/* Override Streamlit's BaseWeb component borders */
+[data-testid="stChatInput"] div[data-baseweb="textarea"] > div,
+[data-testid="stChatInput"] div[data-baseweb="input"] > div,
+[data-testid="stChatInput"] [class*="StyledTextAreaRoot"],
+[data-testid="stChatInput"] [class*="StyledInputRoot"] {
+  border: none !important;
   outline: none !important;
   box-shadow: none !important;
 }
 
-/* Force focus states to stay grey */
+/* Keep the blue focus state when clicked */
 [data-testid="stChatInput"] *:focus,
 [data-testid="stChatInput"] *:focus-visible,
 [data-testid="stChatInput"] *:focus-within,
@@ -332,15 +356,13 @@ div[data-baseweb="input"]:focus,
 [data-testid="stChatInput"] [class*="focus"],
 [data-testid="stChatInput"] [class*="Focus"],
 [data-testid="stChatInput"] [aria-expanded="true"] {
-  border: 1px solid #30363d !important;
-  border-color: #30363d !important;
+  border: 2px solid #0969da !important;
   outline: none !important;
-  outline-color: transparent !important;
-  box-shadow: none !important;
+  box-shadow: 0 0 0 3px rgba(9, 105, 218, 0.15) !important;
   background: #21262d !important;
 }
 
-/* Kill any bottom borders that might turn red */
+/* Ensure bottom borders stay grey and don't turn red */
 [data-testid="stChatInput"],
 [data-testid="stChatInput"] *,
 [data-testid="stChatInput"] > div,
@@ -351,22 +373,6 @@ div[data-baseweb="input"]:focus,
   border-bottom-color: #30363d !important;
 }
 
-/* Remove default outline when NOT focused, but keep blue focus state */
-[data-testid="stChatInput"] textarea {
-  border: none !important;
-  outline: none !important;
-  box-shadow: none !important;
-  background: #21262d !important;
-}
-
-/* Keep the blue focus state when clicked */
-[data-testid="stChatInput"] textarea:focus,
-[data-testid="stChatInput"] textarea:focus-visible {
-  border: 2px solid #0969da !important;
-  outline: none !important;
-  box-shadow: 0 0 0 3px rgba(9, 105, 218, 0.15) !important;
-  background: #21262d !important;
-}
 [data-testid="stChatInput"]:focus-within,
 [data-testid="stChatInput"] *:focus,
 [data-testid="stChatInput"] > div:focus-within,
