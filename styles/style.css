@@ -290,6 +290,7 @@ p {
   right: 0px !important;
   background: var(--bg-primary) !important;
   border: none !important;
+  border-bottom: none !important;
   padding: 8px var(--space-lg) 8px var(--space-lg) !important;
   z-index: var(--z-fixed) !important;
   backdrop-filter: none !important;
@@ -305,6 +306,17 @@ p {
 [data-testid="stChatInput"]::before,
 [data-testid="stChatInput"]::after {
   display: none !important;
+  border: none !important;
+  background: none !important;
+}
+
+/* Remove Streamlit's default bottom border */
+[data-testid="stChatInput"] > div {
+  border-bottom: none !important;
+}
+
+[data-testid="stChatInput"] form {
+  border-bottom: none !important;
 }
 
 /* Chat Input Field */
