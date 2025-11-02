@@ -220,180 +220,117 @@ def show_legal_assistant_content():
 
     # Show welcome message if no messages
     if len(st.session_state.messages) == 0:
-        st.markdown("""
-        <div style='text-align: center; padding: 32px 16px; color: var(--text-muted);'>
-            <h3 style='color: var(--text-secondary); margin-bottom: 8px;'>Welcome to Legal Assistant</h3>
-            <p>Ask me anything about employment law across all 50 U.S. states and federal regulations.</p>
-        </div>
-        """, unsafe_allow_html=True)
+/* STREAMLIT CHAT INPUT COMPLETE OVERRIDE */
 
-    # Display chat messages with optimized rendering
-    for idx, message in enumerate(st.session_state.messages):
-        with st.chat_message(message["role"], avatar="👤" if message["role"] == "user" else "⚖️"):
-            st.markdown(message["content"])
-
-def handle_chat_input(prompt):
-    """Handle chat input and generate response"""
-    # Add user message to chat history
-    st.session_state.messages.append({"role": "user", "content": prompt})
-    
-    # Display user message
-    with st.chat_message("user"):
-        st.markdown(prompt)
-    
-    # Generate and display assistant response
-    with st.chat_message("assistant"):
-        with st.spinner("Searching legal database..."):
-            # Search for relevant legal information
-            search_results = search_legal_database(prompt, limit=5)
-            
-            # Generate response
-            response = generate_legal_response(prompt, search_results)
-            
-            st.markdown(response)
-            
-            # Add assistant response to chat history
-            st.session_state.messages.append({"role": "assistant", "content": response})
-    
-    # Rerun to update the display
-    st.rerun()
-
-# Inject CSS override at the end to ensure it loads after Streamlit's default styles
-st.markdown("""
-<style>
-/* AGGRESSIVE STREAMLIT OVERRIDES - Force grey focus, no blue/red */
-[data-testid="stChatInput"] textarea:focus,
-[data-testid="stChatInput"] textarea:focus-visible,
-[data-testid="stChatInput"] [data-baseweb*="input"]:focus,
-[data-testid="stChatInput"] [data-baseweb*="input"]:focus-visible,
-[data-testid="stChatInput"] [class*="focused"],
-[data-testid="stChatInput"] [class*="focus"] {
-  border: 1px solid #30363d !important;
-  border-color: #30363d !important;
+/* Step 1: Remove default borders and outlines */
+[data-testid="stChatInput"] textarea,
+[data-testid="stChatInput"] input,
+[data-testid="stChatInput"] [role="textbox"] {
+  border: none !important;
   outline: none !important;
-  outline-color: transparent !important;
   box-shadow: none !important;
   background: #21262d !important;
 }
 
-/* Force remove bottom border on chat input - loaded last to override Streamlit */
+/* Step 2: Blue focus state when clicked */
+[data-testid="stChatInput"] textarea:focus,
+[data-testid="stChatInput"] input:focus,
+[data-testid="stChatInput"] [role="textbox"]:focus {
+  border: 2px solid #0969da !important;
+  outline: none !important;
+  box-shadow: 0 0 0 3px rgba(9, 105, 218, 0.15) !important;
+  background: #21262d !important;
+}
+
+/* Step 3: CRITICAL - Find the actual button container and make it relative */
 [data-testid="stChatInput"],
 [data-testid="stChatInput"] > div,
-[data-testid="stChatInput"] > div > div,
 [data-testid="stChatInput"] form,
-[data-testid="stChatInput"] form > div {
-  border-bottom: 0px solid transparent !important;
-  border-bottom-width: 0 !important;
-  border-bottom-style: none !important;
+[data-testid="stChatInput"] form > div,
+[data-testid="stChatInput"] [data-baseweb] {
+  position: relative !important;
 }
 
-[data-testid="stChatInput"]:focus-within,
-[data-testid="stChatInput"]:focus-within > div,
-[data-testid="stChatInput"]:focus-within > div > div,
-[data-testid="stChatInput"]:focus-within form,
-[data-testid="stChatInput"]:focus-within form > div {
-  border-bottom: 0px solid transparent !important;
-  border-bottom-width: 0 !important;
-  border-bottom-style: none !important;
-}
-
-/* Chat Send Button */
-[data-testid="stChatInput"] button {
+/* Step 4: NUCLEAR BUTTON POSITIONING - Target every possible button selector */
+[data-testid="stChatInput"] button,
+[data-testid="stChatInput"] [role="button"],
+[data-testid="stChatInput"] input[type="submit"],
+[data-testid="stChatInput"] [type="submit"],
+[data-testid="stChatInput"] [kind="primary"],
+[data-testid="stChatInput"] [data-testid*="button"],
+[data-testid="stChatInput"] [class*="button"],
+[data-testid="stChatInput"] [class*="Button"],
+[data-testid="stChatInput"] [class*="submit"],
+[data-testid="stChatInput"] [class*="Submit"] {
   position: absolute !important;
   right: 8px !important;
   top: 50% !important;
   transform: translateY(-50%) !important;
-  background: var(--primary-blue) !important;
+  width: 40px !important;
+  height: 40px !important;
+  min-width: 40px !important;
+  min-height: 40px !important;
+  background: #0969da !important;
   border: none !important;
-  border-radius: var(--radius-full) !important;
-  width: 36px !important;
-  height: 36px !important;
-  min-height: 36px !important;
+  border-radius: 50% !important;
+  z-index: 9999 !important;
   display: flex !important;
   align-items: center !important;
   justify-content: center !important;
   cursor: pointer !important;
-  transition: all 0.15s ease-out !important;
   box-shadow: 0 2px 8px rgba(9, 105, 218, 0.3) !important;
-  z-index: 1000 !important;
 }
 
-[data-testid="stChatInput"] button:hover {
-  background: var(--primary-blue-dark) !important;
+/* Step 5: Button hover and active states */
+[data-testid="stChatInput"] button:hover,
+[data-testid="stChatInput"] [role="button"]:hover {
+  background: #0860ca !important;
   transform: translateY(-50%) scale(1.05) !important;
 }
 
-[data-testid="stChatInput"] button:active {
-  transform: translateY(-50%) scale(0.92) !important;
+[data-testid="stChatInput"] button:active,
+[data-testid="stChatInput"] [role="button"]:active {
+  transform: translateY(-50%) scale(0.95) !important;
 }
 
-[data-testid="stChatInput"] button svg {
+/* Step 6: Button icon styling */
+[data-testid="stChatInput"] button svg,
+[data-testid="stChatInput"] [role="button"] svg {
   width: 20px !important;
   height: 20px !important;
   color: white !important;
 }
 
-/* Ensure text box has padding for the button */
+/* Step 7: Add padding to textarea so text doesn't overlap button */
 [data-testid="stChatInput"] textarea {
-  padding-right: 52px !important;
-  position: relative !important;
+  padding-right: 56px !important;
+  padding-left: 16px !important;
+  padding-top: 12px !important;
+  padding-bottom: 12px !important;
+  border-radius: 24px !important;
+  min-height: 48px !important;
 }
 
-/* Force the button container to be positioned relative */
-[data-testid="stChatInput"] > div,
-[data-testid="stChatInput"] form,
-[data-testid="stChatInput"] form > div {
-  position: relative !important;
-}
-
-/* Override any Streamlit positioning on the button */
-[data-testid="stChatInput"] button[kind="primary"],
-[data-testid="stChatInput"] button[type="submit"],
-[data-testid="stChatInput"] [data-testid*="submit"],
-[data-testid="stChatInput"] [class*="submit"],
-[data-testid="stChatInput"] [class*="Send"] {
-  position: absolute !important;
-  right: 8px !important;
-  top: 50% !important;
-  transform: translateY(-50%) !important;
-  width: 36px !important;
-  height: 36px !important;
-  z-index: 1000 !important;
-}
-
-/* ===== RESPONSIVE CHAT DESIGN ===== */
-
-/* Mobile (320px - 767px) */
+/* Step 8: Mobile responsive */
 @media (max-width: 767px) {
+  [data-testid="stChatInput"] button,
+  [data-testid="stChatInput"] [role="button"] {
+    width: 36px !important;
+    height: 36px !important;
+    min-width: 36px !important;
+    min-height: 36px !important;
+    right: 6px !important;
+  }
+  
+  [data-testid="stChatInput"] button svg,
+  [data-testid="stChatInput"] [role="button"] svg {
+    width: 18px !important;
+    height: 18px !important;
+  }
+  
   [data-testid="stChatInput"] textarea {
-    padding: 9px 44px 9px 13px !important;
-  }
-  
-  [data-testid="stChatInput"] textarea:focus {
-    padding: 9px 44px 9px 13px !important;
-  }
-  
-  [data-testid="stChatInput"] button {
-    width: 30px !important;
-    height: 30px !important;
-    min-height: 30px !important;
-    right: 6px !important;
-  }
-  
-  [data-testid="stChatInput"] button svg {
-    width: 16px !important;
-    height: 16px !important;
-  }
-  
-  /* Mobile button overrides */
-  [data-testid="stChatInput"] button[kind="primary"],
-  [data-testid="stChatInput"] button[type="submit"],
-  [data-testid="stChatInput"] [data-testid*="submit"],
-  [data-testid="stChatInput"] [class*="submit"],
-  [data-testid="stChatInput"] [class*="Send"] {
-    width: 30px !important;
-    height: 30px !important;
-    right: 6px !important;
+    padding-right: 48px !important;
+    min-height: 44px !important;
   }
 }
 </style>
