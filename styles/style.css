@@ -341,7 +341,7 @@ p {
   position: absolute !important;
   right: 6px !important;
   top: 50% !important;
-  transform: translateY(-50%) !important;
+  transform: translateY(-10%) !important;
   background: var(--primary-blue) !important;
   border: none !important;
   border-radius: var(--radius-full) !important;
