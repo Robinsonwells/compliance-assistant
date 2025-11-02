@@ -363,11 +363,43 @@ p {
 }
 
 [data-testid="stChatInput"] textarea:focus {
-  border: 2px solid var(--border-light) !important;
+  border: 1px solid var(--border-light) !important;
   outline: none !important;
   outline-offset: 0 !important;
-  box-shadow: 0 0 0 3px rgba(48, 54, 61, 0.15) !important;
-  padding: 13px 59px 13px 15px !important;
+  box-shadow: none !important;
+  padding: 14px 60px 14px var(--space-lg) !important;
+}
+
+/* AGGRESSIVE FOCUS STATE OVERRIDES - Force grey colors */
+[data-testid="stChatInput"] textarea:focus,
+[data-testid="stChatInput"] textarea:focus-visible,
+[data-testid="stChatInput"] textarea:focus-within {
+  border: 1px solid var(--border-light) !important;
+  border-color: var(--border-light) !important;
+  outline: none !important;
+  outline-color: transparent !important;
+  box-shadow: none !important;
+  background: var(--bg-tertiary) !important;
+}
+
+/* Override Streamlit's dynamic focus classes */
+[data-testid="stChatInput"] [class*="focused"],
+[data-testid="stChatInput"] [class*="focus"],
+[data-testid="stChatInput"] [data-baseweb*="input"]:focus,
+[data-testid="stChatInput"] [data-baseweb*="input"]:focus-visible {
+  border: 1px solid var(--border-light) !important;
+  border-color: var(--border-light) !important;
+  outline: none !important;
+  box-shadow: none !important;
+}
+
+/* Prevent ANY blue or red colors on focus */
+[data-testid="stChatInput"] *:focus,
+[data-testid="stChatInput"] *:focus-visible,
+[data-testid="stChatInput"] *:focus-within {
+  border-color: var(--border-light) !important;
+  outline-color: transparent !important;
+  box-shadow: none !important;
 }
 
 [data-testid="stChatInput"] textarea::placeholder {

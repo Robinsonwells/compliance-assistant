@@ -261,6 +261,21 @@ def handle_chat_input(prompt):
 # Inject CSS override at the end to ensure it loads after Streamlit's default styles
 st.markdown("""
 <style>
+/* AGGRESSIVE STREAMLIT OVERRIDES - Force grey focus, no blue/red */
+[data-testid="stChatInput"] textarea:focus,
+[data-testid="stChatInput"] textarea:focus-visible,
+[data-testid="stChatInput"] [data-baseweb*="input"]:focus,
+[data-testid="stChatInput"] [data-baseweb*="input"]:focus-visible,
+[data-testid="stChatInput"] [class*="focused"],
+[data-testid="stChatInput"] [class*="focus"] {
+  border: 1px solid #30363d !important;
+  border-color: #30363d !important;
+  outline: none !important;
+  outline-color: transparent !important;
+  box-shadow: none !important;
+  background: #21262d !important;
+}
+
 /* Force remove bottom border on chat input - loaded last to override Streamlit */
 [data-testid="stChatInput"],
 [data-testid="stChatInput"] > div,
