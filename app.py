@@ -105,10 +105,9 @@ def generate_legal_response(query: str, search_results: List[Dict[str, Any]]) ->
         response = openai.chat.completions.create(
             model="gpt-5",
             messages=messages,
-            max_tokens=1500,
-            temperature=0.1,
-            reasoning_effort="high",
-            verbosity="high"
+            max_output_tokens=1500,
+            reasoning={"effort": "high"},
+            text={"verbosity": "high"}
         )
         
         return response.choices[0].message.content
