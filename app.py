@@ -296,6 +296,72 @@ st.markdown("""
   border-bottom-width: 0 !important;
   border-bottom-style: none !important;
 }
+
+/* Chat Send Button */
+[data-testid="stChatInput"] button {
+  position: absolute !important;
+  right: 12px !important;
+  top: 50% !important;
+  transform: translateY(-50%) !important;
+  background: var(--primary-blue) !important;
+  border: none !important;
+  border-radius: var(--radius-full) !important;
+  width: 40px !important;
+  height: 40px !important;
+  min-height: 40px !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  cursor: pointer !important;
+  transition: all 0.15s ease-out !important;
+  box-shadow: 0 2px 8px rgba(9, 105, 218, 0.3) !important;
+  z-index: 10 !important;
+}
+
+[data-testid="stChatInput"] button:hover {
+  background: var(--primary-blue-dark) !important;
+  transform: translateY(-50%) scale(1.05) !important;
+}
+
+[data-testid="stChatInput"] button:active {
+  transform: translateY(-50%) scale(0.92) !important;
+}
+
+[data-testid="stChatInput"] button svg {
+  width: 20px !important;
+  height: 20px !important;
+  color: white !important;
+}
+
+/* Ensure text box has padding for the button */
+[data-testid="stChatInput"] textarea {
+  padding-right: 60px !important;
+}
+
+/* ===== RESPONSIVE CHAT DESIGN ===== */
+
+/* Mobile (320px - 767px) */
+@media (max-width: 767px) {
+  [data-testid="stChatInput"] textarea {
+    padding: 9px 47px 9px 13px !important;
+  }
+  
+  [data-testid="stChatInput"] textarea:focus {
+    padding: 9px 47px 9px 13px !important;
+  }
+  
+  [data-testid="stChatInput"] button {
+    width: 32px !important;
+    height: 32px !important;
+    min-height: 32px !important;
+    right: 6px !important;
+  }
+  
+  [data-testid="stChatInput"] button svg {
+    width: 16px !important;
+    height: 16px !important;
+  }
+}
 </style>
 """, unsafe_allow_html=True)
 
