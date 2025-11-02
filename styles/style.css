@@ -324,10 +324,10 @@ p {
 }
 
 [data-testid="stChatInput"] textarea:focus {
-  border: 2px solid var(--primary-blue) !important;
+  border: 2px solid var(--border-medium) !important;
   outline: none !important;
   outline-offset: 0 !important;
-  box-shadow: 0 0 0 3px rgba(9, 105, 218, 0.15) !important;
+  box-shadow: 0 0 0 3px rgba(68, 76, 86, 0.15) !important;
   padding: 13px 59px 13px 15px !important;
 }
 
