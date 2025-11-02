@@ -289,7 +289,7 @@ p {
   left: 0px !important;
   right: 0px !important;
   background: var(--bg-primary) !important;
-  border-top: 1px solid var(--border-light) !important;
+  border: none !important;
   padding: var(--space-sm) var(--space-lg) !important;
   z-index: var(--z-fixed) !important;
   backdrop-filter: none !important;
@@ -299,6 +299,12 @@ p {
   margin: 0 var(--space-lg) !important;
   left: var(--space-lg) !important;
   right: var(--space-lg) !important;
+}
+
+/* Ensure no unwanted borders or lines */
+[data-testid="stChatInput"]::before,
+[data-testid="stChatInput"]::after {
+  display: none !important;
 }
 
 /* Chat Input Field */
