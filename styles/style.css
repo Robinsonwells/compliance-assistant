@@ -319,6 +319,24 @@ p {
   border-bottom: none !important;
 }
 
+/* Override all Streamlit border color changes */
+[data-testid="stChatInput"] * {
+  border-bottom-color: var(--border-light) !important;
+}
+
+[data-testid="stChatInput"]:focus-within * {
+  border-bottom-color: var(--border-light) !important;
+}
+
+/* Target the specific Streamlit wrapper div that has the border */
+[data-testid="stChatInput"] > div > div {
+  border-bottom: none !important;
+}
+
+[data-testid="stChatInput"] [class*="st-"] {
+  border-bottom: none !important;
+}
+
 /* Chat Input Field */
 [data-testid="stChatInput"] textarea {
   background: var(--bg-tertiary) !important;
