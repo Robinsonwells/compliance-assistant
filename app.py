@@ -351,6 +351,22 @@ div[data-baseweb="input"]:focus,
   border-bottom-color: #30363d !important;
 }
 
+/* Remove default outline when NOT focused, but keep blue focus state */
+[data-testid="stChatInput"] textarea {
+  border: none !important;
+  outline: none !important;
+  box-shadow: none !important;
+  background: #21262d !important;
+}
+
+/* Keep the blue focus state when clicked */
+[data-testid="stChatInput"] textarea:focus,
+[data-testid="stChatInput"] textarea:focus-visible {
+  border: 2px solid #0969da !important;
+  outline: none !important;
+  box-shadow: 0 0 0 3px rgba(9, 105, 218, 0.15) !important;
+  background: #21262d !important;
+}
 [data-testid="stChatInput"]:focus-within,
 [data-testid="stChatInput"] *:focus,
 [data-testid="stChatInput"] > div:focus-within,
