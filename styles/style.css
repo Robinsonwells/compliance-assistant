@@ -290,7 +290,7 @@ p {
   right: 0px !important;
   background: var(--bg-primary) !important;
   border: none !important;
-  padding: 8px var(--space-lg) 12px var(--space-lg) !important;
+  padding: 8px var(--space-lg) 8px var(--space-lg) !important;
   z-index: var(--z-fixed) !important;
   backdrop-filter: none !important;
   box-shadow: 0 -2px 10px rgba(0, 0, 0, 0.1) !important;
