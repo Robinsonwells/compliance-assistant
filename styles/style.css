@@ -285,7 +285,7 @@ p {
 /* Chat Input Bar - Fixed at Bottom */
 [data-testid="stChatInput"] {
   position: fixed !important;
-  bottom: 0px !important;
+  bottom: 20px !important;
   left: 0px !important;
   right: 0px !important;
   background: var(--bg-primary) !important;
@@ -295,6 +295,10 @@ p {
   backdrop-filter: none !important;
   box-shadow: 0 -2px 10px rgba(0, 0, 0, 0.1) !important;
   padding-bottom: max(var(--space-sm), env(safe-area-inset-bottom)) !important;
+  border-radius: var(--radius-lg) !important;
+  margin: 0 var(--space-lg) !important;
+  left: var(--space-lg) !important;
+  right: var(--space-lg) !important;
 }
 
 /* Chat Input Field */
