@@ -258,5 +258,31 @@ def handle_chat_input(prompt):
     # Rerun to update the display
     st.rerun()
 
+# Inject CSS override at the end to ensure it loads after Streamlit's default styles
+st.markdown("""
+<style>
+/* Force remove bottom border on chat input - loaded last to override Streamlit */
+[data-testid="stChatInput"],
+[data-testid="stChatInput"] > div,
+[data-testid="stChatInput"] > div > div,
+[data-testid="stChatInput"] form,
+[data-testid="stChatInput"] form > div {
+  border-bottom: 0px solid transparent !important;
+  border-bottom-width: 0 !important;
+  border-bottom-style: none !important;
+}
+
+[data-testid="stChatInput"]:focus-within,
+[data-testid="stChatInput"]:focus-within > div,
+[data-testid="stChatInput"]:focus-within > div > div,
+[data-testid="stChatInput"]:focus-within form,
+[data-testid="stChatInput"]:focus-within form > div {
+  border-bottom: 0px solid transparent !important;
+  border-bottom-width: 0 !important;
+  border-bottom-style: none !important;
+}
+</style>
+""", unsafe_allow_html=True)
+
 if __name__ == "__main__":
     main()
