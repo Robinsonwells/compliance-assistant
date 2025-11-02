@@ -319,22 +319,31 @@ p {
   border-bottom: none !important;
 }
 
-/* Override all Streamlit border color changes */
-[data-testid="stChatInput"] * {
-  border-bottom-color: var(--border-light) !important;
-}
-
-[data-testid="stChatInput"]:focus-within * {
-  border-bottom-color: var(--border-light) !important;
-}
-
-/* Target the specific Streamlit wrapper div that has the border */
-[data-testid="stChatInput"] > div > div {
+/* Override all Streamlit border color changes - AGGRESSIVE */
+[data-testid="stChatInput"],
+[data-testid="stChatInput"] *,
+[data-testid="stChatInput"] > div,
+[data-testid="stChatInput"] > div > div,
+[data-testid="stChatInput"] form,
+[data-testid="stChatInput"] form > div,
+[data-testid="stChatInput"] [class*="st-"],
+[data-testid="stChatInput"] [class*="emotion-"],
+[data-testid="stChatInput"] div[data-baseweb] {
   border-bottom: none !important;
+  border-bottom-color: transparent !important;
 }
 
-[data-testid="stChatInput"] [class*="st-"] {
+[data-testid="stChatInput"]:focus-within,
+[data-testid="stChatInput"]:focus-within *,
+[data-testid="stChatInput"]:focus-within > div,
+[data-testid="stChatInput"]:focus-within > div > div,
+[data-testid="stChatInput"]:focus-within form,
+[data-testid="stChatInput"]:focus-within form > div,
+[data-testid="stChatInput"]:focus-within [class*="st-"],
+[data-testid="stChatInput"]:focus-within [class*="emotion-"],
+[data-testid="stChatInput"]:focus-within div[data-baseweb] {
   border-bottom: none !important;
+  border-bottom-color: transparent !important;
 }
 
 /* Chat Input Field */
