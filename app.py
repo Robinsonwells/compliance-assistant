@@ -95,22 +95,19 @@ def generate_legal_response(query: str, search_results: List[Dict[str, Any]]) ->
             context += f"Jurisdiction: {result['jurisdiction']}\n"
             context += f"Content: {result['text']}\n"
         
-        # Create messages for OpenAI
-        messages = [
-            {"role": "system", "content": LEGAL_COMPLIANCE_SYSTEM_PROMPT},
-            {"role": "user", "content": f"Query: {query}\n\nRelevant Legal Sources:\n{context}"}
-        ]
+        # Prepare input for GPT-5 Responses API
+        input_text = f"{LEGAL_COMPLIANCE_SYSTEM_PROMPT}\n\nQuery: {query}\n\nRelevant Legal Sources:\n{context}"
         
-        # Generate response
-        response = openai.chat.completions.create(
+        # Generate response using GPT-5 Responses API
+        response = openai.responses.create(
             model="gpt-5",
-            messages=messages,
-            max_completion_tokens=1500,
+            input=input_text,
+            max_output_tokens=1500,
             reasoning={"effort": "high"},
             text={"verbosity": "high"}
         )
         
-        return response.choices[0].message.content
+        return response.output_text
         
     except Exception as e:
         st.error(f"Error generating response: {e}")
