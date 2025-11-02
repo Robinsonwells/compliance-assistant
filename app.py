@@ -39,7 +39,7 @@ except Exception as e:
 # Page configuration
 st.set_page_config(
     page_title="PEO Compliance Assistant",
-    page_icon="",
+    page_icon="⚖️",
     layout="wide",
     initial_sidebar_state="expanded"
 )
@@ -149,6 +149,7 @@ def logout_user():
 
 # Main application
 def main():
+    """Main entry point"""
     # Check authentication
     if not check_authentication():
         show_login_page()
@@ -192,8 +193,13 @@ def show_login_page():
 def show_main_application():
     """Display main application interface"""
 
+    # Initialize chat messages
+    if 'messages' not in st.session_state:
+        st.session_state.messages = []
+
     # Optimized header for mobile-first design
     header_col1, header_col2 = st.columns([4, 1])
+    
     with header_col1:
         st.markdown("<h1 style='margin-bottom: 4px;'>PEO Compliance Assistant</h1>", unsafe_allow_html=True)
         st.caption("Comprehensive employment law guidance for all 50 U.S. states and federal law")
@@ -204,6 +210,9 @@ def show_main_application():
 
     # Add visual separator
     st.markdown("<hr style='margin: 16px 0; border: none; border-top: 1px solid var(--border-light);'>", unsafe_allow_html=True)
+    
+    # Show welcome message if no messages
+    if len(st.session_state.messages) == 0:
         st.markdown("""
         <div style="text-align: center; padding: 2rem 1rem; color: var(--text-muted);">
             <h3 style="color: var(--text-secondary); margin-bottom: 0.5rem;">👤 ⚖️ Welcome to PEO Compliance Assistant</h3>
@@ -216,6 +225,30 @@ def show_main_application():
         avatar = "👤" if message["role"] == "user" else "⚖️"
         with st.chat_message(message["role"], avatar=avatar):
             st.markdown(message["content"])
+    
+    # Chat input handler
+    if prompt := st.chat_input("Ask a compliance question..."):
+        # Add user message to chat
+        st.session_state.messages.append({"role": "user", "content": prompt})
+        
+        # Display user message
+        with st.chat_message("user", avatar="👤"):
+            st.markdown(prompt)
+        
+        # Generate and display assistant response
+        with st.chat_message("assistant", avatar="⚖️"):
+            with st.spinner("Searching legal databases..."):
+                # Search legal database
+                search_results = search_legal_database(prompt, limit=5)
+                
+                # Generate response
+                response = generate_legal_response(prompt, search_results)
+                
+                # Display response
+                st.markdown(response)
+                
+                # Add assistant message to chat
+                st.session_state.messages.append({"role": "assistant", "content": response})
 
 if __name__ == "__main__":
     main()
