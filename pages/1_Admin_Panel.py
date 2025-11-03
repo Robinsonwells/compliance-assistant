@@ -1,6 +1,8 @@
 import streamlit as st
 import os
 from dotenv import load_dotenv
+import hashlib
+import secrets
 import uuid
 from datetime import datetime
 import hashlib
@@ -69,6 +71,74 @@ def load_css():
             st.markdown(f"<style>{f.read()}</style>", unsafe_allow_html=True)
 
 load_css()
+
+# Admin authentication functions
+def get_admin_password_hash():
+    """Get admin password hash from environment or use default"""
+    admin_password = os.getenv("ADMIN_PASSWORD", "admin123")  # Default for development
+    return hashlib.sha256(admin_password.encode()).hexdigest()
+
+def check_admin_authentication():
+    """Check if admin is authenticated"""
+    if 'admin_authenticated' not in st.session_state:
+        st.session_state.admin_authenticated = False
+    return st.session_state.admin_authenticated
+
+def authenticate_admin(password: str) -> bool:
+    """Authenticate admin with password"""
+    password_hash = hashlib.sha256(password.encode()).hexdigest()
+    expected_hash = get_admin_password_hash()
+    
+    if password_hash == expected_hash:
+        st.session_state.admin_authenticated = True
+        return True
+    return False
+
+def logout_admin():
+    """Logout admin"""
+    st.session_state.admin_authenticated = False
+    st.rerun()
+
+def show_admin_login():
+    """Display admin login page"""
+    st.title("🔐 Admin Panel Access")
+    st.markdown("### Administrator Login Required")
+    
+    # Center the login form
+    col1, col2, col3 = st.columns([1, 2, 1])
+    
+    with col2:
+        st.markdown("""
+        <div style='background: var(--bg-secondary); padding: 2rem; border-radius: 12px; border: 1px solid var(--border-light);'>
+        """, unsafe_allow_html=True)
+        
+        with st.form("admin_login_form"):
+            st.markdown("**Enter Admin Password:**")
+            admin_password = st.text_input("Password", type="password", placeholder="Enter admin password")
+            
+            col_a, col_b, col_c = st.columns([1, 2, 1])
+            with col_b:
+                login_button = st.form_submit_button("🔓 Access Admin Panel", use_container_width=True)
+            
+            if login_button:
+                if admin_password:
+                    if authenticate_admin(admin_password):
+                        st.success("✅ Admin access granted!")
+                        st.rerun()
+                    else:
+                        st.error("❌ Invalid admin password. Access denied.")
+                else:
+                    st.error("⚠️ Please enter the admin password.")
+        
+        st.markdown("</div>", unsafe_allow_html=True)
+    
+    # Information section
+    st.markdown("---")
+    st.info("🛡️ **Security Notice**: This admin panel provides access to user management, document uploads, and system configuration. Only authorized administrators should have access.")
+    
+    # Development note
+    if os.getenv("ADMIN_PASSWORD") is None:
+        st.warning("⚠️ **Development Mode**: Using default admin password. Set ADMIN_PASSWORD environment variable for production.")
 
 def ensure_collection_exists():
     """Ensure the Qdrant collection exists with proper configuration"""
@@ -1122,5 +1192,22 @@ def show_knowledge_base_search():
 def main():
     admin_panel_page()
 
+    # Check admin authentication first
+    if not check_admin_authentication():
+        show_admin_login()
+        return
+    
+    # Admin header with logout
+    header_col1, header_col2 = st.columns([4, 1])
+    with header_col1:
+        st.title("⚙️ Admin Panel")
+        st.caption("System administration and document management")
+    
+    with header_col2:
+        if st.button("🚪 Logout", help="Logout from admin panel", use_container_width=True):
+            logout_admin()
+    
+    st.markdown("---")
+    
 if __name__ == "__main__":
     main()
