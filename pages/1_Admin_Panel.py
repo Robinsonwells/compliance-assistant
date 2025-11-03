@@ -709,6 +709,20 @@ def admin_panel_page():
     st.title("Admin Panel - Knowledge Base Management")
     st.markdown("*Manage legal documents and database content*")
 
+    # Create tabs for different admin functions
+    tab1, tab2, tab3 = st.tabs(["📚 Document Management", "👥 User Management", "🔍 Knowledge Base Search"])
+    
+    with tab1:
+        show_document_management()
+    
+    with tab2:
+        show_user_management()
+    
+    with tab3:
+        show_knowledge_base_search()
+
+def show_document_management():
+    """Show document upload and management interface"""
     # Initialize session state for tracking processed files and processing status
     if "processed_file_ids" not in st.session_state:
         st.session_state.processed_file_ids = set()
@@ -717,8 +731,7 @@ def admin_panel_page():
     if "processing_complete" not in st.session_state:
         st.session_state.processing_complete = False
 
-    # Upload section
-    st.markdown("### Upload Documents")
+    st.markdown("### Upload New Documents")
 
     uploaded_files = st.file_uploader(
         "Upload legal documents (PDF, DOCX, TXT, XML)",
@@ -891,6 +904,221 @@ def admin_panel_page():
     else:
         st.info("No documents uploaded yet. Upload some legal documents to get started!")
 
+def show_user_management():
+    """Show user management interface"""
+    st.markdown("### User Management")
+    
+    # Add new user section
+    with st.expander("➕ Add New User", expanded=False):
+        with st.form("add_user_form"):
+            st.markdown("#### Create New User Access")
+            
+            col1, col2 = st.columns(2)
+            with col1:
+                client_name = st.text_input("Client Name*", help="Full name or company name")
+                email = st.text_input("Email Address", help="Optional - for contact purposes")
+            
+            with col2:
+                subscription_tier = st.selectbox(
+                    "Subscription Tier",
+                    options=['basic', 'premium', 'enterprise'],
+                    index=0,
+                    help="Access level for the user"
+                )
+                days_valid = st.number_input(
+                    "Days Valid",
+                    min_value=1,
+                    max_value=3650,
+                    value=365,
+                    help="How many days the access code will be valid"
+                )
+            
+            submit_user = st.form_submit_button("Create User", use_container_width=True)
+            
+            if submit_user:
+                if client_name.strip():
+                    try:
+                        access_code = user_manager.add_user(
+                            client_name=client_name.strip(),
+                            email=email.strip() if email.strip() else None,
+                            subscription_tier=subscription_tier,
+                            days_valid=days_valid
+                        )
+                        
+                        st.success(f"✅ User created successfully!")
+                        st.info(f"🔑 **Access Code:** `{access_code}`")
+                        st.warning("⚠️ Save this access code - it won't be shown again!")
+                        
+                        # Auto-refresh to show new user
+                        st.rerun()
+                        
+                    except Exception as e:
+                        st.error(f"❌ Error creating user: {e}")
+                else:
+                    st.error("❌ Client name is required")
+    
+    # Display existing users
+    st.markdown("#### Existing Users")
+    
+    try:
+        users = user_manager.get_all_users()
+        
+        if users:
+            # Create a more detailed user display
+            for user in users:
+                access_code, client_name, email, created_at, last_login, is_active, expires_at, subscription_tier = user
+                
+                # Determine status
+                status_color = "🟢" if is_active else "🔴"
+                status_text = "Active" if is_active else "Inactive"
+                
+                # Check if expired
+                if expires_at:
+                    try:
+                        from datetime import datetime
+                        expires_date = datetime.fromisoformat(expires_at.replace('Z', '+00:00'))
+                        is_expired = expires_date < datetime.now(expires_date.tzinfo)
+                        if is_expired:
+                            status_color = "🟡"
+                            status_text = "Expired"
+                    except:
+                        pass
+                
+                with st.expander(f"{status_color} {client_name} ({access_code}) - {status_text}"):
+                    col1, col2, col3 = st.columns([2, 2, 1])
+                    
+                    with col1:
+                        st.write(f"**Client:** {client_name}")
+                        st.write(f"**Email:** {email or 'Not provided'}")
+                        st.write(f"**Access Code:** `{access_code}`")
+                    
+                    with col2:
+                        st.write(f"**Tier:** {subscription_tier.title()}")
+                        st.write(f"**Created:** {created_at[:10] if created_at else 'Unknown'}")
+                        st.write(f"**Last Login:** {last_login[:10] if last_login else 'Never'}")
+                        st.write(f"**Expires:** {expires_at[:10] if expires_at else 'Never'}")
+                    
+                    with col3:
+                        if is_active:
+                            if st.button("🚫 Deactivate", key=f"deactivate_{access_code}"):
+                                if user_manager.deactivate_user(access_code):
+                                    st.success(f"Deactivated user {client_name}")
+                                    st.rerun()
+                                else:
+                                    st.error("Failed to deactivate user")
+                        else:
+                            st.write("*Inactive*")
+        else:
+            st.info("No users found. Create your first user above.")
+            
+    except Exception as e:
+        st.error(f"Error loading users: {e}")
+
+def show_knowledge_base_search():
+    """Show knowledge base search interface"""
+    st.markdown("### Knowledge Base Search")
+    st.markdown("*Search through all uploaded legal documents*")
+    
+    # Search interface
+    with st.form("search_form"):
+        search_query = st.text_input(
+            "Search Query",
+            placeholder="Enter your search terms (e.g., 'overtime pay requirements', 'minimum wage New York')",
+            help="Search across all legal documents in the knowledge base"
+        )
+        
+        col1, col2 = st.columns([1, 3])
+        with col1:
+            search_limit = st.selectbox("Results Limit", [5, 10, 20, 50], index=1)
+        with col2:
+            search_button = st.form_submit_button("🔍 Search Knowledge Base", use_container_width=True)
+    
+    # Perform search
+    if search_button and search_query.strip():
+        with st.spinner("Searching knowledge base..."):
+            try:
+                # Generate query embedding
+                query_embedding = embedding_model.encode(search_query).tolist()
+                
+                # Search Qdrant
+                search_results = qdrant_client.search(
+                    collection_name="legal_regulations",
+                    query_vector=query_embedding,
+                    limit=search_limit,
+                    with_payload=True
+                )
+                
+                if search_results:
+                    st.success(f"Found {len(search_results)} relevant results")
+                    
+                    # Display results
+                    for i, result in enumerate(search_results, 1):
+                        payload = result.payload
+                        score = result.score
+                        
+                        # Extract key information
+                        text = payload.get('text', 'No content available')
+                        citation = payload.get('citation', 'Unknown citation')
+                        jurisdiction = payload.get('jurisdiction', 'Unknown')
+                        section_number = payload.get('section_number', 'Unknown')
+                        source_file = payload.get('source_file', 'Unknown file')
+                        
+                        # Create expandable result
+                        with st.expander(f"Result {i}: {citation} (Score: {score:.3f})"):
+                            col1, col2 = st.columns([2, 1])
+                            
+                            with col1:
+                                st.markdown("**Content:**")
+                                st.write(text[:500] + "..." if len(text) > 500 else text)
+                            
+                            with col2:
+                                st.markdown("**Metadata:**")
+                                st.write(f"**Citation:** {citation}")
+                                st.write(f"**Jurisdiction:** {jurisdiction}")
+                                st.write(f"**Section:** {section_number}")
+                                st.write(f"**Source File:** {source_file}")
+                                st.write(f"**Relevance Score:** {score:.3f}")
+                                
+                                # Additional metadata if available
+                                if payload.get('law_type'):
+                                    st.write(f"**Law Type:** {payload['law_type']}")
+                                if payload.get('semantic_type'):
+                                    st.write(f"**Content Type:** {payload['semantic_type']}")
+                else:
+                    st.warning("No results found for your search query.")
+                    st.info("Try different keywords or check if documents have been uploaded to the knowledge base.")
+                    
+            except Exception as e:
+                st.error(f"Error searching knowledge base: {e}")
+                st.error("Please check your database connection and try again.")
+    
+    elif search_button and not search_query.strip():
+        st.warning("Please enter a search query.")
+    
+    # Knowledge base statistics
+    st.markdown("---")
+    st.markdown("#### Knowledge Base Statistics")
+    
+    try:
+        # Get collection info
+        collection_info = qdrant_client.get_collection("legal_regulations")
+        total_chunks = collection_info.points_count
+        
+        # Get unique documents count
+        documents = get_uploaded_documents()
+        total_documents = len(documents)
+        
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            st.metric("Total Documents", total_documents)
+        with col2:
+            st.metric("Total Chunks", total_chunks)
+        with col3:
+            avg_chunks = total_chunks / total_documents if total_documents > 0 else 0
+            st.metric("Avg Chunks/Doc", f"{avg_chunks:.1f}")
+            
+    except Exception as e:
+        st.error(f"Error loading statistics: {e}")
 def main():
     admin_panel_page()
 
