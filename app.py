@@ -16,6 +16,7 @@ try:
     from qdrant_client import QdrantClient
     from sentence_transformers import SentenceTransformer
     import openai
+    import torch
     
     # Initialize clients
     qdrant_client = QdrantClient(
@@ -23,8 +24,12 @@ try:
         api_key=os.getenv("QDRANT_API_KEY"),
     )
     
-    # Initialize embedding model
-    embedding_model = SentenceTransformer('all-MiniLM-L6-v2')
+    # Initialize embedding model with proper device handling
+    device = 'cpu'  # Force CPU usage to avoid meta tensor issues
+    embedding_model = SentenceTransformer('all-MiniLM-L6-v2', device=device)
+    
+    # Ensure model is properly loaded on CPU
+    embedding_model = embedding_model.to(device)
     
     # Initialize OpenAI
     openai.api_key = os.getenv("OPENAI_API_KEY")

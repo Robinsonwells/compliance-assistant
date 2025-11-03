@@ -5,6 +5,7 @@ import hashlib
 import secrets
 import uuid
 from datetime import datetime
+import torch
 import hashlib
 import io
 from typing import List, Dict, Any
@@ -39,8 +40,12 @@ try:
         api_key=os.getenv("QDRANT_API_KEY"),
     )
     
-    # Initialize embedding model
-    embedding_model = SentenceTransformer('all-MiniLM-L6-v2')
+    # Initialize embedding model with proper device handling
+    device = 'cpu'  # Force CPU usage to avoid meta tensor issues
+    embedding_model = SentenceTransformer('all-MiniLM-L6-v2', device=device)
+    
+    # Ensure model is properly loaded on CPU
+    embedding_model = embedding_model.to(device)
     
     # Initialize user manager
     user_manager = UserManager()
