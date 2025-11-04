@@ -290,24 +290,13 @@ def generate_legal_response(query: str, search_results: List[Dict[str, Any]]) ->
 <details>
 <summary><strong>🧠 Reasoning Analysis & Cost Breakdown</strong> (Click to expand)</summary>
 
-**Complexity Score: {complexity_score}/30 points**
-{complexity_details}
+**Reasoning Effort:** {reasoning_effort.upper()} (Score: {complexity_score}/30)
 
-**Reasoning Decision:** {reasoning_effort.upper()} effort (Score: {complexity_score})
-• 0-14 points: LOW reasoning (simple fact retrieval)
-• 15-22 points: MEDIUM reasoning (standard compliance)
-• 23+ points: HIGH reasoning (multi-jurisdictional conflicts)
-
-**Cost Analysis:**
-• **Estimated Cost:** ${estimated_cost:.4f} (based on {reasoning_effort} effort pricing)
-• **Cost per 15k tokens:** ${COST_PER_15K_TOKENS[reasoning_effort]:.2f}
-• **Actual tokens used:** {total_tokens:,}
-
+**Tokens Used:** {total_tokens:,}
 **Token Breakdown:**
-• Input Tokens: {input_tokens:,} (query + context + system prompt)
-• Output Tokens: {output_tokens:,} (reasoning + visible response)
-• Reasoning Tokens: {reasoning_tokens:,} (internal AI reasoning)
-• Total Tokens: {total_tokens:,}
+• Input: {input_tokens:,}
+• Output: {output_tokens:,}
+• Reasoning: {reasoning_tokens:,}
 
 </details>
 """
