@@ -179,11 +179,64 @@ p {
   outline-offset: 2px !important;
 }
 
+/* COMPREHENSIVE BUTTON TEXT VISIBILITY FIXES */
+/* Target ALL possible button text elements with nuclear option */
+.stButton > button,
+.stButton > button *,
+.stButton > button span,
+.stButton > button div,
+.stButton > button p,
+.stButton > button [class*="css-"],
+.stButton > button [class*="emotion-"],
+.stButton > button [class*="st-"] {
+  color: #000000 !important;
+  text-shadow: none !important;
+  opacity: 1 !important;
+  visibility: visible !important;
+  background-color: transparent !important;
+  display: inline !important;
+  font-weight: 600 !important;
+  font-size: 16px !important;
+}
+
+/* Login form specific button targeting */
+form[data-testid="form"] .stButton > button,
+form[data-testid="form"] .stButton > button *,
+[data-testid="stForm"] .stButton > button,
+[data-testid="stForm"] .stButton > button *,
+button[kind="primary"],
+button[kind="primary"] * {
+  color: #000000 !important;
+  text-shadow: none !important;
+  opacity: 1 !important;
+  visibility: visible !important;
+  font-weight: 600 !important;
+  font-size: 16px !important;
+}
+
+/* Hover states for button text */
+.stButton > button:hover,
+.stButton > button:hover *,
+.stButton > button:hover span,
+.stButton > button:hover div,
+.stButton > button:hover p {
+  color: #000000 !important;
+  text-shadow: none !important;
+  opacity: 1 !important;
+  visibility: visible !important;
+}
+
 /* Secondary button style */
 .stButton[data-testid*="secondary"] > button {
   background-color: transparent !important;
   color: #000000 !important;
   border: 1px solid var(--border-light) !important;
+}
+
+.stButton[data-testid*="secondary"] > button,
+.stButton[data-testid*="secondary"] > button * {
+  color: #000000 !important;
+  font-weight: 600 !important;
 }
 
 .stButton[data-testid*="secondary"] > button:hover {
@@ -192,6 +245,11 @@ p {
   color: #000000 !important;
 }
 
+.stButton[data-testid*="secondary"] > button:hover,
+.stButton[data-testid*="secondary"] > button:hover * {
+  color: #000000 !important;
+  font-weight: 600 !important;
+}
 /* ===== FORMS ===== */
 .stTextInput > div > div > input {
   background-color: var(--bg-tertiary) !important;
