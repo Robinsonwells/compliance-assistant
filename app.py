@@ -15,7 +15,7 @@ from system_prompts import LEGAL_COMPLIANCE_SYSTEM_PROMPT
 try:
     from qdrant_client import QdrantClient
     from sentence_transformers import SentenceTransformer
-    import openai
+    from openai import OpenAI
     import torch
     
     # Initialize clients
@@ -31,8 +31,11 @@ try:
     # Ensure model is properly loaded on CPU
     embedding_model = embedding_model.to(device)
     
-    # Initialize OpenAI
-    openai.api_key = os.getenv("OPENAI_API_KEY")
+    # Initialize OpenAI client with extended timeout for GPT-5
+    openai_client = OpenAI(
+        api_key=os.getenv("OPENAI_API_KEY"),
+        timeout=600.0  # 10 minute timeout for GPT-5 reasoning
+    )
     
     # Initialize user manager
     user_manager = UserManager()
@@ -92,6 +95,16 @@ def search_legal_database(query: str, limit: int = 5) -> List[Dict[str, Any]]:
 def generate_legal_response(query: str, search_results: List[Dict[str, Any]]) -> str:
     """Generate response using OpenAI with legal context"""
     try:
+        # Define simple queries that don't need high reasoning effort
+        simple_queries = ['test', 'hello', 'hi', 'help', 'what', 'how are you']
+        query_lower = query.lower().strip()
+        
+        # Determine reasoning effort based on query complexity
+        if query_lower in simple_queries or len(query.split()) < 5:
+            reasoning_effort = "low"
+        else:
+            reasoning_effort = "medium"  # Use medium instead of high for better performance
+        
         # Prepare context from search results
         context = ""
         for i, result in enumerate(search_results, 1):
@@ -104,19 +117,55 @@ def generate_legal_response(query: str, search_results: List[Dict[str, Any]]) ->
         input_text = f"{LEGAL_COMPLIANCE_SYSTEM_PROMPT}\n\nQuery: {query}\n\nRelevant Legal Sources:\n{context}"
         
         # Generate response using GPT-5 Responses API
-        response = openai.responses.create(
+        response = openai_client.responses.create(
             model="gpt-5",
             input=input_text,
-            max_output_tokens=1500,
-            reasoning={"effort": "high"},
+            max_output_tokens=None,  # No token limit - track usage
+            reasoning={"effort": reasoning_effort},
             text={"verbosity": "high"}
         )
 
-        return response.output_text
+        # Extract token usage information
+        usage = response.usage
+        input_tokens = usage.input_tokens
+        output_tokens = usage.output_tokens
+        reasoning_tokens = usage.output_tokens_details.get('reasoning_tokens', 0) if hasattr(usage, 'output_tokens_details') and usage.output_tokens_details else 0
+        total_tokens = usage.total_tokens
+        
+        # Log token usage to console
+        print(f"Query: {query[:100]}...")
+        print(f"Reasoning Effort: {reasoning_effort}")
+        print(f"Input Tokens: {input_tokens:,}")
+        print(f"Output Tokens: {output_tokens:,}")
+        print(f"Reasoning Tokens: {reasoning_tokens:,}")
+        print(f"Total Tokens: {total_tokens:,}")
+        
+        # Get the AI response text
+        ai_response = response.output_text
+        
+        # Append token usage information to the response
+        token_info = f"""
+
+---
+**Token Usage:**
+- **Input Tokens:** {input_tokens:,} (query + context + system prompt)
+- **Output Tokens:** {output_tokens:,} (reasoning + visible response)
+- **Reasoning Tokens:** {reasoning_tokens:,} (internal AI reasoning)
+- **Total Tokens:** {total_tokens:,}
+- **Reasoning Effort:** {reasoning_effort}
+"""
+        
+        return ai_response + token_info
         
     except Exception as e:
-        st.error(f"Error generating response: {e}")
-        return "I apologize, but I encountered an error while generating a response. Please try again."
+        error_msg = str(e).lower()
+        print(f"Error generating response: {e}")
+        
+        if "timeout" in error_msg:
+            return "The query is taking longer than expected to process. Please try simplifying your question or try again later."
+        else:
+            st.error(f"Error generating response: {e}")
+            return "I apologize, but I encountered an error while generating a response. Please try again."
 
 # Authentication functions
 def check_authentication():
@@ -236,6 +285,16 @@ def show_legal_assistant_content():
 
 def handle_chat_input(prompt):
     """Handle chat input and generate response"""
+    # Define simple queries for dynamic spinner text
+    simple_queries = ['test', 'hello', 'hi', 'help', 'what', 'how are you']
+    query_lower = prompt.lower().strip()
+    
+    # Set dynamic spinner text based on query complexity
+    if query_lower in simple_queries or len(prompt.split()) < 5:
+        spinner_text = "Searching legal database..."
+    else:
+        spinner_text = "Analyzing complex query... This may take 1-2 minutes for detailed legal analysis."
+    
     # Add user message to chat history
     st.session_state.messages.append({"role": "user", "content": prompt})
     
@@ -245,7 +304,7 @@ def handle_chat_input(prompt):
     
     # Generate and display assistant response
     with st.chat_message("assistant", avatar="⚖️"):
-        with st.spinner("Searching legal database..."):
+        with st.spinner(spinner_text):
             # Search legal database
             search_results = search_legal_database(prompt)
             
