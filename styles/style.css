@@ -20,12 +20,10 @@
   --border-accent: #586069;
   --border-strong: #6e7681;
   
-  --primary-blue: #0969da;
-  --primary-blue-dark: #0860ca;
-  --secondary-blue: #58a6ff;
+  --primary-blue: #ffffff;
+  --primary-blue-dark: #e6e6e6;
+  --secondary-blue: #cccccc;
   --success-green: #3fb950;
-  --warning-orange: #d29922;
-  --error-red: #f85149;
   
   /* Spacing System (8px base) */
   --space-xs: 4px;
