@@ -7,6 +7,35 @@ from typing import List, Dict, Any
 # Load environment variables
 load_dotenv()
 
+# US States and abbreviations for complexity scoring
+US_STATES = {
+    'alabama', 'al', 'alaska', 'ak', 'arizona', 'az', 'arkansas', 'ar', 'california', 'ca',
+    'colorado', 'co', 'connecticut', 'ct', 'delaware', 'de', 'florida', 'fl', 'georgia', 'ga',
+    'hawaii', 'hi', 'idaho', 'id', 'illinois', 'il', 'indiana', 'in', 'iowa', 'ia',
+    'kansas', 'ks', 'kentucky', 'ky', 'louisiana', 'la', 'maine', 'me', 'maryland', 'md',
+    'massachusetts', 'ma', 'michigan', 'mi', 'minnesota', 'mn', 'mississippi', 'ms',
+    'missouri', 'mo', 'montana', 'mt', 'nebraska', 'ne', 'nevada', 'nv', 'new hampshire', 'nh',
+    'new jersey', 'nj', 'new mexico', 'nm', 'new york', 'ny', 'north carolina', 'nc',
+    'north dakota', 'nd', 'ohio', 'oh', 'oklahoma', 'ok', 'oregon', 'or', 'pennsylvania', 'pa',
+    'rhode island', 'ri', 'south carolina', 'sc', 'south dakota', 'sd', 'tennessee', 'tn',
+    'texas', 'tx', 'utah', 'ut', 'vermont', 'vt', 'virginia', 'va', 'washington', 'wa',
+    'west virginia', 'wv', 'wisconsin', 'wi', 'wyoming', 'wy'
+}
+
+# Cost per 15k tokens (research-backed estimates)
+COST_PER_15K_TOKENS = {
+    "low": 0.07,      # $0.06-0.08 range
+    "medium": 0.13,   # $0.13 baseline
+    "high": 0.28      # $0.25-0.30 range
+}
+
+# Cost per token (calculated from 15k baseline)
+COST_PER_TOKEN = {
+    "low": COST_PER_15K_TOKENS["low"] / 15000,
+    "medium": COST_PER_15K_TOKENS["medium"] / 15000,
+    "high": COST_PER_15K_TOKENS["high"] / 15000
+}
+
 # Import custom modules
 from user_management import UserManager
 from system_prompts import LEGAL_COMPLIANCE_SYSTEM_PROMPT
@@ -92,18 +121,124 @@ def search_legal_database(query: str, limit: int = 5) -> List[Dict[str, Any]]:
         st.error(f"Error searching database: {e}")
         return []
 
+def calculate_complexity_score(query: str) -> tuple[int, dict]:
+    """Calculate complexity score based on 10 factors (0-30 points max)"""
+    query_lower = query.lower()
+    words = query.split()
+    word_count = len(words)
+    
+    score_breakdown = {}
+    total_score = 0
+    
+    # 1. State count (1-3 pts)
+    state_mentions = sum(1 for word in query_lower.split() if word in US_STATES)
+    if state_mentions == 1:
+        state_score = 1
+    elif state_mentions == 2:
+        state_score = 2
+    elif state_mentions >= 3:
+        state_score = 3
+    else:
+        state_score = 0
+    score_breakdown["State count"] = f"{state_mentions} states = {state_score}pts"
+    total_score += state_score
+    
+    # 2. Query length (1-3 pts)
+    if word_count < 10:
+        length_score = 1
+    elif word_count <= 20:
+        length_score = 2
+    else:
+        length_score = 3
+    score_breakdown["Query length"] = f"{word_count} words = {length_score}pts"
+    total_score += length_score
+    
+    # 3. Comparison keywords (1-3 pts)
+    comparison_keywords = ['vs', 'versus', 'compare', 'contrast', 'difference', 'different']
+    comparison_count = sum(1 for keyword in comparison_keywords if keyword in query_lower)
+    comparison_score = min(3, comparison_count)
+    score_breakdown["Comparison keywords"] = f"{comparison_count} found = {comparison_score}pts"
+    total_score += comparison_score
+    
+    # 4. Exception keywords (1-3 pts)
+    exception_keywords = ['except', 'unless', 'however', 'exemption', 'but', 'although']
+    exception_count = sum(1 for keyword in exception_keywords if keyword in query_lower)
+    exception_score = min(3, exception_count)
+    score_breakdown["Exception keywords"] = f"{exception_count} found = {exception_score}pts"
+    total_score += exception_score
+    
+    # 5. Hypothetical keywords (1-3 pts)
+    hypothetical_keywords = ['if', 'suppose', 'scenario', 'what if', 'hypothetical', 'assume']
+    hypothetical_count = sum(1 for keyword in hypothetical_keywords if keyword in query_lower)
+    hypothetical_score = min(3, hypothetical_count)
+    score_breakdown["Hypothetical keywords"] = f"{hypothetical_count} found = {hypothetical_score}pts"
+    total_score += hypothetical_score
+    
+    # 6. Analysis keywords (1-3 pts)
+    analysis_keywords = ['analyze', 'evaluate', 'implications', 'impact', 'consequences', 'assess']
+    analysis_count = sum(1 for keyword in analysis_keywords if keyword in query_lower)
+    analysis_score = min(3, analysis_count)
+    score_breakdown["Analysis keywords"] = f"{analysis_count} found = {analysis_score}pts"
+    total_score += analysis_score
+    
+    # 7. Conflict keywords (1-3 pts)
+    conflict_keywords = ['conflicting', 'preemption', 'override', 'supersede', 'conflict', 'clash']
+    conflict_count = sum(1 for keyword in conflict_keywords if keyword in query_lower)
+    conflict_score = min(3, conflict_count)
+    score_breakdown["Conflict keywords"] = f"{conflict_count} found = {conflict_score}pts"
+    total_score += conflict_score
+    
+    # 8. Multi-step indicators (1-3 pts)
+    multistep_keywords = ['first', 'then', 'also', 'additionally', 'furthermore', 'next', 'step']
+    multistep_count = sum(1 for keyword in multistep_keywords if keyword in query_lower)
+    multistep_score = min(3, multistep_count)
+    score_breakdown["Multi-step indicators"] = f"{multistep_count} found = {multistep_score}pts"
+    total_score += multistep_score
+    
+    # 9. Complexity phrases (1-3 pts)
+    complexity_keywords = ['edge case', 'grey area', 'gray area', 'unclear', 'ambiguous', 'complex']
+    complexity_count = sum(1 for keyword in complexity_keywords if keyword in query_lower)
+    complexity_score = min(3, complexity_count)
+    score_breakdown["Complexity phrases"] = f"{complexity_count} found = {complexity_score}pts"
+    total_score += complexity_score
+    
+    # 10. Question type (1-3 pts)
+    if any(word in query_lower for word in ['what is', 'define', 'definition']):
+        question_score = 1  # Simple fact lookup
+        question_type = "Fact lookup"
+    elif any(word in query_lower for word in ['how', 'why', 'when', 'where']):
+        question_score = 2  # Interpretation needed
+        question_type = "Interpretation"
+    elif any(word in query_lower for word in ['should', 'recommend', 'best', 'strategy']):
+        question_score = 3  # Synthesis required
+        question_type = "Synthesis"
+    else:
+        question_score = 2  # Default to interpretation
+        question_type = "Interpretation"
+    score_breakdown["Question type"] = f"{question_type} = {question_score}pts"
+    total_score += question_score
+    
+    return total_score, score_breakdown
+
+def get_reasoning_effort(complexity_score: int) -> str:
+    """Map complexity score to reasoning effort level"""
+    if complexity_score <= 14:
+        return "low"
+    elif complexity_score <= 22:
+        return "medium"
+    else:
+        return "high"
+
+def calculate_estimated_cost(total_tokens: int, reasoning_effort: str) -> float:
+    """Calculate estimated cost based on token usage and reasoning effort"""
+    return total_tokens * COST_PER_TOKEN[reasoning_effort]
+
 def generate_legal_response(query: str, search_results: List[Dict[str, Any]]) -> str:
     """Generate response using OpenAI with legal context"""
     try:
-        # Define simple queries that don't need high reasoning effort
-        simple_queries = ['test', 'hello', 'hi', 'help', 'what', 'how are you']
-        query_lower = query.lower().strip()
-        
-        # Determine reasoning effort based on query complexity
-        if query_lower in simple_queries or len(query.split()) < 5:
-            reasoning_effort = "low"
-        else:
-            reasoning_effort = "medium"  # Use medium instead of high for better performance
+        # Calculate complexity score and determine reasoning effort
+        complexity_score, score_breakdown = calculate_complexity_score(query)
+        reasoning_effort = get_reasoning_effort(complexity_score)
         
         # Prepare context from search results
         context = ""
@@ -143,16 +278,38 @@ def generate_legal_response(query: str, search_results: List[Dict[str, Any]]) ->
         # Get the AI response text
         ai_response = response.output_text
         
+        # Calculate estimated cost
+        estimated_cost = calculate_estimated_cost(total_tokens, reasoning_effort)
+        
+        # Create detailed breakdown for transparency
+        complexity_details = "\n".join([f"• {factor}: {score}" for factor, score in score_breakdown.items()])
+        
         # Append token usage information to the response
         token_info = f"""
 
----
-**Token Usage:**
-- **Input Tokens:** {input_tokens:,} (query + context + system prompt)
-- **Output Tokens:** {output_tokens:,} (reasoning + visible response)
-- **Reasoning Tokens:** {reasoning_tokens:,} (internal AI reasoning)
-- **Total Tokens:** {total_tokens:,}
-- **Reasoning Effort:** {reasoning_effort}
+<details>
+<summary><strong>🧠 Reasoning Analysis & Cost Breakdown</strong> (Click to expand)</summary>
+
+**Complexity Score: {complexity_score}/30 points**
+{complexity_details}
+
+**Reasoning Decision:** {reasoning_effort.upper()} effort (Score: {complexity_score})
+• 0-14 points: LOW reasoning (simple fact retrieval)
+• 15-22 points: MEDIUM reasoning (standard compliance)
+• 23+ points: HIGH reasoning (multi-jurisdictional conflicts)
+
+**Cost Analysis:**
+• **Estimated Cost:** ${estimated_cost:.4f} (based on {reasoning_effort} effort pricing)
+• **Cost per 15k tokens:** ${COST_PER_15K_TOKENS[reasoning_effort]:.2f}
+• **Actual tokens used:** {total_tokens:,}
+
+**Token Breakdown:**
+• Input Tokens: {input_tokens:,} (query + context + system prompt)
+• Output Tokens: {output_tokens:,} (reasoning + visible response)
+• Reasoning Tokens: {reasoning_tokens:,} (internal AI reasoning)
+• Total Tokens: {total_tokens:,}
+
+</details>
 """
         
         return ai_response + token_info
@@ -285,15 +442,17 @@ def show_legal_assistant_content():
 
 def handle_chat_input(prompt):
     """Handle chat input and generate response"""
-    # Define simple queries for dynamic spinner text
-    simple_queries = ['test', 'hello', 'hi', 'help', 'what', 'how are you']
-    query_lower = prompt.lower().strip()
+    # Calculate complexity for dynamic spinner text
+    complexity_score, _ = calculate_complexity_score(prompt)
+    reasoning_effort = get_reasoning_effort(complexity_score)
     
     # Set dynamic spinner text based on query complexity
-    if query_lower in simple_queries or len(prompt.split()) < 5:
+    if reasoning_effort == "low":
         spinner_text = "Searching legal database..."
+    elif reasoning_effort == "medium":
+        spinner_text = "Analyzing query with medium reasoning effort..."
     else:
-        spinner_text = "Analyzing complex query... This may take 1-2 minutes for detailed legal analysis."
+        spinner_text = "Analyzing complex multi-jurisdictional query with high reasoning effort... This may take 3-10 minutes."
     
     # Add user message to chat history
     st.session_state.messages.append({"role": "user", "content": prompt})
