@@ -222,10 +222,12 @@ def calculate_complexity_score(query: str) -> tuple[int, dict]:
 
 def get_reasoning_effort(complexity_score: int) -> str:
     """Map complexity score to reasoning effort level"""
-    if complexity_score > 22:
+    if complexity_score >= 23:
         return "high"
-    else:
+    elif complexity_score >= 15:
         return "medium"
+    else:
+        return "low"
 
 def calculate_estimated_cost(total_tokens: int, reasoning_effort: str) -> float:
     """Calculate estimated cost based on token usage and reasoning effort"""
