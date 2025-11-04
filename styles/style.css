@@ -268,8 +268,9 @@ p {
   background: var(--bg-secondary) !important;
   color: var(--text-primary) !important;
   border-radius: 18px 18px 18px 4px !important;
-  border-left: 3px solid #666666 !important;
+  border-left: 3px solid var(--primary-blue) !important;
   border: 1px solid var(--border-light) !important;
+  border-left: 3px solid var(--primary-blue) !important;
   padding: var(--space-lg) var(--space-xl) !important;
   max-width: 90% !important;
   margin-right: auto !important;
@@ -931,7 +932,7 @@ p {
     --text-primary: #ffffff;
     --text-secondary: #ffffff;
     --border-light: #666666;
-    --primary-blue: #4da6ff;
+    --primary-blue: #ffffff;
   }
 }
 
