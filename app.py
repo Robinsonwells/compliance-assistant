@@ -129,7 +129,7 @@ def generate_legal_response(query: str, search_results: List[Dict[str, Any]]) ->
         usage = response.usage
         input_tokens = usage.input_tokens
         output_tokens = usage.output_tokens
-        reasoning_tokens = usage.output_tokens_details.get('reasoning_tokens', 0) if hasattr(usage, 'output_tokens_details') and usage.output_tokens_details else 0
+        reasoning_tokens = getattr(getattr(usage, 'output_tokens_details', None), 'reasoning_tokens', 0)
         total_tokens = usage.total_tokens
         
         # Log token usage to console
