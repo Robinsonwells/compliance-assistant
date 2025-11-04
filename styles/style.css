@@ -151,7 +151,7 @@ p {
 
 /* ===== BUTTONS ===== */
 .stButton > button {
-  background-color: var(--primary-blue) !important;
+  background-color: #ffffff !important;
   color: #000000 !important;
   border: none !important;
   border-radius: var(--radius-md) !important;
@@ -164,7 +164,7 @@ p {
 }
 
 .stButton > button:hover {
-  background-color: var(--primary-blue-dark) !important;
+  background-color: #f0f0f0 !important;
   color: #000000 !important;
   transform: translateY(-1px) !important;
   box-shadow: var(--shadow-md) !important;
