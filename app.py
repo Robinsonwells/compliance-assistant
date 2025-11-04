@@ -425,8 +425,8 @@ def show_legal_assistant_content():
     else:
         # Display chat messages with avatars
         for message in st.session_state.messages:
-            avatar = "U" if message["role"] == "user" else "A"
-            with st.chat_message(message["role"], avatar=avatar):
+            avatar = "USER" if message["role"] == "user" else "AI"
+            with st.chat_message(message["role"]):
                 st.markdown(message["content"])
 
 def handle_chat_input(prompt):
@@ -447,11 +447,11 @@ def handle_chat_input(prompt):
     st.session_state.messages.append({"role": "user", "content": prompt})
     
     # Display user message
-    with st.chat_message("user", avatar="U"):
+    with st.chat_message("user"):
         st.markdown(prompt)
     
     # Generate and display assistant response
-    with st.chat_message("assistant", avatar="A"):
+    with st.chat_message("assistant"):
         with st.spinner(spinner_text):
             # Search legal database
             search_results = search_legal_database(prompt)
