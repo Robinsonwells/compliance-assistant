@@ -111,8 +111,8 @@ def generate_legal_response(query: str, search_results: List[Dict[str, Any]]) ->
             reasoning={"effort": "high"},
             text={"verbosity": "high"}
         )
-        
-        return response.output_text
+
+        return response.text
         
     except Exception as e:
         st.error(f"Error generating response: {e}")
