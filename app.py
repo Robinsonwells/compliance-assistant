@@ -286,7 +286,7 @@ def generate_legal_response(query: str, search_results: List[Dict[str, Any]]) ->
         token_info = f"""
 
 <details>
-<summary><strong>🧠 Reasoning Analysis & Cost Breakdown</strong> (Click to expand)</summary>
+<summary><strong>Reasoning Analysis</strong> (Click to expand)</summary>
 
 **Reasoning Effort:** {reasoning_effort.upper()} (Score: {complexity_score}/30)
 
@@ -393,7 +393,7 @@ def show_main_application():
         st.caption("Comprehensive employment law guidance for all 50 U.S. states and federal law")
 
     with header_col2:
-        if st.button("↗", key="logout_btn", help="Logout", use_container_width=True):
+        if st.button("Logout", key="logout_btn", help="Logout", use_container_width=True):
             logout_user()
 
     # Add visual separator
@@ -416,14 +416,14 @@ def show_legal_assistant_content():
     if len(st.session_state.messages) == 0:
         st.markdown("""
         <div style='text-align: center; padding: 2rem; color: var(--text-muted);'>
-            <h3>👋 Welcome to PEO Compliance Assistant</h3>
+            <h3>Welcome to PEO Compliance Assistant</h3>
             <p>Ask me about employment law in any U.S. state or federal law</p>
         </div>
         """, unsafe_allow_html=True)
     else:
         # Display chat messages with avatars
         for message in st.session_state.messages:
-            avatar = "👤" if message["role"] == "user" else "⚖️"
+            avatar = "U" if message["role"] == "user" else "A"
             with st.chat_message(message["role"], avatar=avatar):
                 st.markdown(message["content"])
 
@@ -445,11 +445,11 @@ def handle_chat_input(prompt):
     st.session_state.messages.append({"role": "user", "content": prompt})
     
     # Display user message
-    with st.chat_message("user", avatar="👤"):
+    with st.chat_message("user", avatar="U"):
         st.markdown(prompt)
     
     # Generate and display assistant response
-    with st.chat_message("assistant", avatar="⚖️"):
+    with st.chat_message("assistant", avatar="A"):
         with st.spinner(spinner_text):
             # Search legal database
             search_results = search_legal_database(prompt)
