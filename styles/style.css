@@ -228,7 +228,7 @@ button[kind="primary"] * {
 
 /* Secondary button style */
 .stButton[data-testid*="secondary"] > button {
-  background-color: transparent !important;
+  background-color: #ffffff !important;
   color: #000000 !important;
   border: 1px solid var(--border-light) !important;
 }
@@ -240,7 +240,7 @@ button[kind="primary"] * {
 }
 
 .stButton[data-testid*="secondary"] > button:hover {
-  background-color: var(--bg-accent) !important;
+  background-color: #f0f0f0 !important;
   border-color: var(--border-medium) !important;
   color: #000000 !important;
 }
