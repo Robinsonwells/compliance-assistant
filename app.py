@@ -293,11 +293,12 @@ def calculate_estimated_cost(total_tokens: int, reasoning_effort: str) -> float:
     """Calculate estimated cost based on token usage and reasoning effort"""
     return total_tokens * COST_PER_TOKEN[reasoning_effort]
 
-def generate_legal_response(query: str, search_results: List[Dict[str, Any]]) -> str:
+def generate_legal_response(query: str, search_results: List[Dict[str, Any]], reasoning_effort: str = None) -> str:
     """Generate response using OpenAI with legal context"""
     try:
-        # Use GPT-4o-mini to classify reasoning effort
-        reasoning_effort = classify_reasoning_effort_with_gpt4o_mini(query)
+        # Use provided reasoning effort or classify if not provided
+        if reasoning_effort is None:
+            reasoning_effort = classify_reasoning_effort_with_gpt4o_mini(query)
         
         # Still calculate complexity score for display purposes
         complexity_score, score_breakdown = calculate_complexity_score(query)
@@ -494,18 +495,6 @@ def show_legal_assistant_content():
 
 def handle_chat_input(prompt):
     """Handle chat input and generate response"""
-    # Calculate complexity for dynamic spinner text
-    complexity_score, _ = calculate_complexity_score(prompt)
-    reasoning_effort = get_reasoning_effort(complexity_score)
-    
-    # Set dynamic spinner text based on query complexity
-    if reasoning_effort == "low":
-        spinner_text = "Searching legal database..."
-    elif reasoning_effort == "medium":
-        spinner_text = "Analyzing query with medium reasoning effort..."
-    else:
-        spinner_text = "Analyzing complex multi-jurisdictional query with high reasoning effort... This may take 3-10 minutes."
-    
     # Add user message to chat history
     st.session_state.messages.append({"role": "user", "content": prompt})
     
@@ -515,12 +504,46 @@ def handle_chat_input(prompt):
     
     # Generate and display assistant response
     with st.chat_message("assistant"):
-        with st.spinner(spinner_text):
-            # Search legal database
+        # Create status placeholder for real-time updates
+        status_placeholder = st.empty()
+        
+        with st.spinner("Processing your legal query..."):
+            # Step 1: Classify reasoning effort
+            status_placeholder.info("🤔 Choosing reasoning effort...")
+            reasoning_effort = classify_reasoning_effort_with_gpt4o_mini(prompt)
+            
+            # Show determined effort level
+            effort_emoji = {"low": "⚡", "medium": "🧠", "high": "🔬"}
+            status_placeholder.success(f"{effort_emoji.get(reasoning_effort, '🧠')} Reasoning effort: **{reasoning_effort.upper()}**")
+            
+            # Brief pause to let user see the effort level
+            import time
+            time.sleep(0.5)
+            
+            # Step 2: Search legal database
+            status_placeholder.info("🔍 Searching legal database...")
             search_results = search_legal_database(prompt)
             
-            # Generate response
-            response = generate_legal_response(prompt, search_results)
+            # Show search results count
+            if search_results:
+                status_placeholder.success(f"📚 Found {len(search_results)} relevant legal sources")
+            else:
+                status_placeholder.warning("📚 No specific legal sources found - using general knowledge")
+            
+            time.sleep(0.5)
+            
+            # Step 3: Generate response with dynamic status based on effort
+            if reasoning_effort == "low":
+                status_placeholder.info("⚡ Generating quick response...")
+            elif reasoning_effort == "medium":
+                status_placeholder.info("🧠 Analyzing with medium reasoning effort...")
+            else:
+                status_placeholder.info("🔬 Performing deep analysis with high reasoning effort... This may take 3-10 minutes.")
+            
+            response = generate_legal_response(prompt, search_results, reasoning_effort)
+            
+            # Clear status placeholder before showing final response
+            status_placeholder.empty()
             
             # Display response
             st.markdown(response)
