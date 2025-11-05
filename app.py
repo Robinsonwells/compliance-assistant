@@ -299,11 +299,11 @@ def calculate_estimated_cost(total_tokens: int, reasoning_effort: str) -> float:
     return total_tokens * COST_PER_TOKEN[reasoning_effort]
 
 def call_perplexity_auditor(original_query: str, main_answer: str) -> Dict[str, Any]:
-    """Step 3: Independent fact-checker using Perplexity's sonar-reasoning-pro API"""
+    """Step 3: Independent fact-checker using Perplexity's sonar-reasoning-pro API directly"""
     try:
         if not PERPLEXITY_API_KEY:
             return {
-                "report": "⚠️ **AUDITOR ERROR:** Perplexity API key not configured. Please verify the information independently using official government sources.",
+                "report": "⚠️ **AUDITOR ERROR:** Perplexity API key not configured.",
                 "citations": [],
                 "usage": {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0},
                 "finish_reason": "error"
@@ -363,7 +363,17 @@ Use inline citations [1], [2], etc. for all sources. Be thorough but concise."""
             "model": "sonar-reasoning-pro",
             "messages": [
                 {"role": "user", "content": prompt}
-            ]
+            ],
+            "web_search_options": {
+                "search_recency_filter": "month",  # Focus on recent legal changes
+                "search_domain_filter": [
+                    "*.gov",  # Government sites
+                    "law.cornell.edu",  # Cornell Law
+                    "dol.gov",  # Department of Labor
+                    "eeoc.gov"  # EEOC
+                ],
+                "max_search_results": 10
+            }
         }
         
         headers = {
@@ -371,7 +381,7 @@ Use inline citations [1], [2], etc. for all sources. Be thorough but concise."""
             "Content-Type": "application/json"
         }
         
-        response = requests.post(url, json=payload, headers=headers, timeout=60)
+        response = requests.post(url, json=payload, headers=headers, timeout=120)
         response.raise_for_status()  # Raise an exception for bad status codes
         
         response_data = response.json()
@@ -382,15 +392,22 @@ Use inline citations [1], [2], etc. for all sources. Be thorough but concise."""
         # Remove <think>...</think> section using regex
         clean_content = re.sub(r'<think>.*?</think>\s*', '', message_content, flags=re.DOTALL)
         
-        # Extract search results for citations
+        # Extract citations from search_results
+        citations = []
         search_results = response_data.get("search_results", [])
+        for result in search_results:
+            citations.append({
+                "title": result.get("title", "Source"),
+                "url": result.get("url", "#"),
+                "snippet": result.get("snippet", "")  # Include snippet for potential future use
+            })
         
         # Extract usage information
         usage = response_data.get("usage", {})
         
         return {
             "report": clean_content.strip(),
-            "citations": search_results,
+            "citations": citations,
             "usage": {
                 "prompt_tokens": usage.get("prompt_tokens", 0),
                 "completion_tokens": usage.get("completion_tokens", 0),
@@ -402,15 +419,15 @@ Use inline citations [1], [2], etc. for all sources. Be thorough but concise."""
     except Exception as e:
         print(f"Error in independent auditor: {e}")
         return {
-            "report": f"⚠️ **AUDITOR ERROR:** Unable to perform fact-checking due to technical issues: {str(e)}\n\nPlease verify the information independently using official government sources.",
+            "report": f"⚠️ **AUDITOR ERROR:** {str(e)}\n\nPlease verify the information independently using official government sources.",
             "citations": [],
             "usage": {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0},
             "finish_reason": "error"
         }
 
-def format_audit_with_citations(audit_content: str, search_results: List[Dict]) -> str:
-    """Convert Perplexity search results to clickable citation links"""
-    if not search_results:
+def format_audit_with_citations(audit_content: str, citations: List[Dict]) -> str:
+    """Convert Perplexity citations to clickable links"""
+    if not citations:
         return audit_content
     
     try:
@@ -418,9 +435,9 @@ def format_audit_with_citations(audit_content: str, search_results: List[Dict]) 
         
         # Build citation links
         citation_links = []
-        for i, result in enumerate(search_results, 1):
-            title = result.get('title', 'Source')
-            url = result.get('url', '#')
+        for i, cite in enumerate(citations, 1):
+            title = cite.get('title', 'Source')
+            url = cite.get('url', '#')
             
             # Create HTML link
             link = f'<a href="{url}" target="_blank" title="{title}" style="color: #0969da; text-decoration: none;">[{i}]</a>'
@@ -430,7 +447,7 @@ def format_audit_with_citations(audit_content: str, search_results: List[Dict]) 
             output = output.replace(citation_marker, link)
             
             # Store for reference list
-            citation_links.append(f"[{i}] {title} - {url}")
+            citation_links.append(f"[{i}] {title}\n    {url}")
         
         # Add reference list at the end
         if citation_links:
