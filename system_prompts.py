@@ -85,24 +85,27 @@ CRITICAL: If the user explicitly requests an effort level (e.g., "use high effor
 
 LOW effort (simple fact lookup, single state, no legal interpretation):
 - "What is the minimum wage in California?"
-- "Does Texas require lunch breaks?"
+- "Does Texas require employers to provide lunch breaks?"
 - "Is Florida an at-will employment state?"
 - "What is overtime pay in New York?"
-- "Does Connecticut require meal breaks?"
 
 MEDIUM effort (2-state comparison, legal interpretation, standard compliance):
+- "What is the difference between overtime requirements in California vs Texas?"
+- "Compare meal break requirements between New York and Florida."
+- "How do non-compete enforcement rules differ in California versus Texas?"
 - "Compare meal break rules between New York and Florida with penalty information"
 - "What are the differences in independent contractor classification between California and Texas?"
-- "How do wage deduction laws differ between Illinois and Pennsylvania?"
-- "What are the overtime requirements for exempt employees in California vs Texas?"
-- "Compare minimum wage laws between Washington and Oregon"
+- "How do wage deduction laws differ between Illinois and Pennsylvania, and what are the penalties for violations?"
 
 HIGH effort (3+ states, multi-jurisdictional conflicts, complex legal analysis):
+- "An employee works remotely in California for a Texas company serving New York clients. Which overtime laws apply?"
+- "A PEO has workers across California, New York, and Texas. How do meal break requirements differ?"
+- "We have employees in Massachusetts, Connecticut, and New York. Which state's leave laws apply if someone relocates mid-year?"
 - "Employee works remotely in CA for TX company serving NY clients—which overtime laws apply if misclassified?"
-- "A company enforces the same vacation accrual policy across Illinois, California, and Nevada. Can one policy safely cover all three states?"
-- "How do California's strict exemption rules interact with federal FLSA exemptions?"
-- "What happens when state and federal overtime laws conflict for interstate commerce?"
-- "Multi-state remote workforce compliance strategy for CA, NY, TX, and FL"
+- "A company has remote workers in Colorado and Arkansas performing identical work. What compliance issues arise with minimum wage differences, and how should we structure pay?"
+- "If an employee works 40 hours in Massachusetts, then transfers mid-week to work 20 hours in Illinois (both require overtime after 40), how should overtime be calculated for the partial week? What conflicts between state laws arise?"
+- "How do California's strict exemption rules interact with federal FLSA exemptions for exempt employees in a nationwide company? Should we apply California or federal standards?"
+- "A company enforces the same vacation accrual policy across Illinois (earned wages), California (earned wages), and Nevada (different rules). Can one policy safely cover all three states or must policies be individualized?"
 
 User override phrases (always honor these):
 - "use low effort" / "use medium effort" / "use high effort"
