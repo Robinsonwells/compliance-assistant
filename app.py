@@ -2,10 +2,15 @@ import streamlit as st
 import os
 from dotenv import load_dotenv
 import uuid
+import requests
+import re
 from typing import List, Dict, Any
 
 # Load environment variables
 load_dotenv()
+
+# Get API keys
+PERPLEXITY_API_KEY = os.getenv("PERPLEXITY_API_KEY")
 
 # US States and abbreviations for complexity scoring
 US_STATES = {
@@ -293,9 +298,16 @@ def calculate_estimated_cost(total_tokens: int, reasoning_effort: str) -> float:
     """Calculate estimated cost based on token usage and reasoning effort"""
     return total_tokens * COST_PER_TOKEN[reasoning_effort]
 
-def independent_auditor(original_query: str, main_answer: str) -> Dict[str, Any]:
-    """Step 3: Independent fact-checker using web search"""
+def call_perplexity_auditor(original_query: str, main_answer: str) -> Dict[str, Any]:
+    """Step 3: Independent fact-checker using Perplexity's sonar-reasoning-pro"""
     try:
+        if not PERPLEXITY_API_KEY:
+            return {
+                "report": "⚠️ **AUDITOR ERROR:** Perplexity API key not configured. Please verify the information independently using official government sources.",
+                "citations": [],
+                "usage": {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0}
+            }
+        
         prompt = f"""You are an independent legal fact-checker with web search access. Your job is to verify the accuracy of legal answers by searching current law.
 
 PRIORITIZE THESE OFFICIAL SOURCES:
@@ -367,34 +379,29 @@ Use inline citations [1], [2], etc. for all sources. Be thorough but concise."""
             "finish_reason": "error"
         }
 
-def format_audit_with_citations(audit_content: str, citations: List[Dict]) -> str:
-    """Convert inline citation markers to clickable links"""
-    if not citations:
+def format_audit_with_citations(audit_content: str, search_results: List[Dict]) -> str:
+    """Convert Perplexity inline citation markers to clickable links"""
+    if not search_results:
         return audit_content
     
     try:
         output = audit_content
         
-        # Sort citations by start_index in reverse to avoid index shifting
-        sorted_citations = sorted(citations, key=lambda x: x.get('url_citation', {}).get('start_index', 0), reverse=True)
-        
         # Build citation links
         citation_links = []
-        for i, citation in enumerate(sorted_citations, 1):
-            if citation.get('type') == 'url_citation' and 'url_citation' in citation:
-                url_cite = citation['url_citation']
-                title = url_cite.get('title', 'Source')
-                url = url_cite.get('url', '#')
-                
-                # Create HTML link
-                link = f'<a href="{url}" target="_blank" title="{title}" style="color: #0969da; text-decoration: none;">[{i}]</a>'
-                
-                # Replace citation marker in text
-                citation_marker = f"[{i}]"
-                output = output.replace(citation_marker, link)
-                
-                # Store for reference list
-                citation_links.append(f"[{i}] {title} - {url}")
+        for i, result in enumerate(search_results, 1):
+            title = result.get('title', 'Source')
+            url = result.get('url', '#')
+            
+            # Create HTML link
+            link = f'<a href="{url}" target="_blank" title="{title}" style="color: #0969da; text-decoration: none;">[{i}]</a>'
+            
+            # Replace citation marker in text
+            citation_marker = f"[{i}]"
+            output = output.replace(citation_marker, link)
+            
+            # Store for reference list
+            citation_links.append(f"[{i}] {title} - {url}")
         
         # Add reference list at the end
         if citation_links:
@@ -404,7 +411,6 @@ def format_audit_with_citations(audit_content: str, citations: List[Dict]) -> st
         
     except Exception as e:
         print(f"Error formatting citations: {e}")
-        return audit_content + "\n\n*Note: Citation formatting error occurred*"
 
 def generate_legal_response(query: str, search_results: List[Dict[str, Any]], reasoning_effort: str = None) -> str:
     """Generate response using OpenAI with legal context"""
@@ -672,7 +678,7 @@ def handle_chat_input(prompt):
                 audit_status.info("🌐 Searching current legal sources...")
                 
                 # Call independent auditor
-                audit_result = independent_auditor(prompt, response)
+                audit_result = call_perplexity_auditor(prompt, response)
                 
                 audit_status.info("📋 Analyzing findings...")
                 time.sleep(0.5)
@@ -682,6 +688,22 @@ def handle_chat_input(prompt):
                     audit_result["report"], 
                     audit_result["citations"]
                 )
+                
+                # Add token usage information to the audit report
+                usage = audit_result.get("usage", {})
+                input_tokens = usage.get("prompt_tokens", 0)
+                output_tokens = usage.get("completion_tokens", 0)
+                total_tokens = usage.get("total_tokens", 0)
+                
+                token_info = f"""
+
+**Tokens Used:** {total_tokens:,}
+**Token Breakdown:**
+• Input: {input_tokens:,}
+• Output: {output_tokens:,}
+"""
+                
+                formatted_audit += token_info
                 
                 # Clear status and show results
                 audit_status.empty()
