@@ -299,13 +299,14 @@ def calculate_estimated_cost(total_tokens: int, reasoning_effort: str) -> float:
     return total_tokens * COST_PER_TOKEN[reasoning_effort]
 
 def call_perplexity_auditor(original_query: str, main_answer: str) -> Dict[str, Any]:
-    """Step 3: Independent fact-checker using Perplexity's sonar-reasoning-pro"""
+    """Step 3: Independent fact-checker using Perplexity's sonar-reasoning-pro API"""
     try:
         if not PERPLEXITY_API_KEY:
             return {
                 "report": "⚠️ **AUDITOR ERROR:** Perplexity API key not configured. Please verify the information independently using official government sources.",
                 "citations": [],
-                "usage": {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0}
+                "usage": {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0},
+                "finish_reason": "error"
             }
         
         prompt = f"""You are an independent legal fact-checker with web search access. Your job is to verify the accuracy of legal answers by searching current law.
@@ -355,20 +356,47 @@ REPORT FORMAT:
 
 Use inline citations [1], [2], etc. for all sources. Be thorough but concise."""
 
-        response = openai_client.chat.completions.create(
-            model="gpt-4o-search-preview",  # Using the search-enabled model
-            messages=[{
-                "role": "user",
-                "content": prompt
-            }],
-            web_search_options={},  # Enable web search
-            max_tokens=4000
-        )
+        # Make request to Perplexity API
+        url = "https://api.perplexity.ai/chat/completions"
+        
+        payload = {
+            "model": "sonar-reasoning-pro",
+            "messages": [
+                {"role": "user", "content": prompt}
+            ]
+        }
+        
+        headers = {
+            "Authorization": f"Bearer {PERPLEXITY_API_KEY}",
+            "Content-Type": "application/json"
+        }
+        
+        response = requests.post(url, json=payload, headers=headers, timeout=60)
+        response.raise_for_status()  # Raise an exception for bad status codes
+        
+        response_data = response.json()
+        
+        # Extract the message content
+        message_content = response_data["choices"][0]["message"]["content"]
+        
+        # Remove <think>...</think> section using regex
+        clean_content = re.sub(r'<think>.*?</think>\s*', '', message_content, flags=re.DOTALL)
+        
+        # Extract search results for citations
+        search_results = response_data.get("search_results", [])
+        
+        # Extract usage information
+        usage = response_data.get("usage", {})
         
         return {
-            "report": response.choices[0].message.content,
-            "citations": response.choices[0].message.annotations if hasattr(response.choices[0].message, 'annotations') else [],
-            "finish_reason": response.choices[0].finish_reason
+            "report": clean_content.strip(),
+            "citations": search_results,
+            "usage": {
+                "prompt_tokens": usage.get("prompt_tokens", 0),
+                "completion_tokens": usage.get("completion_tokens", 0),
+                "total_tokens": usage.get("total_tokens", 0)
+            },
+            "finish_reason": response_data["choices"][0].get("finish_reason", "stop")
         }
         
     except Exception as e:
@@ -376,11 +404,12 @@ Use inline citations [1], [2], etc. for all sources. Be thorough but concise."""
         return {
             "report": f"⚠️ **AUDITOR ERROR:** Unable to perform fact-checking due to technical issues: {str(e)}\n\nPlease verify the information independently using official government sources.",
             "citations": [],
+            "usage": {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0},
             "finish_reason": "error"
         }
 
 def format_audit_with_citations(audit_content: str, search_results: List[Dict]) -> str:
-    """Convert Perplexity inline citation markers to clickable links"""
+    """Convert Perplexity search results to clickable citation links"""
     if not search_results:
         return audit_content
     
@@ -411,6 +440,7 @@ def format_audit_with_citations(audit_content: str, search_results: List[Dict]) 
         
     except Exception as e:
         print(f"Error formatting citations: {e}")
+        return audit_content
 
 def generate_legal_response(query: str, search_results: List[Dict[str, Any]], reasoning_effort: str = None) -> str:
     """Generate response using OpenAI with legal context"""
@@ -689,21 +719,22 @@ def handle_chat_input(prompt):
                     audit_result["citations"]
                 )
                 
-                # Add token usage information to the audit report
+                # Extract usage information
                 usage = audit_result.get("usage", {})
-                input_tokens = usage.get("prompt_tokens", 0)
-                output_tokens = usage.get("completion_tokens", 0)
+                prompt_tokens = usage.get("prompt_tokens", 0)
+                completion_tokens = usage.get("completion_tokens", 0)
                 total_tokens = usage.get("total_tokens", 0)
                 
-                token_info = f"""
+                # Add token usage information
+                if total_tokens > 0:
+                    token_info = f"""
 
 **Tokens Used:** {total_tokens:,}
 **Token Breakdown:**
-• Input: {input_tokens:,}
-• Output: {output_tokens:,}
+• Input: {prompt_tokens:,}
+• Output: {completion_tokens:,}
 """
-                
-                formatted_audit += token_info
+                    formatted_audit += token_info
                 
                 # Clear status and show results
                 audit_status.empty()
