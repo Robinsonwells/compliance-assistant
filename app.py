@@ -350,8 +350,7 @@ Use inline citations [1], [2], etc. for all sources. Be thorough but concise."""
                 "content": prompt
             }],
             web_search_options={},  # Enable web search
-            max_tokens=4000,
-            temperature=0.1
+            max_tokens=4000
         )
         
         return {
