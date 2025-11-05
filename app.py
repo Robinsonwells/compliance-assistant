@@ -229,6 +229,66 @@ def get_reasoning_effort(complexity_score: int) -> str:
     else:
         return "low"
 
+def classify_reasoning_effort_with_gpt4o_mini(query: str) -> str:
+    """Use GPT-4o-mini to classify reasoning effort required for the query"""
+    try:
+        # Import the classifier prompt
+        from system_prompts import GPT4O_MINI_CLASSIFIER_SYSTEM_PROMPT
+        
+        # Check for explicit user override phrases first
+        query_lower = query.lower()
+        
+        # High effort overrides
+        high_effort_phrases = [
+            "use high effort", "high reasoning", "detailed analysis", 
+            "thorough", "comprehensive analysis"
+        ]
+        if any(phrase in query_lower for phrase in high_effort_phrases):
+            return "high"
+        
+        # Low effort overrides  
+        low_effort_phrases = [
+            "use low effort", "low reasoning", "quick answer", 
+            "simple answer", "brief"
+        ]
+        if any(phrase in query_lower for phrase in low_effort_phrases):
+            return "low"
+        
+        # Medium effort overrides
+        medium_effort_phrases = [
+            "use medium effort", "medium reasoning"
+        ]
+        if any(phrase in query_lower for phrase in medium_effort_phrases):
+            return "medium"
+        
+        # No override detected, use GPT-4o-mini to classify
+        response = openai_client.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=[
+                {"role": "system", "content": GPT4O_MINI_CLASSIFIER_SYSTEM_PROMPT},
+                {"role": "user", "content": query}
+            ],
+            max_tokens=10,
+            temperature=0,
+            timeout=10
+        )
+        
+        # Parse and validate response
+        effort_level = response.choices[0].message.content.strip().lower()
+        
+        # Validate response is one of the expected values
+        if effort_level in ["low", "medium", "high"]:
+            return effort_level
+        else:
+            # Invalid response, default to medium
+            print(f"Invalid classifier response: {effort_level}, defaulting to medium")
+            return "medium"
+            
+    except Exception as e:
+        # Any error, default to medium (safe middle ground)
+        print(f"Error in GPT-4o-mini classifier: {e}, defaulting to medium")
+        return "medium"
+
 def calculate_estimated_cost(total_tokens: int, reasoning_effort: str) -> float:
     """Calculate estimated cost based on token usage and reasoning effort"""
     return total_tokens * COST_PER_TOKEN[reasoning_effort]
@@ -236,9 +296,11 @@ def calculate_estimated_cost(total_tokens: int, reasoning_effort: str) -> float:
 def generate_legal_response(query: str, search_results: List[Dict[str, Any]]) -> str:
     """Generate response using OpenAI with legal context"""
     try:
-        # Calculate complexity score and determine reasoning effort
+        # Use GPT-4o-mini to classify reasoning effort
+        reasoning_effort = classify_reasoning_effort_with_gpt4o_mini(query)
+        
+        # Still calculate complexity score for display purposes
         complexity_score, score_breakdown = calculate_complexity_score(query)
-        reasoning_effort = get_reasoning_effort(complexity_score)
         
         # Prepare context from search results
         context = ""
@@ -290,7 +352,8 @@ def generate_legal_response(query: str, search_results: List[Dict[str, Any]]) ->
 <details>
 <summary><strong>Reasoning Analysis</strong> (Click to expand)</summary>
 
-**Reasoning Effort:** {reasoning_effort.upper()} (Score: {complexity_score}/30)
+**Reasoning Effort:** {reasoning_effort.upper()} (Classified by GPT-4o-mini)
+**Complexity Score:** {complexity_score}/30 (for reference)
 
 **Tokens Used:** {total_tokens:,}
 **Token Breakdown:**

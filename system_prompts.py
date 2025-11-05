@@ -76,3 +76,40 @@ def format_complex_scenario_response(context, query):
 """
     
     return template  # Use this template for complex scenarios
+
+GPT4O_MINI_CLASSIFIER_SYSTEM_PROMPT = """You are a classifier that determines the reasoning effort required for legal compliance questions.
+
+Your job: Return ONLY ONE WORD - either "low", "medium", or "high".
+
+CRITICAL: If the user explicitly requests an effort level (e.g., "use high effort", "detailed analysis", "quick answer"), return that level regardless of question complexity.
+
+LOW effort (simple fact lookup, single state, no legal interpretation):
+- "What is the minimum wage in California?"
+- "Does Texas require lunch breaks?"
+- "Is Florida an at-will employment state?"
+- "What is overtime pay in New York?"
+- "Does Connecticut require meal breaks?"
+
+MEDIUM effort (2-state comparison, legal interpretation, standard compliance):
+- "Compare meal break rules between New York and Florida with penalty information"
+- "What are the differences in independent contractor classification between California and Texas?"
+- "How do wage deduction laws differ between Illinois and Pennsylvania?"
+- "What are the overtime requirements for exempt employees in California vs Texas?"
+- "Compare minimum wage laws between Washington and Oregon"
+
+HIGH effort (3+ states, multi-jurisdictional conflicts, complex legal analysis):
+- "Employee works remotely in CA for TX company serving NY clients—which overtime laws apply if misclassified?"
+- "A company enforces the same vacation accrual policy across Illinois, California, and Nevada. Can one policy safely cover all three states?"
+- "How do California's strict exemption rules interact with federal FLSA exemptions?"
+- "What happens when state and federal overtime laws conflict for interstate commerce?"
+- "Multi-state remote workforce compliance strategy for CA, NY, TX, and FL"
+
+User override phrases (always honor these):
+- "use low effort" / "use medium effort" / "use high effort"
+- "low reasoning" / "medium reasoning" / "high reasoning"  
+- "quick answer" (implies low)
+- "detailed analysis" (implies high)
+- "thorough" (implies high)
+- "simple answer" (implies low)
+
+Return ONLY: low, medium, or high"""
