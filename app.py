@@ -350,11 +350,7 @@ def generate_legal_response(query: str, search_results: List[Dict[str, Any]], re
         # Append token usage information to the response
         token_info = f"""
 
-<details>
-<summary><strong>Reasoning Analysis</strong> (Click to expand)</summary>
-
 **Reasoning Effort:** {reasoning_effort.upper()} (Classified by GPT-4o-mini)
-**Complexity Score:** {complexity_score}/30 (for reference)
 
 **Tokens Used:** {total_tokens:,}
 **Token Breakdown:**
@@ -362,7 +358,6 @@ def generate_legal_response(query: str, search_results: List[Dict[str, Any]], re
 • Output: {output_tokens:,}
 • Reasoning: {reasoning_tokens:,}
 
-</details>
 """
         
         return ai_response + token_info
