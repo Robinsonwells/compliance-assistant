@@ -293,6 +293,120 @@ def calculate_estimated_cost(total_tokens: int, reasoning_effort: str) -> float:
     """Calculate estimated cost based on token usage and reasoning effort"""
     return total_tokens * COST_PER_TOKEN[reasoning_effort]
 
+def independent_auditor(original_query: str, main_answer: str) -> Dict[str, Any]:
+    """Step 3: Independent fact-checker using web search"""
+    try:
+        prompt = f"""You are an independent legal fact-checker with web search access. Your job is to verify the accuracy of legal answers by searching current law.
+
+PRIORITIZE THESE OFFICIAL SOURCES:
+- State legislature websites (.gov domains)
+- Cornell Legal Information Institute (law.cornell.edu)
+- Federal regulations (ecfr.gov, regulations.gov)
+- State Department of Labor websites
+- Official case law databases
+- Government agency websites (DOL, EEOC, NLRB)
+
+IGNORE THESE SOURCES:
+- Blog posts and commercial legal advice websites
+- General legal services marketing sites
+- Non-authoritative sources
+- Wikipedia or user-generated content
+
+ORIGINAL QUESTION:
+{original_query}
+
+ANSWER TO VERIFY:
+{main_answer}
+
+YOUR TASK:
+1. Search for current versions of all statutes, regulations, and laws mentioned in the answer
+2. Verify all factual claims including penalty rates, dates, requirements, and dollar amounts
+3. Check for recent amendments or changes to cited laws
+4. Flag any outdated information, errors, or missing context
+5. Provide specific corrections with authoritative sources
+
+FOCUS ESPECIALLY ON:
+- Statutory penalty rates (these change frequently)
+- Amendment dates and current versions of laws
+- Dollar amounts and percentages
+- Recent case law or regulatory changes
+- Effective dates of legal requirements
+
+REPORT FORMAT:
+✅ **VERIFIED CLAIMS:** (List what information in the answer is correct and current)
+
+❌ **ERRORS/OUTDATED INFO:** (List what information is wrong, outdated, or missing, with corrections)
+
+⚠️ **ADDITIONAL CONTEXT:** (Relevant updates, caveats, or important context not mentioned)
+
+📊 **OVERALL ASSESSMENT:** (Rate accuracy as High/Medium/Low and provide recommendation)
+
+Use inline citations [1], [2], etc. for all sources. Be thorough but concise."""
+
+        response = openai_client.chat.completions.create(
+            model="gpt-4o-search-preview",  # Using the search-enabled model
+            messages=[{
+                "role": "user",
+                "content": prompt
+            }],
+            web_search_options={},  # Enable web search
+            max_tokens=4000,
+            temperature=0.1
+        )
+        
+        return {
+            "report": response.choices[0].message.content,
+            "citations": response.choices[0].message.annotations if hasattr(response.choices[0].message, 'annotations') else [],
+            "finish_reason": response.choices[0].finish_reason
+        }
+        
+    except Exception as e:
+        print(f"Error in independent auditor: {e}")
+        return {
+            "report": f"⚠️ **AUDITOR ERROR:** Unable to perform fact-checking due to technical issues: {str(e)}\n\nPlease verify the information independently using official government sources.",
+            "citations": [],
+            "finish_reason": "error"
+        }
+
+def format_audit_with_citations(audit_content: str, citations: List[Dict]) -> str:
+    """Convert inline citation markers to clickable links"""
+    if not citations:
+        return audit_content
+    
+    try:
+        output = audit_content
+        
+        # Sort citations by start_index in reverse to avoid index shifting
+        sorted_citations = sorted(citations, key=lambda x: x.get('url_citation', {}).get('start_index', 0), reverse=True)
+        
+        # Build citation links
+        citation_links = []
+        for i, citation in enumerate(sorted_citations, 1):
+            if citation.get('type') == 'url_citation' and 'url_citation' in citation:
+                url_cite = citation['url_citation']
+                title = url_cite.get('title', 'Source')
+                url = url_cite.get('url', '#')
+                
+                # Create HTML link
+                link = f'<a href="{url}" target="_blank" title="{title}" style="color: #0969da; text-decoration: none;">[{i}]</a>'
+                
+                # Replace citation marker in text
+                citation_marker = f"[{i}]"
+                output = output.replace(citation_marker, link)
+                
+                # Store for reference list
+                citation_links.append(f"[{i}] {title} - {url}")
+        
+        # Add reference list at the end
+        if citation_links:
+            output += "\n\n**Sources:**\n" + "\n".join(citation_links)
+        
+        return output
+        
+    except Exception as e:
+        print(f"Error formatting citations: {e}")
+        return audit_content + "\n\n*Note: Citation formatting error occurred*"
+
 def generate_legal_response(query: str, search_results: List[Dict[str, Any]], reasoning_effort: str = None) -> str:
     """Generate response using OpenAI with legal context"""
     try:
@@ -545,6 +659,51 @@ def handle_chat_input(prompt):
     
     # Add assistant response to chat history
     st.session_state.messages.append({"role": "assistant", "content": response})
+    
+    # Step 4: Independent Fact-Checking (separate message)
+    with st.chat_message("assistant"):
+        st.markdown("### 🕵️ Independent Fact-Check Report")
+        st.markdown("*Verifying information against current law using web search...*")
+        
+        # Create status placeholder for auditor
+        audit_status = st.empty()
+        
+        try:
+            with st.spinner("Fact-checking with web search..."):
+                audit_status.info("🌐 Searching current legal sources...")
+                
+                # Call independent auditor
+                audit_result = independent_auditor(prompt, response)
+                
+                audit_status.info("📋 Analyzing findings...")
+                time.sleep(0.5)
+                
+                # Format audit report with citations
+                formatted_audit = format_audit_with_citations(
+                    audit_result["report"], 
+                    audit_result["citations"]
+                )
+                
+                # Clear status and show results
+                audit_status.empty()
+                
+                # Display formatted audit report
+                st.markdown(formatted_audit, unsafe_allow_html=True)
+                
+                # Show audit metadata
+                if audit_result["citations"]:
+                    st.caption(f"✅ Verified against {len(audit_result['citations'])} authoritative sources")
+                else:
+                    st.caption("⚠️ No web sources found - manual verification recommended")
+        
+        except Exception as e:
+            audit_status.empty()
+            st.error(f"⚠️ **Fact-checking unavailable:** {str(e)}")
+            st.info("Please verify the information independently using official government sources.")
+    
+    # Add audit report to chat history as separate message
+    audit_content = f"### 🕵️ Independent Fact-Check Report\n\n{audit_result.get('report', 'Fact-checking unavailable')}"
+    st.session_state.messages.append({"role": "assistant", "content": audit_content})
 
 if __name__ == "__main__":
     main()
