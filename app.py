@@ -299,31 +299,50 @@ def calculate_estimated_cost(total_tokens: int, reasoning_effort: str) -> float:
     return total_tokens * COST_PER_TOKEN[reasoning_effort]
 
 def call_perplexity_auditor(original_query: str, main_answer: str) -> Dict[str, Any]:
-    """Step 3: Independent fact-checker using Perplexity's sonar-reasoning-pro API directly"""
+    """Step 3: Selective fact-checker - only flags material issues and adds context"""
     try:
         if not PERPLEXITY_API_KEY:
             return {
-                "report": "⚠️ **AUDITOR ERROR:** Perplexity API key not configured.",
+                "report": "✅ **VERIFICATION SKIPPED:** API key not configured.",
                 "citations": [],
                 "usage": {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0},
                 "finish_reason": "error"
             }
-        
-        prompt = f"""You are an independent legal fact-checker with web search access. Your job is to verify the accuracy of legal answers by searching current law.
 
-PRIORITIZE THESE OFFICIAL SOURCES:
-- State legislature websites (.gov domains)
-- Cornell Legal Information Institute (law.cornell.edu)
-- Federal regulations (ecfr.gov, regulations.gov)
-- State Department of Labor websites
-- Official case law databases
-- Government agency websites (DOL, EEOC, NLRB)
+        prompt = f"""You are an independent legal auditor with web search access. Your job is NOT to verify every claim, but rather to catch material issues and add important context.
 
-IGNORE THESE SOURCES:
-- Blog posts and commercial legal advice websites
-- General legal services marketing sites
+ONLY flag issues if you find:
+1. MORE RECENT, CONTRADICTORY information (not just missing details)
+2. MISSING CONTEXT or important legal nuance that affects interpretation
+3. UPCOMING LAWS or recent legislative changes relevant to the answer
+4. OUTDATED INFORMATION where laws have been substantively changed
+
+DO NOT flag:
+- Lack of detail in summaries
+- Missing citations (if the law stated is correct)
+- Pedantic formatting issues
+- Hypothetical "what if" scenarios
+- Laws that "could" change or might be proposed
+
+IMPORTANT CONTEXT:
+Many citations in the knowledge base are from when laws were established, not their last update.
+This is normal and acceptable. Only flag if you find a MORE RECENT source that contradicts the core claim.
+
+PRIORITIZE THESE OFFICIAL SOURCES FOR CURRENT INFORMATION:
+- State legislature websites (.gov domains) - most current
+- Cornell Legal Information Institute (law.cornell.edu) - authoritative summaries
+- Federal regulations (ecfr.gov, regulations.gov) - official versions
+- State Department of Labor websites - current enforcement info
+- Government agency websites (DOL, EEOC, NLRB) - interpretations
+- Official case law databases - recent rulings
+
+IGNORE (and do not cite):
+- Blog posts about legal topics
+- Commercial legal advice websites
+- Legal services marketing content
 - Non-authoritative sources
 - Wikipedia or user-generated content
+- Secondary sources that aren't citing to primary law
 
 ORIGINAL QUESTION:
 {original_query}
@@ -331,34 +350,66 @@ ORIGINAL QUESTION:
 ANSWER TO VERIFY:
 {main_answer}
 
-YOUR TASK:
-1. Search for current versions of all statutes, regulations, and laws mentioned in the answer
-2. Verify all factual claims including penalty rates, dates, requirements, and dollar amounts
-3. Check for recent amendments or changes to cited laws
-4. Flag any outdated information, errors, or missing context
-5. Provide specific corrections with authoritative sources
+YOUR TASK - FOCUS ONLY ON MATERIAL ISSUES:
 
-FOCUS ESPECIALLY ON:
-- Statutory penalty rates (these change frequently)
-- Amendment dates and current versions of laws
-- Dollar amounts and percentages
-- Recent case law or regulatory changes
-- Effective dates of legal requirements
+1. SEARCH FOR CONTRADICTIONS
+   - If the answer states "law X applies," search for current status of law X
+   - If the answer cites a specific statute, search for RECENT amendments
+   - If the answer gives a dollar amount, verify it's current as of 2025
+   - If the answer states a requirement, confirm it hasn't been repealed
+
+2. SEARCH FOR MISSING CONTEXT
+   - Are there recent state law changes that provide important nuance?
+   - Is there a recent federal law that interacts with state law differently?
+   - Are there upcoming bills or pending amendments (within next 12 months)?
+   - Are there enforcement priorities or recent guidance from DOL/EEOC/NLRB?
+
+3. SEARCH FOR STATUTE UPDATES
+   - Extract each statute cited: (e.g., "Cal. Lab. Code § 510")
+   - Search: "[State] [statute code] [statute number] current"
+   - Check: Last amendment date, current version, recent changes
+   - Only flag if: More recent version contradicts the answer
+
+CRITICAL GUIDELINES:
+- Do NOT criticize summaries for lacking detail
+- Do NOT flag citations based on their age (old citations can be correct)
+- Do NOT flag laws based on what they "could" do or "might" do
+- Do NOT introduce irrelevant law (e.g., federal law if query is state-specific)
+- Do NOT assume information is wrong just because you can't verify it
+- Do NOT require citations for every fact (as long as it's stated correctly)
 
 REPORT FORMAT:
-✅ **VERIFIED CLAIMS:** (List what information in the answer is correct and current)
 
-❌ **ERRORS/OUTDATED INFO:** (List what information is wrong, outdated, or missing, with corrections)
+🚨 **MATERIAL ISSUES FOUND** (only if actual contradictions or critical context)
+- [Issue]: [What the answer stated] vs [What current law shows]
+- [Citation to current source]
+- [Why this matters to the user]
 
-⚠️ **ADDITIONAL CONTEXT:** (Relevant updates, caveats, or important context not mentioned)
+OR if no material issues:
 
-📊 **OVERALL ASSESSMENT:** (Rate accuracy as High/Medium/Low and provide recommendation)
+✅ **VERIFICATION COMPLETE**
+- Core claims verified against current sources
+- No contradictions found between answer and current law
+- Any updates or context worth noting: [list if relevant]
 
-Use inline citations [1], [2], etc. for all sources. Be thorough but concise."""
+⚠️ **ADDED CONTEXT** (only if materially important)
+- [Context]: [Why user should know this]
+- [Relevant source or upcoming change]
+
+📊 **SUMMARY**
+- Accuracy: High/Medium/Low (based on material issues only)
+- Main message is [correct/needs clarification]: [brief statement]
+- Recommend: [specific action, if any]
+
+STRICT RULE:
+If you find NO material contradictions, NO missing critical context, NO upcoming changes that affect the answer:
+REPORT: ✅ VERIFICATION COMPLETE
+
+Don't add lengthy analysis if there are no issues to report. Brevity is good. Don't pontificate or speculate."""
 
         # Make request to Perplexity API
         url = "https://api.perplexity.ai/chat/completions"
-        
+
         payload = {
             "model": "sonar-reasoning-pro",
             "messages": [
@@ -369,10 +420,9 @@ Use inline citations [1], [2], etc. for all sources. Be thorough but concise."""
                 "search_domain_filter": [
                     "*.gov",  # Government sites
                     "law.cornell.edu",  # Cornell Law
-                    "dol.gov",  # Department of Labor
-                    "eeoc.gov"  # EEOC
+                    "*.edu"  # Educational institutions
                 ],
-                "max_search_results": 10
+                "max_search_results": 8  # Reduced from 10 for efficiency
             }
         }
         
