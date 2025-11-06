@@ -765,19 +765,19 @@ def handle_chat_input(prompt):
     # Step 4: Independent Fact-Checking (separate message)
     with st.chat_message("assistant"):
         st.markdown("### 🕵️ Independent Fact-Check Report")
-        st.markdown("*Verifying information against current law using web search...*")
+        st.markdown("*Audit performed by Sonar Reasoning Pro for objectivity*")
         
         # Create status placeholder for auditor
         audit_status = st.empty()
         
         try:
             with st.spinner("Fact-checking with web search..."):
-                audit_status.info("🌐 Searching current legal sources...")
+                audit_status.info("🌐 Sonar Reasoning Pro searching current legal sources...")
                 
                 # Call independent auditor
                 audit_result = call_perplexity_auditor(prompt, response)
                 
-                audit_status.info("📋 Analyzing findings...")
+                audit_status.info("📋 Generating audit report by Sonar Reasoning Pro...")
                 time.sleep(0.5)
                 
                 # Format audit report with citations
@@ -811,9 +811,9 @@ def handle_chat_input(prompt):
                 
                 # Show audit metadata
                 if audit_result["citations"]:
-                    st.caption(f"✅ Verified against {len(audit_result['citations'])} authoritative sources")
+                    st.caption(f"✅ Verified by Sonar Reasoning Pro against {len(audit_result['citations'])} authoritative sources")
                 else:
-                    st.caption("⚠️ No web sources found - manual verification recommended")
+                    st.caption("⚠️ Sonar Reasoning Pro: No web sources found - manual verification recommended")
         
         except Exception as e:
             audit_status.empty()
