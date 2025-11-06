@@ -144,17 +144,20 @@ def format_complex_scenario_response(context, query):
 
 GPT4O_MINI_CLASSIFIER_SYSTEM_PROMPT = """You are a classifier that determines the reasoning effort required for legal compliance questions.
 
-Your job: Return ONLY ONE WORD - either "low", "medium", or "high".
+Your job: Return ONLY ONE WORD - either "medium" or "high".
 
-CRITICAL: If the user explicitly requests an effort level (e.g., "use high effort", "detailed analysis", "quick answer"), return that level regardless of question complexity.
+IMPORTANT: Low effort is NO LONGER an option. All queries require at least medium effort.
 
-LOW effort (simple fact lookup, single state, no legal interpretation):
+CRITICAL: If the user explicitly requests an effort level, map it as follows:
+- "low effort", "quick answer", "simple answer", "brief" → return "medium"
+- "medium effort" → return "medium"
+- "high effort", "detailed analysis", "thorough", "comprehensive analysis" → return "high"
+
+MEDIUM effort (single state, 2-state comparison, standard compliance, legal interpretation):
 - "What is the minimum wage in California?"
 - "Does Texas require employers to provide lunch breaks?"
 - "Is Florida an at-will employment state?"
 - "What is overtime pay in New York?"
-
-MEDIUM effort (2-state comparison, legal interpretation, standard compliance):
 - "What is the difference between overtime requirements in California vs Texas?"
 - "Compare meal break requirements between New York and Florida."
 - "How do non-compete enforcement rules differ in California versus Texas?"
@@ -173,11 +176,8 @@ HIGH effort (3+ states, multi-jurisdictional conflicts, complex legal analysis):
 - "A company enforces the same vacation accrual policy across Illinois (earned wages), California (earned wages), and Nevada (different rules). Can one policy safely cover all three states or must policies be individualized?"
 
 User override phrases (always honor these):
-- "use low effort" / "use medium effort" / "use high effort"
-- "low reasoning" / "medium reasoning" / "high reasoning"  
-- "quick answer" (implies low)
-- "detailed analysis" (implies high)
-- "thorough" (implies high)
-- "simple answer" (implies low)
+- "use low effort" / "quick answer" / "simple answer" / "brief" → return "medium"
+- "use medium effort" / "medium reasoning" → return "medium"
+- "use high effort" / "high reasoning" / "detailed analysis" / "thorough" / "comprehensive analysis" → return "high"
 
-Return ONLY: low, medium, or high"""
+Return ONLY: medium or high"""

@@ -233,12 +233,11 @@ def calculate_complexity_score(query: str) -> tuple[int, dict]:
 
 def get_reasoning_effort(complexity_score: int) -> str:
     """Map complexity score to reasoning effort level"""
+    # Low is no longer an option, minimum is medium
     if complexity_score >= 23:
         return "high"
-    elif complexity_score >= 15:
-        return "medium"
     else:
-        return "low"
+        return "medium"
 
 def classify_reasoning_effort_with_gpt4o_mini(query: str) -> str:
     """Use GPT-4o-mini to classify reasoning effort required for the query"""
@@ -257,13 +256,13 @@ def classify_reasoning_effort_with_gpt4o_mini(query: str) -> str:
         if any(phrase in query_lower for phrase in high_effort_phrases):
             return "high"
         
-        # Low effort overrides  
+        # Low effort overrides changed to medium
         low_effort_phrases = [
-            "use low effort", "low reasoning", "quick answer", 
+            "use low effort", "low reasoning", "quick answer",
             "simple answer", "brief"
         ]
         if any(phrase in query_lower for phrase in low_effort_phrases):
-            return "low"
+            return "medium"
         
         # Medium effort overrides
         medium_effort_phrases = [
@@ -288,7 +287,10 @@ def classify_reasoning_effort_with_gpt4o_mini(query: str) -> str:
         effort_level = response.choices[0].message.content.strip().lower()
         
         # Validate response is one of the expected values
-        if effort_level in ["low", "medium", "high"]:
+        # Map low to medium since low is no longer an option
+        if effort_level == "low":
+            return "medium"
+        elif effort_level in ["medium", "high"]:
             return effort_level
         else:
             # Invalid response, default to medium
@@ -728,7 +730,7 @@ def handle_chat_input(prompt):
             reasoning_effort = classify_reasoning_effort_with_gpt4o_mini(prompt)
             
             # Show determined effort level
-            effort_emoji = {"low": "⚡", "medium": "🧠", "high": "🔬"}
+            effort_emoji = {"medium": "🧠", "high": "🔬"}
             status_placeholder.success(f"{effort_emoji.get(reasoning_effort, '🧠')} Reasoning effort: **{reasoning_effort.upper()}**")
             
             # Brief pause to let user see the effort level
@@ -748,9 +750,7 @@ def handle_chat_input(prompt):
             time.sleep(0.5)
             
             # Step 3: Generate response with dynamic status based on effort
-            if reasoning_effort == "low":
-                status_placeholder.info("⚡ Generating quick response...")
-            elif reasoning_effort == "medium":
+            if reasoning_effort == "medium":
                 status_placeholder.info("🧠 Analyzing with medium reasoning effort...")
             else:
                 status_placeholder.info("🔬 Performing deep analysis with high reasoning effort... This may take 3-10 minutes.")
