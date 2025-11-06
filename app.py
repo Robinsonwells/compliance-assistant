@@ -298,97 +298,9 @@ def calculate_estimated_cost(total_tokens: int, reasoning_effort: str) -> float:
     """Calculate estimated cost based on token usage and reasoning effort"""
     return total_tokens * COST_PER_TOKEN[reasoning_effort]
 
-def extract_key_topics(text: str) -> List[str]:
-    """Extract key topics from query for relevance validation"""
-    text_lower = text.lower()
-
-    # Extract state names
-    states_found = []
-    for state in US_STATES:
-        if state in text_lower:
-            states_found.append(state)
-
-    # Extract legal domain keywords
-    legal_keywords = [
-        'overtime', 'wage', 'salary', 'minimum wage', 'employment', 'labor',
-        'break', 'meal break', 'rest break', 'leave', 'sick leave', 'vacation',
-        'termination', 'firing', 'layoff', 'discrimination', 'harassment',
-        'workers compensation', 'unemployment', 'classification', 'contractor',
-        'exempt', 'non-exempt', 'flsa', 'ada', 'fmla', 'title vii',
-        'pay', 'payroll', 'benefits', 'overtime pay', 'double time',
-        'holiday', 'shift', 'remote work', 'telecommute', 'workweek',
-        'hours', 'time', 'schedule', 'penalty', 'compliance'
-    ]
-
-    keywords_found = []
-    for keyword in legal_keywords:
-        if keyword in text_lower:
-            keywords_found.append(keyword)
-
-    # Combine and return unique topics
-    all_topics = states_found + keywords_found
-    return list(set(all_topics))[:15]  # Limit to top 15 topics
-
-def validate_citation_relevance(query_keywords: List[str], citations: List[Dict]) -> Dict[str, Any]:
-    """Validate that citations are topically relevant to the query"""
-    if not citations or not query_keywords:
-        return {
-            "status": "UNKNOWN",
-            "match_score": 0.0,
-            "matched_keywords": [],
-            "citation_topics": []
-        }
-
-    # Extract all text from citations
-    citation_text = ""
-    citation_topics = []
-
-    for cite in citations:
-        title = cite.get('title', '').lower()
-        url = cite.get('url', '').lower()
-        snippet = cite.get('snippet', '').lower()
-
-        citation_text += f" {title} {url} {snippet}"
-
-        # Extract topics from title
-        title_words = [w for w in title.split() if len(w) > 3]
-        citation_topics.extend(title_words[:5])  # Top 5 words from each title
-
-    # Check how many query keywords appear in citations
-    matched_keywords = []
-    for keyword in query_keywords:
-        if keyword.lower() in citation_text:
-            matched_keywords.append(keyword)
-
-    # Calculate match score
-    match_score = len(matched_keywords) / len(query_keywords) if query_keywords else 0.0
-
-    # Determine status
-    if match_score >= 0.3:
-        status = "GOOD_MATCH"
-    elif match_score >= 0.1:
-        status = "WEAK_MATCH"
-    else:
-        status = "CRITICAL_MISMATCH"
-
-    return {
-        "status": status,
-        "match_score": match_score,
-        "matched_keywords": matched_keywords,
-        "citation_topics": list(set(citation_topics))
-    }
-
 def call_perplexity_auditor(original_query: str, main_answer: str) -> Dict[str, Any]:
     """Step 3: Selective fact-checker - only flags material issues and adds context"""
     try:
-        # DIAGNOSTIC: Log inputs
-        print("\n" + "="*80)
-        print("🔍 AUDIT FUNCTION CALLED")
-        print("="*80)
-        print(f"📋 Original Query (first 200 chars): {original_query[:200]}...")
-        print(f"📝 Main Answer (first 200 chars): {main_answer[:200]}...")
-        print("="*80 + "\n")
-
         if not PERPLEXITY_API_KEY:
             return {
                 "report": "✅ **VERIFICATION SKIPPED:** API key not configured.",
@@ -396,10 +308,6 @@ def call_perplexity_auditor(original_query: str, main_answer: str) -> Dict[str, 
                 "usage": {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0},
                 "finish_reason": "error"
             }
-
-        # Extract key topics from original query for validation
-        query_keywords = extract_key_topics(original_query)
-        print(f"🔑 Key topics extracted from query: {query_keywords}")
 
         prompt = f"""You are an independent legal auditor with web search access. Your job is NOT to verify every claim, but rather to catch material issues and add important context.
 
@@ -499,14 +407,6 @@ REPORT: ✅ VERIFICATION COMPLETE
 
 Don't add lengthy analysis if there are no issues to report. Brevity is good. Don't pontificate or speculate."""
 
-        # DIAGNOSTIC: Log the prompt being sent
-        print("\n" + "="*80)
-        print("📤 SENDING TO PERPLEXITY API")
-        print("="*80)
-        print(f"Prompt length: {len(prompt)} characters")
-        print(f"\nFirst 500 chars of prompt:\n{prompt[:500]}...")
-        print("="*80 + "\n")
-
         # Make request to Perplexity API
         url = "https://api.perplexity.ai/chat/completions"
 
@@ -531,23 +431,10 @@ Don't add lengthy analysis if there are no issues to report. Brevity is good. Do
             "Content-Type": "application/json"
         }
         
-        # DIAGNOSTIC: Log request details
-        print(f"🌐 Making request to: {url}")
-        print(f"📦 Model: {payload['model']}")
-        print(f"🔍 Search filters: recency={payload['web_search_options']['search_recency_filter']}, domains={payload['web_search_options']['search_domain_filter']}")
-
         response = requests.post(url, json=payload, headers=headers, timeout=120)
         response.raise_for_status()  # Raise an exception for bad status codes
-
+        
         response_data = response.json()
-
-        # DIAGNOSTIC: Log response details
-        print("\n" + "="*80)
-        print("📥 RECEIVED FROM PERPLEXITY API")
-        print("="*80)
-        print(f"Response status: {response.status_code}")
-        print(f"Search results count: {len(response_data.get('search_results', []))}")
-        print("="*80 + "\n")
         
         # Extract the message content
         message_content = response_data["choices"][0]["message"]["content"]
@@ -558,62 +445,17 @@ Don't add lengthy analysis if there are no issues to report. Brevity is good. Do
         # Extract citations from search_results
         citations = []
         search_results = response_data.get("search_results", [])
-
-        # DIAGNOSTIC: Log search results details
-        print("📚 SEARCH RESULTS RECEIVED:")
-        for i, result in enumerate(search_results, 1):
-            title = result.get("title", "Source")
-            url = result.get("url", "#")
-            snippet = result.get("snippet", "")
-            print(f"  [{i}] {title}")
-            print(f"      URL: {url}")
-            print(f"      Snippet (first 100 chars): {snippet[:100]}...")
-            print()
-
+        for result in search_results:
             citations.append({
-                "title": title,
-                "url": url,
-                "snippet": snippet
+                "title": result.get("title", "Source"),
+                "url": result.get("url", "#"),
+                "snippet": result.get("snippet", "")  # Include snippet for potential future use
             })
-
-        # CRITICAL: Validate citation relevance
-        relevance_warning = None
-        if citations:
-            relevance_check = validate_citation_relevance(query_keywords, citations)
-            print(f"\n⚠️  RELEVANCE CHECK: {relevance_check['status']}")
-            print(f"    Match score: {relevance_check['match_score']:.2f}")
-            print(f"    Matched keywords: {relevance_check['matched_keywords']}")
-            print(f"    Citation topics: {relevance_check['citation_topics'][:5]}")
-
-            if relevance_check['status'] in ['CRITICAL_MISMATCH', 'WEAK_MATCH']:
-                print("\n🚨 CRITICAL: Citations are off-topic!")
-                print(f"    Expected topics: {query_keywords}")
-                print(f"    Received topics: {relevance_check['citation_topics'][:10]}")
-                print("    This indicates a search failure or API error.\n")
-
-                # Store warning for UI display
-                relevance_warning = {
-                    "status": relevance_check['status'],
-                    "match_score": relevance_check['match_score'],
-                    "query_keywords": query_keywords,
-                    "citation_topics": relevance_check['citation_topics']
-                }
-
+        
         # Extract usage information
         usage = response_data.get("usage", {})
-
-        # DIAGNOSTIC: Log final output
-        print("\n" + "="*80)
-        print("✅ AUDIT COMPLETE")
-        print("="*80)
-        print(f"Report length: {len(clean_content)} characters")
-        print(f"Citations count: {len(citations)}")
-        print(f"Tokens used: {usage.get('total_tokens', 0)}")
-        if relevance_warning:
-            print(f"⚠️  RELEVANCE WARNING: {relevance_warning['status']}")
-        print("="*80 + "\n")
-
-        result = {
+        
+        return {
             "report": clean_content.strip(),
             "citations": citations,
             "usage": {
@@ -623,23 +465,9 @@ Don't add lengthy analysis if there are no issues to report. Brevity is good. Do
             },
             "finish_reason": response_data["choices"][0].get("finish_reason", "stop")
         }
-
-        # Add relevance warning if present
-        if relevance_warning:
-            result["relevance_warning"] = relevance_warning
-
-        return result
         
     except Exception as e:
-        print("\n" + "="*80)
-        print("❌ AUDITOR ERROR")
-        print("="*80)
-        print(f"Error type: {type(e).__name__}")
-        print(f"Error message: {str(e)}")
-        import traceback
-        print(f"\nFull traceback:\n{traceback.format_exc()}")
-        print("="*80 + "\n")
-
+        print(f"Error in independent auditor: {e}")
         return {
             "report": f"⚠️ **AUDITOR ERROR:** {str(e)}\n\nPlease verify the information independently using official government sources.",
             "citations": [],
@@ -948,37 +776,15 @@ def handle_chat_input(prompt):
                 
                 # Call independent auditor
                 audit_result = call_perplexity_auditor(prompt, response)
-
+                
                 audit_status.info("📋 Generating audit report by Sonar Reasoning Pro...")
                 time.sleep(0.5)
-
-                # Check if audit result contains relevance warning
-                relevance_warning = audit_result.get("relevance_warning", None)
-
+                
                 # Format audit report with citations
                 formatted_audit = format_audit_with_citations(
-                    audit_result["report"],
+                    audit_result["report"], 
                     audit_result["citations"]
                 )
-
-                # Add relevance warning if present
-                if relevance_warning:
-                    warning_box = f"""
-⚠️ **CITATION QUALITY WARNING**
-
-The fact-checker returned sources that may not be relevant to your question:
-- **Expected topics**: {', '.join(relevance_warning['query_keywords'][:8])}
-- **Received topics**: {', '.join(relevance_warning['citation_topics'][:8])}
-- **Match score**: {relevance_warning['match_score']:.0%}
-
-This suggests the web search may have failed to find appropriate sources. The audit report below should be reviewed critically.
-
-**Recommendation**: Verify the information using official government sources directly.
-
----
-
-"""
-                    formatted_audit = warning_box + formatted_audit
                 
                 # Extract usage information
                 usage = audit_result.get("usage", {})
