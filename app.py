@@ -59,11 +59,17 @@ try:
     )
     
     # Initialize embedding model with proper device handling
-    device = 'cpu'  # Force CPU usage to avoid meta tensor issues
+    # Use GPU if available, fallback to CPU
+    try:
+        device = 'cuda' if torch.cuda.is_available() else 'cpu'
+    except:
+        device = 'cpu'
+
     embedding_model = SentenceTransformer('all-MiniLM-L6-v2', device=device)
-    
-    # Ensure model is properly loaded on CPU
     embedding_model = embedding_model.to(device)
+
+    # Log which device is being used
+    print(f"Using device: {device} for embeddings")
     
     # Initialize OpenAI client with extended timeout for GPT-5
     openai_client = OpenAI(
@@ -95,7 +101,7 @@ def load_css():
 
 load_css()
 
-def search_legal_database(query: str, limit: int = 5) -> List[Dict[str, Any]]:
+def search_legal_database(query: str, limit: int = 20) -> List[Dict[str, Any]]:
     """Search the legal database using semantic similarity"""
     try:
         # Generate query embedding
@@ -311,6 +317,10 @@ def call_perplexity_auditor(original_query: str, main_answer: str) -> Dict[str, 
 
         prompt = f"""You are an independent legal auditor with web search access. Your job is NOT to verify every claim, but rather to catch material issues and add important context.
 
+CRITICAL: SEARCH ONLY FOR LABOR AND EMPLOYMENT LAW
+This query is about: {original_query}
+Only search for and cite sources about labor law, employment regulations, wage/hour law, worker classification, or workplace compliance. DO NOT search for or cite property law, tax law, criminal law, or any non-employment topics.
+
 ONLY flag issues if you find:
 1. MORE RECENT, CONTRADICTORY information (not just missing details)
 2. MISSING CONTEXT or important legal nuance that affects interpretation
@@ -416,13 +426,7 @@ Don't add lengthy analysis if there are no issues to report. Brevity is good. Do
                 {"role": "user", "content": prompt}
             ],
             "web_search_options": {
-                "search_recency_filter": "month",  # Focus on recent legal changes
-                "search_domain_filter": [
-                    "*.gov",  # Government sites
-                    "law.cornell.edu",  # Cornell Law
-                    "*.edu"  # Educational institutions
-                ],
-                "max_search_results": 8  # Reduced from 10 for efficiency
+                "max_search_results": 15
             }
         }
         
@@ -431,7 +435,7 @@ Don't add lengthy analysis if there are no issues to report. Brevity is good. Do
             "Content-Type": "application/json"
         }
         
-        response = requests.post(url, json=payload, headers=headers, timeout=120)
+        response = requests.post(url, json=payload, headers=headers, timeout=300)
         response.raise_for_status()  # Raise an exception for bad status codes
         
         response_data = response.json()
