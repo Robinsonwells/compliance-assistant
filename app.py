@@ -106,7 +106,6 @@ def load_css():
 load_css()
 
 def search_legal_database(query: str, limit: int = 20) -> List[Dict[str, Any]]:
-def search_legal_database(query: str, limit: int = 50) -> List[Dict[str, Any]]:
     """Search the legal database using semantic similarity"""
     try:
         # Generate query embedding
@@ -116,7 +115,7 @@ def search_legal_database(query: str, limit: int = 50) -> List[Dict[str, Any]]:
         search_results = qdrant_client.search(
             collection_name="legal_regulations",
             query_vector=query_embedding,
-            limit=limit,
+            limit=50,
             with_payload=True
         )
         
