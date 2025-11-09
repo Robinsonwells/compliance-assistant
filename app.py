@@ -327,21 +327,12 @@ CRITICAL: SEARCH ONLY FOR LABOR AND EMPLOYMENT LAW
 This query is about: {original_query}
 Only search for and cite sources about labor law, employment regulations, wage/hour law, worker classification, or workplace compliance. DO NOT search for or cite property law, tax law, criminal law, or any non-employment topics.
 
-ONLY flag issues if you find:
 1. MORE RECENT, CONTRADICTORY information (not just missing details)
-2. MISSING CONTEXT or important legal nuance that affects interpretation
-3. UPCOMING LAWS or recent legislative changes relevant to the answer
-4. OUTDATED INFORMATION where laws have been substantively changed
 
 DO NOT flag:
-- Lack of detail in summaries
-- Missing citations (if the law stated is correct)
-- Pedantic formatting issues
 - Hypothetical "what if" scenarios
-- Laws that "could" change or might be proposed
 
 IMPORTANT CONTEXT:
-Many citations in the knowledge base are from when laws were established, not their last update.
 This is normal and acceptable. Only flag if you find a MORE RECENT source that contradicts the core claim.
 
 PRIORITIZE THESE OFFICIAL SOURCES FOR CURRENT INFORMATION:
@@ -349,11 +340,7 @@ PRIORITIZE THESE OFFICIAL SOURCES FOR CURRENT INFORMATION:
 - Cornell Legal Information Institute (law.cornell.edu) - authoritative summaries
 - Federal regulations (ecfr.gov, regulations.gov) - official versions
 - State Department of Labor websites - current enforcement info
-- Government agency websites (DOL, EEOC, NLRB) - interpretations
 - Official case law databases - recent rulings
-
-IGNORE (and do not cite):
-- Blog posts about legal topics
 - Commercial legal advice websites
 - Legal services marketing content
 - Non-authoritative sources
@@ -388,37 +375,19 @@ YOUR TASK - FOCUS ONLY ON MATERIAL ISSUES:
 
 CRITICAL GUIDELINES:
 - Do NOT criticize summaries for lacking detail
-- Do NOT flag citations based on their age (old citations can be correct)
-- Do NOT flag laws based on what they "could" do or "might" do
 - Do NOT introduce irrelevant law (e.g., federal law if query is state-specific)
 - Do NOT assume information is wrong just because you can't verify it
 - Do NOT require citations for every fact (as long as it's stated correctly)
-
-REPORT FORMAT:
-
 🚨 **MATERIAL ISSUES FOUND** (only if actual contradictions or critical context)
 - [Issue]: [What the answer stated] vs [What current law shows]
-- [Citation to current source]
-- [Why this matters to the user]
-
 OR if no material issues:
 
 ✅ **VERIFICATION COMPLETE**
 - Core claims verified against current sources
-- No contradictions found between answer and current law
-- Any updates or context worth noting: [list if relevant]
-
 ⚠️ **ADDED CONTEXT** (only if materially important)
 - [Context]: [Why user should know this]
-- [Relevant source or upcoming change]
 
-📊 **SUMMARY**
-- Accuracy: High/Medium/Low (based on material issues only)
-- Main message is [correct/needs clarification]: [brief statement]
 - Recommend: [specific action, if any]
-
-STRICT RULE:
-If you find NO material contradictions, NO missing critical context, NO upcoming changes that affect the answer:
 REPORT: ✅ VERIFICATION COMPLETE
 
 Don't add lengthy analysis if there are no issues to report. Brevity is good. Don't pontificate or speculate."""
