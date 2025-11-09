@@ -13,3 +13,5 @@ python-docx
 torch==2.3.1
 sentence-transformers>=2.2.0
 requests>=2.31.0
+supabase>=2.3.0
+pytz

@@ -44,6 +44,7 @@ COST_PER_TOKEN = {
 # Import custom modules
 from user_management import UserManager
 from system_prompts import LEGAL_COMPLIANCE_SYSTEM_PROMPT
+from chat_logger import ChatLogger
 
 # Initialize components
 try:
@@ -79,6 +80,9 @@ try:
     
     # Initialize user manager
     user_manager = UserManager()
+    
+    # Initialize chat logger
+    chat_logger = ChatLogger()
     
 except Exception as e:
     st.error(f"Failed to initialize components: {e}")
@@ -582,17 +586,17 @@ def generate_legal_response(query: str, search_results: List[Dict[str, Any]], re
 
 """
         
-        return ai_response + token_info
+        return ai_response, total_tokens, estimated_cost
         
     except Exception as e:
         error_msg = str(e).lower()
         print(f"Error generating response: {e}")
         
         if "timeout" in error_msg:
-            return "The query is taking longer than expected to process. Please try simplifying your question or try again later."
+            return "The query is taking longer than expected to process. Please try simplifying your question or try again later.", 0, 0.0
         else:
             st.error(f"Error generating response: {e}")
-            return "I apologize, but I encountered an error while generating a response. Please try again."
+            return "I apologize, but I encountered an error while generating a response. Please try again.", 0, 0.0
 
 # Authentication functions
 def check_authentication():
@@ -712,6 +716,10 @@ def show_legal_assistant_content():
 
 def handle_chat_input(prompt):
     """Handle chat input and generate response"""
+    # Ensure session_id exists
+    if 'session_id' not in st.session_state:
+        st.session_state.session_id = str(uuid.uuid4())
+    
     # Add user message to chat history
     st.session_state.messages.append({"role": "user", "content": prompt})
     
@@ -755,16 +763,19 @@ def handle_chat_input(prompt):
             else:
                 status_placeholder.info("🔬 Performing deep analysis with high reasoning effort... This may take 3-10 minutes.")
             
-            response = generate_legal_response(prompt, search_results, reasoning_effort)
+            ai_response_text, total_tokens, estimated_cost = generate_legal_response(prompt, search_results, reasoning_effort)
             
             # Clear status placeholder before showing final response
             status_placeholder.empty()
             
             # Display response
-            st.markdown(response)
+            st.markdown(ai_response_text)
+            
+            # Display token info in a clean format
+            st.caption(f"🔢 Tokens: {total_tokens:,} | 💰 Cost: ${estimated_cost:.4f} | 🧠 Effort: {reasoning_effort.upper()}")
     
     # Add assistant response to chat history
-    st.session_state.messages.append({"role": "assistant", "content": response})
+    st.session_state.messages.append({"role": "assistant", "content": ai_response_text})
     
     # Step 4: Independent Fact-Checking (separate message)
     with st.chat_message("assistant"):
@@ -779,7 +790,7 @@ def handle_chat_input(prompt):
                 audit_status.info("🌐 Sonar Reasoning Pro searching current legal sources...")
                 
                 # Call independent auditor
-                audit_result = call_perplexity_auditor(prompt, response)
+                audit_result = call_perplexity_auditor(prompt, ai_response_text)
                 
                 audit_status.info("📋 Generating audit report by Sonar Reasoning Pro...")
                 time.sleep(0.5)
@@ -809,6 +820,22 @@ def handle_chat_input(prompt):
                 
                 # Clear status and show results
                 audit_status.empty()
+                
+                # Log the chat interaction with error handling
+                try:
+                    chat_logger.log_chat(
+                        access_code=st.session_state.access_code,
+                        user_query=prompt,
+                        gpt5_response=ai_response_text,
+                        perplexity_response=audit_result["report"],
+                        session_id=st.session_state.session_id,
+                        reasoning_effort=reasoning_effort,
+                        tokens_used=total_tokens,
+                        cost_estimate=estimated_cost
+                    )
+                except Exception as e:
+                    # Don't fail the user experience if logging fails
+                    print(f"Warning: Failed to log chat: {e}")
                 
                 # Display formatted audit report
                 st.markdown(formatted_audit, unsafe_allow_html=True)
