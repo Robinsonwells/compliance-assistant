@@ -106,6 +106,7 @@ def load_css():
 load_css()
 
 def search_legal_database(query: str, limit: int = 20) -> List[Dict[str, Any]]:
+def search_legal_database(query: str, limit: int = 50) -> List[Dict[str, Any]]:
     """Search the legal database using semantic similarity"""
     try:
         # Generate query embedding
