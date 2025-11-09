@@ -570,33 +570,16 @@ def generate_legal_response(query: str, search_results: List[Dict[str, Any]], re
         # Calculate estimated cost
         estimated_cost = calculate_estimated_cost(total_tokens, reasoning_effort)
         
-        # Create detailed breakdown for transparency
-        complexity_details = "\n".join([f"• {factor}: {score}" for factor, score in score_breakdown.items()])
-        
-        # Append token usage information to the response
-        token_info = f"""
-
-**Reasoning Effort:** {reasoning_effort.upper()} (Classified by GPT-4o-mini)
-
-**Tokens Used:** {total_tokens:,}
-**Token Breakdown:**
-• Input: {input_tokens:,}
-• Output: {output_tokens:,}
-• Reasoning: {reasoning_tokens:,}
-
-"""
-        
-        return ai_response, total_tokens, estimated_cost
+        return ai_response, total_tokens, estimated_cost, input_tokens, output_tokens, reasoning_tokens
         
     except Exception as e:
         error_msg = str(e).lower()
         print(f"Error generating response: {e}")
         
         if "timeout" in error_msg:
-            return "The query is taking longer than expected to process. Please try simplifying your question or try again later.", 0, 0.0
+            return "The query is taking longer than expected to process. Please try simplifying your question or try again later.", 0, 0.0, 0, 0, 0
         else:
             st.error(f"Error generating response: {e}")
-            return "I apologize, but I encountered an error while generating a response. Please try again.", 0, 0.0
 
 # Authentication functions
 def check_authentication():
@@ -763,7 +746,7 @@ def handle_chat_input(prompt):
             else:
                 status_placeholder.info("🔬 Performing deep analysis with high reasoning effort... This may take 3-10 minutes.")
             
-            ai_response_text, total_tokens, estimated_cost = generate_legal_response(prompt, search_results, reasoning_effort)
+            ai_response_text, total_tokens, estimated_cost, input_tokens, output_tokens, reasoning_tokens = generate_legal_response(prompt, search_results, reasoning_effort)
             
             # Clear status placeholder before showing final response
             status_placeholder.empty()
@@ -771,8 +754,8 @@ def handle_chat_input(prompt):
             # Display response
             st.markdown(ai_response_text)
             
-            # Display token info in a clean format
-            st.caption(f"🔢 Tokens: {total_tokens:,} | 💰 Cost: ${estimated_cost:.4f} | 🧠 Effort: {reasoning_effort.upper()}")
+            # Display itemized token info
+            st.caption(f"🔢 Input: {input_tokens:,} | Output: {output_tokens:,} | Reasoning: {reasoning_tokens:,} | Total: {total_tokens:,} | 💰 Cost: ${estimated_cost:.4f} | 🧠 Effort: {reasoning_effort.upper()}")
     
     # Add assistant response to chat history
     st.session_state.messages.append({"role": "assistant", "content": ai_response_text})
