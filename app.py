@@ -653,12 +653,7 @@ def show_legal_assistant_content():
 
     # Show welcome message if no messages
     if len(st.session_state.messages) == 0:
-        st.markdown("""
-        <div style='text-align: center; padding: 2rem; color: var(--text-muted);'>
-            <h3>Welcome to PEO Compliance Assistant</h3>
-            <p>Ask me about employment law in any U.S. state or federal law</p>
-        </div>
-        """, unsafe_allow_html=True)
+        pass
     else:
         # Display chat messages with avatars
         for message in st.session_state.messages:
