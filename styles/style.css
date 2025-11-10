@@ -594,10 +594,8 @@ button[kind="primary"] * {
   
   [data-testid="stChatInput"] {
     max-width: 680px !important;
-    margin: 0 auto !important;
-    left: 50% !important;
-    transform: translateX(-50%) !important;
-    right: auto !important;
+    left: var(--space-xl) !important;
+    right: var(--space-xl) !important;
     padding: var(--space-md) var(--space-xl) !important;
   }
 }
@@ -621,10 +619,8 @@ button[kind="primary"] * {
   
   [data-testid="stChatInput"] {
     max-width: 800px !important;
-    margin: 0 auto !important;
-    left: 50% !important;
-    transform: translateX(-50%) !important;
-    right: auto !important;
+    left: var(--space-2xl) !important;
+    right: var(--space-2xl) !important;
     padding: var(--space-md) var(--space-2xl) !important;
   }
   
