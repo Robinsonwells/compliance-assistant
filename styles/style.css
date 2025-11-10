@@ -624,6 +624,17 @@ button[kind="primary"] * {
     padding: var(--space-md) var(--space-2xl) !important;
   }
   
+  /* Adjust chat input position when sidebar is expanded */
+  .stApp:has([data-testid="stSidebar"][aria-expanded="true"]) [data-testid="stChatInput"] {
+    left: calc(21rem + var(--space-2xl)) !important;
+  }
+  
+  /* Alternative selector for when sidebar pushes main content */
+  [data-testid="stAppViewContainer"][style*="margin-left"] ~ * [data-testid="stChatInput"],
+  [data-testid="stAppViewContainer"][style*="margin-left"] [data-testid="stChatInput"] {
+    left: calc(21rem + var(--space-2xl)) !important;
+  }
+  
   /* Desktop hover effects */
   @media (hover: hover) and (pointer: fine) {
     [data-testid="stChatInput"] button:hover {
