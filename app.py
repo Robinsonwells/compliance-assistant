@@ -628,8 +628,7 @@ def show_main_application():
     # Optimized header for mobile-first design
     header_col1, header_col2 = st.columns([4, 1])
     with header_col1:
-        st.markdown("<h1 style='margin-bottom: 4px;'>PEO Compliance Assistant</h1>", unsafe_allow_html=True)
-        st.caption("Comprehensive employment law guidance for all 50 U.S. states and federal law")
+        st.markdown("<h1 style='margin-bottom: 4px;'>Compliance Assistant</h1>", unsafe_allow_html=True)
 
     with header_col2:
         if st.button("Logout", key="logout_btn", help="Logout", use_container_width=True):
