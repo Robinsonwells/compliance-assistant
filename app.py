@@ -559,6 +559,21 @@ def check_authentication():
     if 'session_id' not in st.session_state:
         st.session_state.session_id = str(uuid.uuid4())
     
+    # If not authenticated but we have session data, try to restore authentication
+    if (not st.session_state.authenticated and 
+        'access_code' in st.session_state and 
+        'session_id' in st.session_state):
+        
+        # Check if the existing session is still valid
+        if user_manager.is_session_valid(st.session_state.session_id):
+            # Restore authentication
+            st.session_state.authenticated = True
+            # Update session activity for tracking purposes
+            user_manager.update_session_activity(st.session_state.session_id)
+        else:
+            # Session/access code is no longer valid, clear everything
+            logout_user()
+    
     return st.session_state.authenticated
 
 def authenticate_user(access_code: str) -> bool:
@@ -589,7 +604,7 @@ def main():
     
     # Validate session
     if not user_manager.is_session_valid(st.session_state.session_id):
-        st.error("Your session has expired. Please log in again.")
+        st.error("Your access code has expired or is no longer valid. Please log in again.")
         logout_user()
         return
     

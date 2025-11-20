@@ -79,20 +79,30 @@ class UserManager:
             return False
     
     def is_session_valid(self, session_id, hours_timeout=24):
-        """Check if session is valid (not expired)"""
+        """Check if session is valid (based on access code status and expiration only)"""
         try:
-            timeout_threshold = (datetime.now() - timedelta(hours=hours_timeout)).isoformat()
-            
             result = self.supabase.table('user_sessions').select('''
                 *,
-                users!inner(is_active)
-            ''').eq('session_id', session_id).eq('is_active', True).gt('last_activity', timeout_threshold).execute()
+                users!inner(is_active, expires_at)
+            ''').eq('session_id', session_id).eq('is_active', True).execute()
             
             if not result.data:
                 return False
             
             session = result.data[0]
-            return session['users']['is_active'] == True
+            user = session['users']
+            
+            # Check if user is active
+            if not user['is_active']:
+                return False
+            
+            # Check if user access code has expired
+            if user.get('expires_at'):
+                expires_at = datetime.fromisoformat(user['expires_at'].replace('Z', '+00:00'))
+                if expires_at < datetime.now(expires_at.tzinfo):
+                    return False
+            
+            return True
         except Exception as e:
             print(f"Error validating session: {e}")
             return False
