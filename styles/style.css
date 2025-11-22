@@ -355,15 +355,15 @@ button[kind="primary"] * {
   bottom: 80px !important;
   left: 0px !important;
   right: 0px !important;
-  background: var(--bg-primary) !important;
+  background: transparent !important;
   border: none !important;
   border-bottom: none !important;
-  padding: 8px var(--space-lg) 8px var(--space-lg) !important;
+  padding: 0 !important;
   z-index: var(--z-fixed) !important;
   backdrop-filter: none !important;
-  box-shadow: 0 -2px 10px rgba(0, 0, 0, 0.1) !important;
-  padding-bottom: max(var(--space-sm), env(safe-area-inset-bottom)) !important;
-  border-radius: var(--radius-lg) !important;
+  box-shadow: none !important;
+  padding-bottom: 0 !important;
+  border-radius: 0 !important;
   margin: 0 var(--space-lg) !important;
   left: var(--space-lg) !important;
   right: var(--space-lg) !important;
@@ -417,16 +417,16 @@ button[kind="primary"] * {
 [data-testid="stChatInput"] textarea {
   background: var(--bg-tertiary) !important;
   border: 1px solid var(--border-light) !important;
-  border-radius: var(--radius-2xl) !important;
+  border-radius: 24px !important;
   color: var(--text-primary) !important;
   font-size: var(--font-size-base) !important;
-  padding: 14px 60px 14px var(--space-lg) !important;
+  padding: 12px 52px 12px 16px !important;
   min-height: 56px !important;
   max-height: 120px !important;
   resize: none !important;
   font-family: var(--font-family) !important;
   line-height: 1.4 !important;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1) !important;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.15) !important;
 }
 
 [data-testid="stChatInput"] textarea:focus {
@@ -434,7 +434,7 @@ button[kind="primary"] * {
   outline: none !important;
   outline-offset: 0 !important;
   box-shadow: none !important;
-  padding: 14px 60px 14px var(--space-lg) !important;
+  padding: 12px 52px 12px 16px !important;
 }
 
 /* AGGRESSIVE FOCUS STATE OVERRIDES - Force grey colors */
@@ -478,14 +478,14 @@ button[kind="primary"] * {
 [data-testid="stChatInput"] button {
   position: absolute !important;
   right: 6px !important;
-  top: 10% !important;
-  transform: translateY(-10%) !important;
+  top: 50% !important;
+  transform: translateY(-50%) !important;
   background: var(--primary-blue) !important;
   border: none !important;
   border-radius: var(--radius-full) !important;
-  width: 48px !important;
-  height: 48px !important;
-  min-height: 48px !important;
+  width: 32px !important;
+  height: 32px !important;
+  min-height: 32px !important;
   display: flex !important;
   align-items: center !important;
   justify-content: center !important;
@@ -504,8 +504,8 @@ button[kind="primary"] * {
 }
 
 [data-testid="stChatInput"] button svg {
-  width: 24px !important;
-  height: 24px !important;
+  width: 16px !important;
+  height: 16px !important;
   color: white !important;
 }
 
@@ -536,7 +536,7 @@ button[kind="primary"] * {
   }
   
   [data-testid="stChatInput"] {
-    padding: var(--space-sm) var(--space-lg) !important;
+    padding: 0 !important;
     padding-bottom: max(12px, env(safe-area-inset-bottom)) !important;
   }
   
@@ -596,7 +596,7 @@ button[kind="primary"] * {
     max-width: 680px !important;
     left: var(--space-xl) !important;
     right: var(--space-xl) !important;
-    padding: var(--space-md) var(--space-xl) !important;
+    padding: 0 !important;
   }
 }
 
@@ -621,7 +621,7 @@ button[kind="primary"] * {
     max-width: 800px !important;
     left: var(--space-2xl) !important;
     right: var(--space-2xl) !important;
-    padding: var(--space-md) var(--space-2xl) !important;
+    padding: 0 !important;
   }
   
   /* Adjust chat input position when sidebar is expanded */
