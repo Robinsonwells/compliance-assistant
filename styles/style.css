@@ -353,34 +353,20 @@ button[kind="primary"] * {
 [data-testid="stChatInput"] {
   position: fixed !important;
   bottom: 80px !important;
-  left: var(--space-lg) !important;
-  right: var(--space-lg) !important;
-  background: transparent !important;
+  left: 0px !important;
+  right: 0px !important;
+  background: var(--bg-primary) !important;
   border: none !important;
-  padding: 0 !important;
+  border-bottom: none !important;
+  padding: 8px var(--space-lg) 8px var(--space-lg) !important;
   z-index: var(--z-fixed) !important;
   backdrop-filter: none !important;
-  box-shadow: none !important;
+  box-shadow: 0 -2px 10px rgba(0, 0, 0, 0.1) !important;
   padding-bottom: max(var(--space-sm), env(safe-area-inset-bottom)) !important;
-  border-radius: 0 !important;
-}
-
-/* EXTREME MEASURES: Target ALL Streamlit-generated containers */
-[data-testid="stChatInput"] > div,
-[data-testid="stChatInput"] > div > div,
-[data-testid="stChatInput"] form,
-[data-testid="stChatInput"] form > div,
-[data-testid="stChatInput"] [class*="st-"],
-[data-testid="stChatInput"] [class*="emotion-"],
-[data-testid="stChatInput"] [class*="css-"],
-[data-testid="stChatInput"] div[data-baseweb] {
-  background: transparent !important;
-  border: none !important;
-  box-shadow: none !important;
-  padding: 0 !important;
-  border-radius: 0 !important;
-  margin: 0 !important;
-  backdrop-filter: none !important;
+  border-radius: var(--radius-lg) !important;
+  margin: 0 var(--space-lg) !important;
+  left: var(--space-lg) !important;
+  right: var(--space-lg) !important;
 }
 
 /* Ensure no unwanted borders or lines */
@@ -431,16 +417,16 @@ button[kind="primary"] * {
 [data-testid="stChatInput"] textarea {
   background: var(--bg-tertiary) !important;
   border: 1px solid var(--border-light) !important;
-  border-radius: 24px !important;
+  border-radius: var(--radius-2xl) !important;
   color: var(--text-primary) !important;
   font-size: var(--font-size-base) !important;
-  padding: 12px 52px 12px 16px !important;
+  padding: 14px 60px 14px var(--space-lg) !important;
   min-height: 56px !important;
   max-height: 120px !important;
   resize: none !important;
   font-family: var(--font-family) !important;
   line-height: 1.4 !important;
-  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.15) !important;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1) !important;
 }
 
 [data-testid="stChatInput"] textarea:focus {
@@ -448,37 +434,39 @@ button[kind="primary"] * {
   outline: none !important;
   outline-offset: 0 !important;
   box-shadow: none !important;
-  padding: 12px 52px 12px 16px !important;
+  padding: 14px 60px 14px var(--space-lg) !important;
 }
 
-/* PROPER FOCUS STATE - Blue glow as intended */
-[data-testid="stChatInput"] textarea:focus-visible {
-  border: 2px solid var(--primary-blue) !important;
+/* AGGRESSIVE FOCUS STATE OVERRIDES - Force grey colors */
+[data-testid="stChatInput"] textarea:focus,
+[data-testid="stChatInput"] textarea:focus-visible,
+[data-testid="stChatInput"] textarea:focus-within {
+  border: 1px solid var(--border-light) !important;
+  border-color: var(--border-light) !important;
   outline: none !important;
-  outline-offset: 0 !important;
-  box-shadow: 0 0 0 3px rgba(52, 120, 246, 0.15) !important;
-  padding: 11px 51px 11px 15px !important;
+  outline-color: transparent !important;
+  box-shadow: none !important;
+  background: var(--bg-tertiary) !important;
 }
 
-/* Override Streamlit's dynamic focus classes with proper blue styling */
-[data-testid="stChatInput"] [class*="focused"] textarea,
-[data-testid="stChatInput"] [class*="focus"] textarea,
-[data-testid="stChatInput"] [data-baseweb*="input"]:focus {
-  border: 2px solid var(--primary-blue) !important;
-  box-shadow: 0 0 0 3px rgba(52, 120, 246, 0.15) !important;
-}
-
-/* Ensure containers don't interfere with focus styling */
-[data-testid="stChatInput"] *:focus-within {
-  background: transparent !important;
-  border: none !important;
+/* Override Streamlit's dynamic focus classes */
+[data-testid="stChatInput"] [class*="focused"],
+[data-testid="stChatInput"] [class*="focus"],
+[data-testid="stChatInput"] [data-baseweb*="input"]:focus,
+[data-testid="stChatInput"] [data-baseweb*="input"]:focus-visible {
+  border: 1px solid var(--border-light) !important;
+  border-color: var(--border-light) !important;
+  outline: none !important;
   box-shadow: none !important;
 }
 
-/* But allow textarea itself to have proper focus styling */
-[data-testid="stChatInput"] textarea:focus-within {
-  border: 2px solid var(--primary-blue) !important;
-  box-shadow: 0 0 0 3px rgba(52, 120, 246, 0.15) !important;
+/* Prevent ANY blue or red colors on focus */
+[data-testid="stChatInput"] *:focus,
+[data-testid="stChatInput"] *:focus-visible,
+[data-testid="stChatInput"] *:focus-within {
+  border-color: var(--border-light) !important;
+  outline-color: transparent !important;
+  box-shadow: none !important;
 }
 
 [data-testid="stChatInput"] textarea::placeholder {
@@ -490,14 +478,14 @@ button[kind="primary"] * {
 [data-testid="stChatInput"] button {
   position: absolute !important;
   right: 6px !important;
-  top: 50% !important;
-  transform: translateY(-50%) !important;
+  top: 10% !important;
+  transform: translateY(-10%) !important;
   background: var(--primary-blue) !important;
   border: none !important;
   border-radius: var(--radius-full) !important;
-  width: 32px !important;
-  height: 32px !important;
-  min-height: 32px !important;
+  width: 48px !important;
+  height: 48px !important;
+  min-height: 48px !important;
   display: flex !important;
   align-items: center !important;
   justify-content: center !important;
@@ -553,13 +541,13 @@ button[kind="primary"] * {
   }
   
   [data-testid="stChatInput"] textarea {
-    padding: 10px 42px 10px 14px !important;
+    padding: 10px 48px 10px 14px !important;
     min-height: 42px !important;
     font-size: var(--font-size-base) !important;
   }
   
   [data-testid="stChatInput"] textarea:focus {
-    padding: 8px 40px 8px 12px !important;
+    padding: 9px 47px 9px 13px !important;
   }
   
   [data-testid="stChatInput"] button {
@@ -1069,46 +1057,6 @@ button[kind="primary"] * {
   border-bottom-width: 0 !important;
   border-bottom-style: none !important;
   border-bottom-color: var(--border-light) !important;
-}
-
-/* NUCLEAR OPTION: Remove ALL borders from ALL elements except textarea */
-[data-testid="stChatInput"] *:not(textarea) {
-  border: none !important;
-  border-top: none !important;
-  border-right: none !important;
-  border-bottom: none !important;
-  border-left: none !important;
-  background: transparent !important;
-  box-shadow: none !important;
-}
-
-/* NUCLEAR OPTION: Ensure no Streamlit classes can add styling */
-[data-testid="stChatInput"] [class*="st-"]:not(textarea),
-[data-testid="stChatInput"] [class*="emotion-"]:not(textarea),
-[data-testid="stChatInput"] [class*="css-"]:not(textarea),
-[data-testid="stChatInput"] div[data-baseweb]:not(textarea) {
-  all: unset !important;
-  display: block !important;
-  position: relative !important;
-}
-
-/* NUCLEAR OPTION: Force textarea to be the only styled element */
-[data-testid="stChatInput"] textarea {
-  all: revert !important;
-  background: var(--bg-tertiary) !important;
-  border: 1px solid var(--border-light) !important;
-  border-radius: 24px !important;
-  color: var(--text-primary) !important;
-  font-size: var(--font-size-base) !important;
-  padding: 12px 52px 12px 16px !important;
-  min-height: 56px !important;
-  max-height: 120px !important;
-  resize: none !important;
-  font-family: var(--font-family) !important;
-  line-height: 1.4 !important;
-  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.15) !important;
-  position: relative !important;
-  z-index: 1 !important;
 }
 
 /* ===== END OF STYLES ===== */
