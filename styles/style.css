@@ -98,7 +98,7 @@ body {
 
 .main .block-container {
   padding-top: var(--space-lg) !important;
-  padding-bottom: 100px !important; /* Space for fixed input */
+  padding-bottom: 120px !important; /* Space for fixed input */
   max-width: 1200px !important;
 }
 
@@ -352,15 +352,16 @@ button[kind="primary"] * {
 /* Chat Input Bar - Fixed at Bottom */
 [data-testid="stChatInput"] {
   position: fixed !important;
-  bottom: 20px !important;
-  left: 20px !important;
-  right: 20px !important;
+  bottom: 80px !important;
+  left: var(--space-lg) !important;
+  right: var(--space-lg) !important;
   background: transparent !important;
   border: none !important;
   padding: 0 !important;
   z-index: var(--z-fixed) !important;
   backdrop-filter: none !important;
   box-shadow: none !important;
+  padding-bottom: max(var(--space-sm), env(safe-area-inset-bottom)) !important;
   border-radius: 0 !important;
 }
 
@@ -527,7 +528,7 @@ button[kind="primary"] * {
   .main .block-container {
     padding-left: var(--space-lg) !important;
     padding-right: var(--space-lg) !important;
-    padding-bottom: 80px !important;
+    padding-bottom: 96px !important;
   }
   
   .stChatMessage {
@@ -1087,6 +1088,8 @@ button[kind="primary"] * {
 [data-testid="stChatInput"] [class*="css-"]:not(textarea),
 [data-testid="stChatInput"] div[data-baseweb]:not(textarea) {
   all: unset !important;
+  display: block !important;
+  position: relative !important;
 }
 
 /* NUCLEAR OPTION: Force textarea to be the only styled element */
