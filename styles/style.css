@@ -514,8 +514,11 @@ button[kind="primary"] * {
 /* Mobile (320px - 767px) */
 @media (max-width: 767px) {
   .main .block-container {
-    padding-left: var(--space-lg) !important;
-    padding-right: var(--space-lg) !important;
+    padding-left: 0 !important;
+    padding-right: 0 !important;
+    max-width: calc(100% - (var(--space-lg) * 2)) !important;
+    margin-left: auto !important;
+    margin-right: auto !important;
     padding-bottom: 96px !important;
   }
   
@@ -536,6 +539,11 @@ button[kind="primary"] * {
   }
   
   [data-testid="stChatInput"] {
+    left: 50% !important;
+    right: auto !important;
+    transform: translateX(-50%) !important;
+    max-width: calc(100% - (var(--space-lg) * 2)) !important;
+    margin: 0 !important;
     padding: var(--space-sm) var(--space-lg) !important;
     padding-bottom: max(12px, env(safe-area-inset-bottom)) !important;
   }
