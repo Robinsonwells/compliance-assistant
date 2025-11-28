@@ -656,7 +656,7 @@ def show_main_application():
     show_legal_assistant_content()
 
     # Handle chat input outside of tabs
-    if prompt := st.chat_input("Ask about employment law in any U.S. state or federal law..."):
+    if prompt := st.chat_input("Ask any compliance question"):
         handle_chat_input(prompt)
 
 def show_legal_assistant_content():
