@@ -646,9 +646,9 @@ def show_login_page():
     # Contact info section
     col1, col2 = st.columns([3, 1])
     with col1:
-        st.info("Need an access code?")
+        st.markdown("**Need an access code?**")
     with col2:
-        if st.button("Contact Info", key="contact_info_btn"):
+        if st.button("Contact Info", key="contact_info_btn", use_container_width=True):
             st.session_state.show_contact_info_modal = True
     
     # Contact info modal
