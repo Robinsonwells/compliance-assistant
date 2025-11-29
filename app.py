@@ -616,6 +616,10 @@ def main():
 
 def show_login_page():
     """Display login page"""
+    # Initialize contact info modal state
+    if 'show_contact_info_modal' not in st.session_state:
+        st.session_state.show_contact_info_modal = False
+    
     st.title("PEO Compliance Assistant")
     st.markdown("### Access Required")
     
@@ -635,7 +639,29 @@ def show_login_page():
             else:
                 st.error("Please enter an access code.")
     
-    st.info("Contact your administrator if you need an access code.")
+    # Contact info section
+    col1, col2 = st.columns([3, 1])
+    with col1:
+        st.info("Need an access code?")
+    with col2:
+        if st.button("Contact Info", key="contact_info_btn"):
+            st.session_state.show_contact_info_modal = True
+    
+    # Contact info modal
+    if st.session_state.show_contact_info_modal:
+        st.markdown("---")
+        with st.container():
+            st.markdown("### 📞 Contact Information")
+            st.markdown("**Robinson Wells**")
+            st.markdown("📱 Phone: [(208) 631-4918](tel:+12086314918)")
+            st.markdown("💼 LinkedIn: [Robinson Wells](https://www.linkedin.com/in/robinson-wells-b22634237/)")
+            st.markdown("📧 Email: [robinson.wells@instantlegalai.org](mailto:robinson.wells@instantlegalai.org)")
+            
+            col1, col2, col3 = st.columns([1, 1, 1])
+            with col2:
+                if st.button("Close", key="close_contact_info"):
+                    st.session_state.show_contact_info_modal = False
+                    st.rerun()
 
 def show_main_application():
     """Display main application interface"""
