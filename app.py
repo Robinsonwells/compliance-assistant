@@ -57,6 +57,7 @@ try:
     qdrant_client = QdrantClient(
         url=os.getenv("QDRANT_URL"),
         api_key=os.getenv("QDRANT_API_KEY"),
+        timeout=60.0,  # 60 second timeout to prevent read timeouts
     )
     
     # Initialize embedding model with proper device handling
