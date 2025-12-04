@@ -764,7 +764,7 @@ def handle_chat_input(prompt):
             st.markdown(ai_response_text)
             
             # Display itemized token info
-            st.caption(f"🔢 Input: {input_tokens:,} | Output: {output_tokens:,} | Reasoning: {reasoning_tokens:,} | Total: {total_tokens:,} | 💰 Cost: ${estimated_cost:.4f} | 🧠 Effort: {reasoning_effort.upper()}")
+            st.caption(f"🔢 Input: {input_tokens:,} | Output: {output_tokens:,} | Reasoning: {reasoning_tokens:,} | Total: {total_tokens:,} | 🧠 Effort: {reasoning_effort.upper()}")
     
     # Add assistant response to chat history
     st.session_state.messages.append({"role": "assistant", "content": ai_response_text})
