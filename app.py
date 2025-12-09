@@ -91,7 +91,7 @@ except Exception as e:
 
 # Page configuration
 st.set_page_config(
-    page_title="PEO Compliance Assistant",
+    page_title="Legal Assistant",
     page_icon="",
     layout="wide",
     initial_sidebar_state="expanded"
@@ -625,7 +625,7 @@ def show_login_page():
     if 'show_contact_info_modal' not in st.session_state:
         st.session_state.show_contact_info_modal = False
     
-    st.title("PEO Compliance Assistant")
+    st.title("Legal Assistant")
     st.markdown("### Access Required")
     
     # Create a simple login form

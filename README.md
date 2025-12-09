@@ -1,2 +1,2 @@
 # compliance-assistant
-PEO compliance assistant 
+Legal Assistant

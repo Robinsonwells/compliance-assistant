@@ -1,7 +1,7 @@
 {
   "name": "compliance-assistant",
   "version": "1.0.0",
-  "description": "PEO compliance assistant - Python/Streamlit application",
+  "description": "Legal Assistant - Python/Streamlit application",
   "main": "app.py",
   "scripts": {
     "start": "streamlit run app.py",
