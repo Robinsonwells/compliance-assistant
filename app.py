@@ -706,6 +706,10 @@ def show_main_application():
     if 'selected_model' not in st.session_state:
         st.session_state.selected_model = "GPT-5"
 
+    # Initialize Sonar reasoning effort override
+    if 'sonar_reasoning_effort_override' not in st.session_state:
+        st.session_state.sonar_reasoning_effort_override = "Auto"
+
     # Optimized header for mobile-first design
     header_col1, header_col2 = st.columns([4, 1])
     with header_col1:
@@ -719,6 +723,16 @@ def show_main_application():
             horizontal=True,
             help="GPT-5: Advanced reasoning with web knowledge. Sonar Reasoning Pro: Fast analysis using only your legal database."
         )
+
+        # Show reasoning effort control only for Sonar Reasoning Pro
+        if st.session_state.selected_model == "Sonar Reasoning Pro (RAG Only)":
+            st.session_state.sonar_reasoning_effort_override = st.radio(
+                "Reasoning Effort:",
+                options=["Auto", "Medium", "High"],
+                index=["Auto", "Medium", "High"].index(st.session_state.sonar_reasoning_effort_override),
+                horizontal=True,
+                help="Auto: Determined by query complexity | Medium: ~30s processing | High: ~1-3 min deep analysis"
+            )
 
     with header_col2:
         if st.button("Logout", key="logout_btn", help="Logout", use_container_width=True):
@@ -773,18 +787,33 @@ def handle_chat_input(prompt):
         
         with st.spinner("Processing your legal query..."):
             # Step 1: Determine reasoning effort based on selected model
+            reasoning_effort_source = "Auto"  # Track whether effort is manual or auto
             if selected_model == "GPT-5":
                 status_placeholder.info("🤔 Choosing reasoning effort...")
                 reasoning_effort = classify_reasoning_effort_with_gpt4o_mini(prompt)
             else:  # Sonar Reasoning Pro (RAG Only)
-                status_placeholder.info("🤔 Calculating complexity score...")
-                complexity_score, _ = calculate_complexity_score(prompt)
-                reasoning_effort = get_reasoning_effort(complexity_score)
+                # Check for manual override
+                manual_override = st.session_state.get('sonar_reasoning_effort_override', 'Auto')
+                if manual_override != "Auto":
+                    # Use manual override
+                    reasoning_effort = manual_override.lower()
+                    reasoning_effort_source = "Manual"
+                    status_placeholder.info(f"🎯 Using manual reasoning effort: {manual_override}...")
+                else:
+                    # Use automatic complexity-based determination
+                    status_placeholder.info("🤔 Calculating complexity score...")
+                    complexity_score, _ = calculate_complexity_score(prompt)
+                    reasoning_effort = get_reasoning_effort(complexity_score)
+                    reasoning_effort_source = "Auto"
             
             # Show determined effort level
             effort_emoji = {"medium": "🧠", "high": "🔬"}
             model_emoji = {"GPT-5": "🤖", "Sonar Reasoning Pro (RAG Only)": "🧠"}
-            status_placeholder.success(f"{model_emoji.get(selected_model, '🤖')} Model: **{selected_model}** | {effort_emoji.get(reasoning_effort, '🧠')} Effort: **{reasoning_effort.upper()}**")
+            # Add source indicator for Sonar Reasoning Pro
+            effort_display = reasoning_effort.upper()
+            if selected_model == "Sonar Reasoning Pro (RAG Only)" and reasoning_effort_source:
+                effort_display = f"{reasoning_effort.upper()} ({reasoning_effort_source})"
+            status_placeholder.success(f"{model_emoji.get(selected_model, '🤖')} Model: **{selected_model}** | {effort_emoji.get(reasoning_effort, '🧠')} Effort: **{effort_display}**")
             
             # Brief pause to let user see the effort level
             import time
@@ -809,10 +838,12 @@ def handle_chat_input(prompt):
                 else:
                     status_placeholder.info("🤖 GPT-5 performing deep analysis with high reasoning effort... This may take 3-10 minutes.")
             else:
+                # Add source indicator for Sonar Reasoning Pro
+                source_indicator = f" ({reasoning_effort_source})" if reasoning_effort_source else ""
                 if reasoning_effort == "medium":
-                    status_placeholder.info("🧠 Sonar Reasoning Pro analyzing legal sources with medium effort...")
+                    status_placeholder.info(f"🧠 Sonar Reasoning Pro analyzing legal sources with medium effort{source_indicator}...")
                 else:
-                    status_placeholder.info("🧠 Sonar Reasoning Pro performing deep analysis with high effort...")
+                    status_placeholder.info(f"🧠 Sonar Reasoning Pro performing deep analysis with high effort{source_indicator}...")
             
             ai_response_text, total_tokens, estimated_cost, input_tokens, output_tokens, reasoning_tokens = generate_legal_response(prompt, search_results, selected_model, reasoning_effort)
             
@@ -825,7 +856,9 @@ def handle_chat_input(prompt):
             # Display itemized token info with model information
             model_short = "GPT-5" if selected_model == "GPT-5" else "Sonar-RP"
             if selected_model == "Sonar Reasoning Pro (RAG Only)":
-                st.caption(f"🔢 Input: {input_tokens:,} | Output: {output_tokens:,} | Total: {total_tokens:,} | 🧠 Model: {model_short} | Effort: {reasoning_effort.upper()} | *Cost estimate based on GPT-5 pricing")
+                # Add source indicator for Sonar
+                effort_with_source = f"{reasoning_effort.upper()} ({reasoning_effort_source})" if reasoning_effort_source else reasoning_effort.upper()
+                st.caption(f"🔢 Input: {input_tokens:,} | Output: {output_tokens:,} | Total: {total_tokens:,} | 🧠 Model: {model_short} | Effort: {effort_with_source} | *Cost estimate based on GPT-5 pricing")
             else:
                 st.caption(f"🔢 Input: {input_tokens:,} | Output: {output_tokens:,} | Reasoning: {reasoning_tokens:,} | Total: {total_tokens:,} | 🧠 Model: {model_short} | Effort: {reasoning_effort.upper()}")
     
