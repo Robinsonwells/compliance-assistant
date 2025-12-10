@@ -23,7 +23,8 @@ class ChatLogger:
         session_id: Optional[str] = None,
         reasoning_effort: Optional[str] = None,
         tokens_used: Optional[int] = None,
-        cost_estimate: Optional[float] = None
+        cost_estimate: Optional[float] = None,
+        main_model_used: Optional[str] = None
     ) -> bool:
         """
         Log a chat interaction to Supabase
@@ -37,6 +38,7 @@ class ChatLogger:
             reasoning_effort: "medium" or "high" (optional)
             tokens_used: Total tokens consumed (optional)
             cost_estimate: Estimated cost in dollars (optional)
+            main_model_used: Model used for main response generation (optional)
         
         Returns:
             bool: True if successful, False otherwise
@@ -59,7 +61,8 @@ class ChatLogger:
                 "session_id": session_id,
                 "reasoning_effort": reasoning_effort,
                 "tokens_used": tokens_used,
-                "cost_estimate": cost_estimate
+                "cost_estimate": cost_estimate,
+                "main_model_used": main_model_used
             }
             
             response = self.supabase.table("chat_logs").insert(data).execute()

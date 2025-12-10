@@ -489,16 +489,9 @@ def format_audit_with_citations(audit_content: str, citations: List[Dict]) -> st
         print(f"Error formatting citations: {e}")
         return audit_content
 
-def generate_legal_response(query: str, search_results: List[Dict[str, Any]], reasoning_effort: str = None) -> str:
+def generate_legal_response(query: str, search_results: List[Dict[str, Any]], selected_model: str, reasoning_effort: str) -> str:
     """Generate response using OpenAI with legal context"""
     try:
-        # Use provided reasoning effort or classify if not provided
-        if reasoning_effort is None:
-            reasoning_effort = classify_reasoning_effort_with_gpt4o_mini(query)
-        
-        # Still calculate complexity score for display purposes
-        complexity_score, score_breakdown = calculate_complexity_score(query)
-        
         # Prepare context from search results
         context = ""
         for i, result in enumerate(search_results, 1):
@@ -507,26 +500,67 @@ def generate_legal_response(query: str, search_results: List[Dict[str, Any]], re
             context += f"Jurisdiction: {result['jurisdiction']}\n"
             context += f"Content: {result['text']}\n"
         
-        # Prepare input for GPT-5 Responses API
-        input_text = f"{LEGAL_COMPLIANCE_SYSTEM_PROMPT}\n\nQuery: {query}\n\nRelevant Legal Sources:\n{context}"
-        
-        # Generate response using GPT-5 Responses API
-        response = openai_client.responses.create(
-            model="gpt-5",
-            input=input_text,
-            max_output_tokens=None,  # No token limit - track usage
-            reasoning={"effort": reasoning_effort},
-            text={"verbosity": "high"}
-        )
+        if selected_model == "GPT-5":
+            # Prepare input for GPT-5 Responses API
+            input_text = f"{LEGAL_COMPLIANCE_SYSTEM_PROMPT}\n\nQuery: {query}\n\nRelevant Legal Sources:\n{context}"
+            
+            # Generate response using GPT-5 Responses API
+            response = openai_client.responses.create(
+                model="gpt-5",
+                input=input_text,
+                max_output_tokens=None,  # No token limit - track usage
+                reasoning={"effort": reasoning_effort},
+                text={"verbosity": "high"}
+            )
 
-        # Extract token usage information
-        usage = response.usage
-        input_tokens = usage.input_tokens
-        output_tokens = usage.output_tokens
-        reasoning_tokens = getattr(getattr(usage, 'output_tokens_details', None), 'reasoning_tokens', 0)
-        total_tokens = usage.total_tokens
+            # Extract token usage information
+            usage = response.usage
+            input_tokens = usage.input_tokens
+            output_tokens = usage.output_tokens
+            reasoning_tokens = getattr(getattr(usage, 'output_tokens_details', None), 'reasoning_tokens', 0)
+            total_tokens = usage.total_tokens
+            
+            # Get the AI response text
+            ai_response = response.output_text
+            
+        else:  # Sonar Reasoning Pro (RAG Only)
+            # Prepare messages for Perplexity API
+            messages = [
+                {"role": "system", "content": LEGAL_COMPLIANCE_SYSTEM_PROMPT},
+                {"role": "user", "content": f"Query: {query}\n\nRelevant Legal Sources:\n{context}"}
+            ]
+            
+            # Make request to Perplexity API with search disabled
+            url = "https://api.perplexity.ai/chat/completions"
+            payload = {
+                "model": "sonar-reasoning-pro",
+                "messages": messages,
+                "disable_search": True,  # Disable web search - use only provided context
+                "stream": False
+            }
+            
+            headers = {
+                "Authorization": f"Bearer {PERPLEXITY_API_KEY}",
+                "Content-Type": "application/json"
+            }
+            
+            response = requests.post(url, json=payload, headers=headers, timeout=300)
+            response.raise_for_status()
+            
+            response_data = response.json()
+            
+            # Extract the message content
+            ai_response = response_data["choices"][0]["message"]["content"]
+            
+            # Extract usage information
+            usage = response_data.get("usage", {})
+            input_tokens = usage.get("prompt_tokens", 0)
+            output_tokens = usage.get("completion_tokens", 0)
+            reasoning_tokens = 0  # Sonar Reasoning Pro doesn't separate reasoning tokens
+            total_tokens = usage.get("total_tokens", input_tokens + output_tokens)
         
         # Log token usage to console
+        print(f"Model: {selected_model}")
         print(f"Query: {query[:100]}...")
         print(f"Reasoning Effort: {reasoning_effort}")
         print(f"Input Tokens: {input_tokens:,}")
@@ -534,22 +568,19 @@ def generate_legal_response(query: str, search_results: List[Dict[str, Any]], re
         print(f"Reasoning Tokens: {reasoning_tokens:,}")
         print(f"Total Tokens: {total_tokens:,}")
         
-        # Get the AI response text
-        ai_response = response.output_text
-        
-        # Calculate estimated cost
+        # Calculate estimated cost (using GPT-5 pricing as baseline)
         estimated_cost = calculate_estimated_cost(total_tokens, reasoning_effort)
         
         return ai_response, total_tokens, estimated_cost, input_tokens, output_tokens, reasoning_tokens
         
     except Exception as e:
         error_msg = str(e).lower()
-        print(f"Error generating response: {e}")
+        print(f"Error generating response with {selected_model}: {e}")
         
         if "timeout" in error_msg:
             return "The query is taking longer than expected to process. Please try simplifying your question or try again later.", 0, 0.0, 0, 0, 0
         else:
-            st.error(f"Error generating response: {e}")
+            st.error(f"Error generating response with {selected_model}: {e}")
 
 # Authentication functions
 def check_authentication():
@@ -671,10 +702,23 @@ def show_login_page():
 def show_main_application():
     """Display main application interface"""
 
+    # Initialize model selection in session state
+    if 'selected_model' not in st.session_state:
+        st.session_state.selected_model = "GPT-5"
+
     # Optimized header for mobile-first design
     header_col1, header_col2 = st.columns([4, 1])
     with header_col1:
         st.markdown("<h1 style='margin-bottom: 4px;'>Compliance Assistant</h1>", unsafe_allow_html=True)
+        
+        # Model selection toggle
+        st.session_state.selected_model = st.radio(
+            "AI Model:",
+            options=["GPT-5", "Sonar Reasoning Pro (RAG Only)"],
+            index=0 if st.session_state.selected_model == "GPT-5" else 1,
+            horizontal=True,
+            help="GPT-5: Advanced reasoning with web knowledge. Sonar Reasoning Pro: Fast analysis using only your legal database."
+        )
 
     with header_col2:
         if st.button("Logout", key="logout_btn", help="Logout", use_container_width=True):
@@ -712,6 +756,9 @@ def handle_chat_input(prompt):
     if 'session_id' not in st.session_state:
         st.session_state.session_id = str(uuid.uuid4())
     
+    # Get selected model from session state
+    selected_model = st.session_state.get('selected_model', 'GPT-5')
+    
     # Add user message to chat history
     st.session_state.messages.append({"role": "user", "content": prompt})
     
@@ -725,13 +772,19 @@ def handle_chat_input(prompt):
         status_placeholder = st.empty()
         
         with st.spinner("Processing your legal query..."):
-            # Step 1: Classify reasoning effort
-            status_placeholder.info("🤔 Choosing reasoning effort...")
-            reasoning_effort = classify_reasoning_effort_with_gpt4o_mini(prompt)
+            # Step 1: Determine reasoning effort based on selected model
+            if selected_model == "GPT-5":
+                status_placeholder.info("🤔 Choosing reasoning effort...")
+                reasoning_effort = classify_reasoning_effort_with_gpt4o_mini(prompt)
+            else:  # Sonar Reasoning Pro (RAG Only)
+                status_placeholder.info("🤔 Calculating complexity score...")
+                complexity_score, _ = calculate_complexity_score(prompt)
+                reasoning_effort = get_reasoning_effort(complexity_score)
             
             # Show determined effort level
             effort_emoji = {"medium": "🧠", "high": "🔬"}
-            status_placeholder.success(f"{effort_emoji.get(reasoning_effort, '🧠')} Reasoning effort: **{reasoning_effort.upper()}**")
+            model_emoji = {"GPT-5": "🤖", "Sonar Reasoning Pro (RAG Only)": "🧠"}
+            status_placeholder.success(f"{model_emoji.get(selected_model, '🤖')} Model: **{selected_model}** | {effort_emoji.get(reasoning_effort, '🧠')} Effort: **{reasoning_effort.upper()}**")
             
             # Brief pause to let user see the effort level
             import time
@@ -750,12 +803,18 @@ def handle_chat_input(prompt):
             time.sleep(0.5)
             
             # Step 3: Generate response with dynamic status based on effort
-            if reasoning_effort == "medium":
-                status_placeholder.info("🧠 Analyzing with medium reasoning effort...")
+            if selected_model == "GPT-5":
+                if reasoning_effort == "medium":
+                    status_placeholder.info("🤖 GPT-5 analyzing with medium reasoning effort...")
+                else:
+                    status_placeholder.info("🤖 GPT-5 performing deep analysis with high reasoning effort... This may take 3-10 minutes.")
             else:
-                status_placeholder.info("🔬 Performing deep analysis with high reasoning effort... This may take 3-10 minutes.")
+                if reasoning_effort == "medium":
+                    status_placeholder.info("🧠 Sonar Reasoning Pro analyzing legal sources with medium effort...")
+                else:
+                    status_placeholder.info("🧠 Sonar Reasoning Pro performing deep analysis with high effort...")
             
-            ai_response_text, total_tokens, estimated_cost, input_tokens, output_tokens, reasoning_tokens = generate_legal_response(prompt, search_results, reasoning_effort)
+            ai_response_text, total_tokens, estimated_cost, input_tokens, output_tokens, reasoning_tokens = generate_legal_response(prompt, search_results, selected_model, reasoning_effort)
             
             # Clear status placeholder before showing final response
             status_placeholder.empty()
@@ -763,8 +822,12 @@ def handle_chat_input(prompt):
             # Display response
             st.markdown(ai_response_text)
             
-            # Display itemized token info
-            st.caption(f"🔢 Input: {input_tokens:,} | Output: {output_tokens:,} | Reasoning: {reasoning_tokens:,} | Total: {total_tokens:,} | 🧠 Effort: {reasoning_effort.upper()}")
+            # Display itemized token info with model information
+            model_short = "GPT-5" if selected_model == "GPT-5" else "Sonar-RP"
+            if selected_model == "Sonar Reasoning Pro (RAG Only)":
+                st.caption(f"🔢 Input: {input_tokens:,} | Output: {output_tokens:,} | Total: {total_tokens:,} | 🧠 Model: {model_short} | Effort: {reasoning_effort.upper()} | *Cost estimate based on GPT-5 pricing")
+            else:
+                st.caption(f"🔢 Input: {input_tokens:,} | Output: {output_tokens:,} | Reasoning: {reasoning_tokens:,} | Total: {total_tokens:,} | 🧠 Model: {model_short} | Effort: {reasoning_effort.upper()}")
     
     # Add assistant response to chat history
     st.session_state.messages.append({"role": "assistant", "content": ai_response_text})
@@ -823,7 +886,8 @@ def handle_chat_input(prompt):
                         session_id=st.session_state.session_id,
                         reasoning_effort=reasoning_effort,
                         tokens_used=total_tokens,
-                        cost_estimate=estimated_cost
+                        cost_estimate=estimated_cost,
+                        main_model_used=selected_model
                     )
                 except Exception as e:
                     # Don't fail the user experience if logging fails
