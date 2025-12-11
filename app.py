@@ -748,6 +748,44 @@ def show_main_application():
     if prompt := st.chat_input("Ask any compliance question"):
         handle_chat_input(prompt)
 
+def display_rag_sources(search_results):
+    """Display retrieved RAG sources from Qdrant in an expander"""
+    if not search_results:
+        return
+
+    source_count = len(search_results)
+    with st.expander(f"📚 View Retrieved Legal Sources ({source_count} documents)", expanded=False):
+        st.markdown("*These are the legal documents retrieved from the database and used as context for generating this response.*")
+        st.markdown("---")
+
+        for idx, result in enumerate(search_results, 1):
+            similarity_percentage = round(result.get('score', 0) * 100, 1)
+
+            st.markdown(f"### Source {idx} - Similarity: {similarity_percentage}%")
+
+            citation = result.get('citation', 'N/A')
+            if citation and citation != 'N/A':
+                st.markdown(f"**Citation:** {citation}")
+
+            jurisdiction = result.get('jurisdiction', 'N/A')
+            if jurisdiction and jurisdiction != 'N/A':
+                st.markdown(f"**Jurisdiction:** {jurisdiction}")
+
+            section = result.get('section_number', '')
+            if section:
+                st.markdown(f"**Section:** {section}")
+
+            source_file = result.get('source_file', 'N/A')
+            if source_file and source_file != 'N/A':
+                st.markdown(f"**Source File:** {source_file}")
+
+            st.markdown("**Content:**")
+            text_content = result.get('text', 'No content available')
+            st.markdown(f"```\n{text_content}\n```")
+
+            if idx < source_count:
+                st.markdown("---")
+
 def show_legal_assistant_content():
     """Display legal assistant chat interface content (without chat input)"""
     # Initialize chat history
@@ -763,6 +801,10 @@ def show_legal_assistant_content():
             avatar = "USER" if message["role"] == "user" else "AI"
             with st.chat_message(message["role"]):
                 st.markdown(message["content"])
+
+                # Display RAG sources for assistant messages
+                if message["role"] == "assistant" and "rag_sources" in message:
+                    display_rag_sources(message["rag_sources"])
 
 def handle_chat_input(prompt):
     """Handle chat input and generate response"""
@@ -852,7 +894,10 @@ def handle_chat_input(prompt):
             
             # Display response
             st.markdown(ai_response_text)
-            
+
+            # Display RAG sources in expander
+            display_rag_sources(search_results)
+
             # Display itemized token info with model information
             model_short = "GPT-5" if selected_model == "GPT-5" else "Sonar-RP"
             if selected_model == "Sonar Reasoning Pro (RAG Only)":
@@ -862,8 +907,12 @@ def handle_chat_input(prompt):
             else:
                 st.caption(f"🔢 Input: {input_tokens:,} | Output: {output_tokens:,} | Reasoning: {reasoning_tokens:,} | Total: {total_tokens:,} | 🧠 Model: {model_short} | Effort: {reasoning_effort.upper()}")
     
-    # Add assistant response to chat history
-    st.session_state.messages.append({"role": "assistant", "content": ai_response_text})
+    # Add assistant response to chat history with RAG sources
+    st.session_state.messages.append({
+        "role": "assistant",
+        "content": ai_response_text,
+        "rag_sources": search_results if search_results else []
+    })
     
     # Step 4: Independent Fact-Checking (separate message)
     with st.chat_message("assistant"):
