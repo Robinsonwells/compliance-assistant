@@ -748,6 +748,37 @@ def show_legal_assistant_content():
             with st.chat_message(message["role"]):
                 st.markdown(message["content"])
 
+                # Display retrieved chunks in expander for assistant responses
+                if message["role"] == "assistant" and message.get("chunks"):
+                    chunks = message["chunks"]
+
+                    # Calculate average relevance score
+                    avg_score = sum(chunk.get('score', 0) for chunk in chunks) / len(chunks) if chunks else 0
+
+                    with st.expander(f"📚 View {len(chunks)} Retrieved Legal Sources (Avg Relevance: {avg_score:.1%})", expanded=False):
+                        for i, chunk in enumerate(chunks, 1):
+                            # Display chunk citation as header
+                            st.markdown(f"### Source {i}: {chunk.get('citation', 'Unknown')}")
+
+                            # Display relevance score with visual indicator
+                            score = chunk.get('score', 0)
+                            score_color = "🟢" if score >= 0.8 else "🟡" if score >= 0.6 else "🟠"
+                            st.markdown(f"{score_color} **Relevance Score:** {score:.1%}")
+
+                            # Display metadata
+                            st.markdown(f"**Jurisdiction:** {chunk.get('jurisdiction', 'Unknown')} | **Section:** {chunk.get('section_number', 'Unknown')}")
+
+                            if chunk.get('source_file'):
+                                st.markdown(f"**Source File:** {chunk.get('source_file')}")
+
+                            # Display chunk text content
+                            st.markdown("**Content:**")
+                            st.markdown(f"> {chunk.get('text', 'No content available')}")
+
+                            # Add separator between chunks
+                            if i < len(chunks):
+                                st.divider()
+
 def handle_chat_input(prompt):
     """Handle chat input and generate response"""
     # Ensure session_id exists
@@ -806,7 +837,11 @@ def handle_chat_input(prompt):
             # Step 2: Search legal database
             status_placeholder.info("🔍 Searching legal database...")
             search_results = search_legal_database(prompt)
-            
+
+            # Sort search results by relevance score (highest first)
+            if search_results:
+                search_results = sorted(search_results, key=lambda x: x.get('score', 0), reverse=True)
+
             # Show search results count
             if search_results:
                 status_placeholder.success(f"📚 Found {len(search_results)} relevant legal sources")
@@ -845,9 +880,42 @@ def handle_chat_input(prompt):
                 st.caption(f"🔢 Input: {input_tokens:,} | Output: {output_tokens:,} | Total: {total_tokens:,} | 🧠 Model: {model_short} | Effort: {effort_with_source} | *Cost estimate based on GPT-5 pricing")
             else:
                 st.caption(f"🔢 Input: {input_tokens:,} | Output: {output_tokens:,} | Reasoning: {reasoning_tokens:,} | Total: {total_tokens:,} | 🧠 Model: {model_short} | Effort: {reasoning_effort.upper()}")
+
+            # Display retrieved chunks in expander
+            if search_results:
+                # Calculate average relevance score
+                avg_score = sum(chunk.get('score', 0) for chunk in search_results) / len(search_results)
+
+                with st.expander(f"📚 View {len(search_results)} Retrieved Legal Sources (Avg Relevance: {avg_score:.1%})", expanded=False):
+                    for i, chunk in enumerate(search_results, 1):
+                        # Display chunk citation as header
+                        st.markdown(f"### Source {i}: {chunk.get('citation', 'Unknown')}")
+
+                        # Display relevance score with visual indicator
+                        score = chunk.get('score', 0)
+                        score_color = "🟢" if score >= 0.8 else "🟡" if score >= 0.6 else "🟠"
+                        st.markdown(f"{score_color} **Relevance Score:** {score:.1%}")
+
+                        # Display metadata
+                        st.markdown(f"**Jurisdiction:** {chunk.get('jurisdiction', 'Unknown')} | **Section:** {chunk.get('section_number', 'Unknown')}")
+
+                        if chunk.get('source_file'):
+                            st.markdown(f"**Source File:** {chunk.get('source_file')}")
+
+                        # Display chunk text content
+                        st.markdown("**Content:**")
+                        st.markdown(f"> {chunk.get('text', 'No content available')}")
+
+                        # Add separator between chunks
+                        if i < len(search_results):
+                            st.divider()
     
-    # Add assistant response to chat history
-    st.session_state.messages.append({"role": "assistant", "content": ai_response_text})
+    # Add assistant response to chat history with chunks
+    st.session_state.messages.append({
+        "role": "assistant",
+        "content": ai_response_text,
+        "chunks": search_results if search_results else []
+    })
     
     # Step 4: Independent Fact-Checking (separate message)
     with st.chat_message("assistant"):
