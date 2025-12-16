@@ -799,6 +799,42 @@ def show_main_application():
     # Add visual separator
     st.markdown("<hr style='margin: 16px 0; border: none; border-top: 1px solid var(--border-light);'>", unsafe_allow_html=True)
 
+    # Reasoning Effort Selector - visible on main chat UI
+    col1, col2 = st.columns([3, 1])
+    with col1:
+        st.markdown("**AI Reasoning Effort:**")
+    with col2:
+        # Initialize user effort preference in session state
+        if 'user_effort_preference' not in st.session_state:
+            st.session_state.user_effort_preference = 'automatic'
+
+        # Get admin default for display
+        admin_default = st.session_state.settings_cache.get('default_reasoning_effort', 'automatic')
+
+        # Create selectbox with clear labels
+        effort_options = {
+            'automatic': f'Automatic (Admin: {admin_default.title()})',
+            'medium': 'Medium',
+            'high': 'High'
+        }
+
+        selected_effort = st.selectbox(
+            "Select Effort",
+            options=list(effort_options.keys()),
+            format_func=lambda x: effort_options[x],
+            key='effort_selector',
+            label_visibility='collapsed'
+        )
+
+        # Update session state
+        st.session_state.user_effort_preference = selected_effort
+
+    # Add brief explanation
+    st.caption("🧠 **Medium:** Balanced reasoning • 🔬 **High:** Deep analysis (slower, more thorough)")
+
+    # Add visual separator
+    st.markdown("<hr style='margin: 16px 0; border: none; border-top: 1px solid var(--border-light);'>", unsafe_allow_html=True)
+
     # Debug sidebar for production troubleshooting
     if st.sidebar.checkbox("🔧 Debug Mode", key="debug_mode_toggle"):
         st.sidebar.markdown("---")
@@ -917,22 +953,24 @@ def handle_chat_input(prompt):
         status_placeholder = st.empty()
 
         with st.spinner("Processing your legal query..."):
-            # Step 1: Determine reasoning effort based on global setting
-            global_effort_setting = st.session_state.settings_cache.get('default_reasoning_effort', 'automatic')
-            reasoning_effort_source = "Admin"
+            # Step 1: Determine reasoning effort based on user preference (overrides admin setting)
+            user_effort_preference = st.session_state.get('user_effort_preference', 'automatic')
+            reasoning_effort_source = "User"
 
-            if global_effort_setting == 'automatic':
+            if user_effort_preference == 'automatic':
+                # Use automatic classification
                 reasoning_effort_source = "Auto"
                 if selected_model == "GPT-5":
-                    status_placeholder.info("Choosing reasoning effort...")
+                    status_placeholder.info("Choosing reasoning effort automatically...")
                     reasoning_effort = classify_reasoning_effort_with_gpt4o_mini(prompt)
                 else:
                     status_placeholder.info("Calculating complexity score...")
                     complexity_score, _ = calculate_complexity_score(prompt)
                     reasoning_effort = get_reasoning_effort(complexity_score)
             else:
-                reasoning_effort = global_effort_setting
-                status_placeholder.info(f"Using admin-configured reasoning effort: {global_effort_setting}...")
+                # Use user's explicit choice (medium or high)
+                reasoning_effort = user_effort_preference
+                status_placeholder.info(f"Using your selected reasoning effort: {user_effort_preference}...")
             
             # Show determined effort level
             effort_emoji = {"medium": "🧠", "high": "🔬"}
