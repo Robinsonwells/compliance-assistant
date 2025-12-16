@@ -1,6 +1,7 @@
 import torch  # Initialize PyTorch early to prevent torch.classes errors
 import streamlit as st
 from user_management import UserManager
+from settings_manager import SettingsManager
 from datetime import datetime
 from dotenv import load_dotenv
 import os
@@ -107,32 +108,36 @@ def init_admin_systems():
     try:
         # Initialize user management
         user_manager = UserManager()
-        
+
+        # Initialize settings management
+        settings_manager = SettingsManager()
+        settings_manager.initialize_default_settings()
+
         # Initialize chunker
         openai_api_key = os.getenv("OPENAI_API_KEY")
         if not openai_api_key:
             st.error("OPENAI_API_KEY environment variable is not set")
             st.stop()
         chunker = LegalSemanticChunker(openai_api_key)
-        
+
         # Initialize local embedding model
         embedding_model = SentenceTransformer('all-MiniLM-L6-v2')
-        
+
         # Initialize Qdrant client
         qdrant_url = os.getenv("QDRANT_URL")
         qdrant_api_key = os.getenv("QDRANT_API_KEY")
-        
+
         if not qdrant_url or not qdrant_api_key:
             st.error("QDRANT_URL and QDRANT_API_KEY environment variables must be set")
             st.stop()
-        
+
         client = QdrantClient(
             url=qdrant_url,
             api_key=qdrant_api_key,
         )
-        
+
         collection_name = "legal_regulations"
-        
+
         # Create collection if it doesn't exist
         try:
             client.get_collection(collection_name)
@@ -141,7 +146,7 @@ def init_admin_systems():
                 collection_name=collection_name,
                 vectors_config=VectorParams(size=384, distance=Distance.COSINE)
             )
-        
+
         # Always ensure payload index for source_file field exists
         try:
             client.create_payload_index(
@@ -153,7 +158,7 @@ def init_admin_systems():
             # Index might already exist, which is fine
             if "already exists" not in str(e).lower():
                 print(f"Warning: Could not create payload index: {e}")
-        
+
         # Ensure payload index for content_hash field exists
         try:
             client.create_payload_index(
@@ -165,9 +170,9 @@ def init_admin_systems():
             # Index might already exist, which is fine
             if "already exists" not in str(e).lower():
                 print(f"Warning: Could not create content_hash payload index: {e}")
-        
-        return user_manager, chunker, client, embedding_model
-        
+
+        return user_manager, settings_manager, chunker, client, embedding_model
+
     except Exception as e:
         st.error(f"❌ System initialization failed: {str(e)}")
         st.error("Please check your environment variables and try refreshing the page.")
@@ -392,8 +397,8 @@ def main():
                 st.session_state.admin_authenticated = False
                 st.rerun()
 
-        um, chunker, coll, embedding_model = init_admin_systems()
-        tab1, tab2 = st.tabs(["👥 Users", "📚 Knowledge Base"])
+        um, sm, chunker, coll, embedding_model = init_admin_systems()
+        tab1, tab2, tab3 = st.tabs(["👥 Users", "📚 Knowledge Base", "⚙️ Settings"])
 
         with tab1:
             st.markdown("### 👥 User Management")
@@ -666,7 +671,82 @@ def main():
             except Exception as e:
                 st.error(f"❌ Error loading file information: {str(e)}")
                 st.info("Database connection may be temporarily unavailable. Please refresh the page.")
-                
+
+        with tab3:
+            st.markdown("### ⚙️ System Settings")
+            st.markdown("Configure system-wide behavior and features.")
+
+            st.markdown("---")
+            st.markdown("#### 🎨 Display Settings")
+
+            try:
+                # Get current setting value
+                current_value = sm.get_setting('show_rag_chunks', 'true')
+                current_enabled = current_value.lower() == 'true'
+
+                # Get setting details for metadata
+                setting_details = sm.get_setting_details('show_rag_chunks')
+                if setting_details and setting_details.get('updated_at'):
+                    last_updated = setting_details['updated_at']
+                    st.caption(f"Last updated: {last_updated[:19].replace('T', ' ')}")
+
+                st.markdown("##### Show RAG Chunks in Responses")
+                st.markdown("""
+                When enabled, users will see an expandable section displaying the retrieved legal sources
+                (RAG chunks) under each AI response. This helps users verify the sources and understand
+                what information the AI used to formulate its answer.
+                """)
+
+                col1, col2 = st.columns([3, 1])
+
+                with col1:
+                    show_chunks = st.checkbox(
+                        "Display retrieved chunks to users",
+                        value=current_enabled,
+                        key="show_rag_chunks_toggle",
+                        help="Toggle to show or hide the RAG chunks section in user responses"
+                    )
+
+                with col2:
+                    if st.button("💾 Save Setting", type="primary", use_container_width=True):
+                        try:
+                            new_value = 'true' if show_chunks else 'false'
+                            success = sm.update_setting('show_rag_chunks', new_value)
+
+                            if success:
+                                st.success("✅ Setting saved successfully!")
+                                sm.clear_cache()  # Clear cache to ensure immediate effect
+                                time.sleep(1)
+                                st.rerun()
+                            else:
+                                st.error("❌ Failed to save setting")
+                        except Exception as e:
+                            st.error(f"❌ Error saving setting: {str(e)}")
+                            st.info("Please try again or contact your system administrator.")
+
+                st.markdown("---")
+
+                # Display current status
+                status_col1, status_col2 = st.columns(2)
+                with status_col1:
+                    st.metric(
+                        "Current Status",
+                        "Enabled" if current_enabled else "Disabled",
+                        delta="Active" if current_enabled else "Inactive"
+                    )
+                with status_col2:
+                    st.metric(
+                        "Affects",
+                        "All Users",
+                        help="This setting applies to all users system-wide"
+                    )
+
+                st.info("💡 **Tip:** Disabling this option will hide the technical details from users while still using RAG to generate accurate responses.")
+
+            except Exception as e:
+                st.error(f"❌ Error loading settings: {str(e)}")
+                st.info("Please refresh the page or contact your system administrator.")
+
     except Exception as e:
         st.error(f"🚨 Critical application error: {str(e)}")
         st.error("Your session remains active, but some features may be unavailable.")

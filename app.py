@@ -43,6 +43,7 @@ COST_PER_TOKEN = {
 
 # Import custom modules
 from user_management import UserManager
+from settings_manager import SettingsManager
 from system_prompts import LEGAL_COMPLIANCE_SYSTEM_PROMPT
 from chat_logger import ChatLogger
 
@@ -81,10 +82,13 @@ try:
     
     # Initialize user manager
     user_manager = UserManager()
-    
+
     # Initialize chat logger
     chat_logger = ChatLogger()
-    
+
+    # Initialize settings manager
+    settings_manager = SettingsManager()
+
 except Exception as e:
     st.error(f"Failed to initialize components: {e}")
     st.stop()
@@ -749,7 +753,10 @@ def show_legal_assistant_content():
                 st.markdown(message["content"])
 
                 # Display retrieved chunks in expander for assistant responses
-                if message["role"] == "assistant" and message.get("chunks"):
+                # Check if showing chunks is enabled in settings
+                show_chunks_enabled = settings_manager.get_setting('show_rag_chunks', 'true').lower() == 'true'
+
+                if show_chunks_enabled and message["role"] == "assistant" and message.get("chunks"):
                     chunks = message["chunks"]
 
                     # Calculate average relevance score
@@ -882,7 +889,10 @@ def handle_chat_input(prompt):
                 st.caption(f"🔢 Input: {input_tokens:,} | Output: {output_tokens:,} | Reasoning: {reasoning_tokens:,} | Total: {total_tokens:,} | 🧠 Model: {model_short} | Effort: {reasoning_effort.upper()}")
 
             # Display retrieved chunks in expander
-            if search_results:
+            # Check if showing chunks is enabled in settings
+            show_chunks_enabled = settings_manager.get_setting('show_rag_chunks', 'true').lower() == 'true'
+
+            if show_chunks_enabled and search_results:
                 # Calculate average relevance score
                 avg_score = sum(chunk.get('score', 0) for chunk in search_results) / len(search_results)
 
@@ -910,12 +920,17 @@ def handle_chat_input(prompt):
                         if i < len(search_results):
                             st.divider()
     
-    # Add assistant response to chat history with chunks
-    st.session_state.messages.append({
+    # Add assistant response to chat history with chunks (only if setting is enabled)
+    show_chunks_enabled = settings_manager.get_setting('show_rag_chunks', 'true').lower() == 'true'
+    message_data = {
         "role": "assistant",
-        "content": ai_response_text,
-        "chunks": search_results if search_results else []
-    })
+        "content": ai_response_text
+    }
+    # Only include chunks in message history if the setting is enabled
+    if show_chunks_enabled:
+        message_data["chunks"] = search_results if search_results else []
+
+    st.session_state.messages.append(message_data)
     
     # Step 4: Independent Fact-Checking (separate message)
     with st.chat_message("assistant"):
