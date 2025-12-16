@@ -673,96 +673,100 @@ def main():
                 st.info("Database connection may be temporarily unavailable. Please refresh the page.")
 
         with tab3:
-            st.markdown("### ⚙️ System Settings")
+            st.markdown("### System Settings")
             st.markdown("Configure system-wide behavior and features.")
 
             st.markdown("---")
-            st.markdown("#### 🎨 Display Settings")
+            st.markdown("#### Display Settings")
+
+            settings_error = None
+            current_enabled = True
+            setting_details = None
 
             try:
-                # Get current setting value
-                current_value = sm.get_setting('show_rag_chunks', 'true')
-                current_enabled = current_value.lower() == 'true'
-
-                # Get setting details for metadata
-                setting_details = sm.get_setting_details('show_rag_chunks')
-                if setting_details and setting_details.get('updated_at'):
-                    last_updated = setting_details['updated_at']
-                    st.caption(f"Last updated: {last_updated[:19].replace('T', ' ')}")
-
-                st.markdown("##### Show RAG Chunks in Responses")
-                st.markdown("""
-                When enabled, users will see an expandable section displaying the retrieved legal sources
-                (RAG chunks) under each AI response. This helps users verify the sources and understand
-                what information the AI used to formulate its answer.
-                """)
-
-                col1, col2 = st.columns([3, 1])
-
-                with col1:
-                    show_chunks = st.checkbox(
-                        "Display retrieved chunks to users",
-                        value=current_enabled,
-                        key="show_rag_chunks_toggle",
-                        help="Toggle to show or hide the RAG chunks section in user responses"
-                    )
-
-                with col2:
-                    if st.button("💾 Save Setting", type="primary", use_container_width=True):
-                        try:
-                            new_value = 'true' if show_chunks else 'false'
-                            success = sm.update_setting('show_rag_chunks', new_value)
-
-                            if success:
-                                # Step 1: Clear global SettingsManager cache (affects NEW sessions immediately)
-                                sm.clear_cache()
-
-                                # Step 2: Clear admin's session cache (affects current admin session)
-                                # Force re-initialization by deleting the cache entirely
-                                if 'settings_cache' in st.session_state:
-                                    del st.session_state['settings_cache']
-
-                                st.success("✅ Setting saved successfully!")
-
-                                # Step 3: Verify the setting was actually saved
-                                saved_value = sm.get_setting('show_rag_chunks', 'true')
-                                if (saved_value == 'true') == show_chunks:
-                                    st.success("✅ Setting verified in database!")
-                                else:
-                                    st.warning("⚠️ Setting saved but verification failed")
-
-                                st.info("ℹ️ **Note:** Existing user sessions will see changes on their next page refresh (Streamlit limitation)")
-
-                                time.sleep(1.5)
-                                st.rerun()
-                            else:
-                                st.error("❌ Failed to save setting to database")
-                        except Exception as e:
-                            st.error(f"❌ Error saving setting: {str(e)}")
-                            st.info("Please try again or contact your system administrator.")
-
-                st.markdown("---")
-
-                # Display current status
-                status_col1, status_col2 = st.columns(2)
-                with status_col1:
-                    st.metric(
-                        "Current Status",
-                        "Enabled" if current_enabled else "Disabled",
-                        delta="Active" if current_enabled else "Inactive"
-                    )
-                with status_col2:
-                    st.metric(
-                        "Affects",
-                        "All Users",
-                        help="This setting applies to all users system-wide"
-                    )
-
-                st.info("💡 **Tip:** Disabling this option will hide the technical details from users while still using RAG to generate accurate responses.")
-
+                if sm is None:
+                    settings_error = "Settings manager not initialized"
+                else:
+                    current_value = sm.get_setting('show_rag_chunks', 'true')
+                    current_enabled = current_value.lower() == 'true'
+                    setting_details = sm.get_setting_details('show_rag_chunks')
             except Exception as e:
-                st.error(f"❌ Error loading settings: {str(e)}")
-                st.info("Please refresh the page or contact your system administrator.")
+                settings_error = str(e)
+
+            if settings_error:
+                st.warning(f"Settings database unavailable: {settings_error}")
+                st.info("Using default values. Changes cannot be saved until connection is restored.")
+
+            if setting_details and setting_details.get('updated_at'):
+                last_updated = setting_details['updated_at']
+                st.caption(f"Last updated: {last_updated[:19].replace('T', ' ')}")
+
+            st.markdown("##### Show RAG Chunks in Responses")
+            st.markdown("""
+            When enabled, users will see an expandable section displaying the retrieved legal sources
+            (RAG chunks) under each AI response. This helps users verify the sources and understand
+            what information the AI used to formulate its answer.
+            """)
+
+            col1, col2 = st.columns([3, 1])
+
+            with col1:
+                show_chunks = st.checkbox(
+                    "Display retrieved chunks to users",
+                    value=current_enabled,
+                    key="show_rag_chunks_toggle",
+                    help="Toggle to show or hide the RAG chunks section in user responses",
+                    disabled=settings_error is not None
+                )
+
+            with col2:
+                save_disabled = settings_error is not None
+                if st.button("Save Setting", type="primary", use_container_width=True, disabled=save_disabled):
+                    try:
+                        new_value = 'true' if show_chunks else 'false'
+                        success = sm.update_setting('show_rag_chunks', new_value)
+
+                        if success:
+                            sm.clear_cache()
+
+                            if 'settings_cache' in st.session_state:
+                                del st.session_state['settings_cache']
+
+                            st.success("Setting saved successfully!")
+
+                            saved_value = sm.get_setting('show_rag_chunks', 'true')
+                            if (saved_value == 'true') == show_chunks:
+                                st.success("Setting verified in database!")
+                            else:
+                                st.warning("Setting saved but verification failed")
+
+                            st.info("Note: Existing user sessions will see changes on their next page refresh")
+
+                            time.sleep(1.5)
+                            st.rerun()
+                        else:
+                            st.error("Failed to save setting to database")
+                    except Exception as e:
+                        st.error(f"Error saving setting: {str(e)}")
+                        st.info("Please try again or contact your system administrator.")
+
+            st.markdown("---")
+
+            status_col1, status_col2 = st.columns(2)
+            with status_col1:
+                st.metric(
+                    "Current Status",
+                    "Enabled" if current_enabled else "Disabled",
+                    delta="Active" if current_enabled else "Inactive"
+                )
+            with status_col2:
+                st.metric(
+                    "Affects",
+                    "All Users",
+                    help="This setting applies to all users system-wide"
+                )
+
+            st.info("Tip: Disabling this option will hide the technical details from users while still using RAG to generate accurate responses.")
 
     except Exception as e:
         st.error(f"🚨 Critical application error: {str(e)}")
