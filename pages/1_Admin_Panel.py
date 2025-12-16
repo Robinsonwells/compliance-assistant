@@ -1,17 +1,10 @@
-import torch  # Initialize PyTorch early to prevent torch.classes errors
 import streamlit as st
-from user_management import UserManager
-from settings_manager import SettingsManager
 from datetime import datetime
 from dotenv import load_dotenv
 import os
 import re
 import uuid
 import hashlib
-from sentence_transformers import SentenceTransformer
-from qdrant_client import QdrantClient
-from qdrant_client.models import Distance, VectorParams, PointStruct, Filter, FieldCondition, MatchValue
-from advanced_chunking import LegalSemanticChunker, extract_pdf_text, extract_docx_text
 import time
 
 # Load custom CSS
@@ -24,8 +17,8 @@ def load_css():
 
 def delete_file_chunks(qdrant_client, source_file: str) -> tuple[bool, str]:
     """Delete all chunks associated with a specific source file"""
+    from qdrant_client.models import Filter, FieldCondition, MatchValue
     try:
-        # First, get all points with this source file to count them
         scroll_result = qdrant_client.scroll(
             collection_name="legal_regulations",
             scroll_filter=Filter(
@@ -36,18 +29,17 @@ def delete_file_chunks(qdrant_client, source_file: str) -> tuple[bool, str]:
                     )
                 ]
             ),
-            limit=10000,  # Large limit to get all matching points
+            limit=10000,
             with_payload=False,
             with_vectors=False
         )
-        
+
         points = scroll_result[0]
         count = len(points)
-        
+
         if count == 0:
             return False, "No chunks found for this file"
-        
-        # Delete all points with this source file
+
         qdrant_client.delete(
             collection_name="legal_regulations",
             points_selector=Filter(
@@ -59,7 +51,7 @@ def delete_file_chunks(qdrant_client, source_file: str) -> tuple[bool, str]:
                 ]
             )
         )
-        
+
         return True, f"Deleted {count} chunks"
     except Exception as e:
         return False, str(e)
@@ -103,81 +95,77 @@ st.set_page_config(page_title="Admin Panel", page_icon="👨‍💼", layout="wi
 load_css()
 
 @st.cache_resource
-def init_admin_systems():
-    """Initialize admin systems with caching to improve performance"""
+def init_user_management():
+    """Initialize user management (lightweight - Supabase only)"""
+    from user_management import UserManager
+    return UserManager()
+
+@st.cache_resource
+def init_settings():
+    """Initialize settings management (lightweight - Supabase only)"""
+    from settings_manager import SettingsManager
+    sm = SettingsManager()
+    sm.initialize_default_settings()
+    return sm
+
+@st.cache_resource
+def init_knowledge_base():
+    """Initialize knowledge base systems (heavy - ML models and vector DB)"""
+    import torch
+    from sentence_transformers import SentenceTransformer
+    from qdrant_client import QdrantClient
+    from qdrant_client.models import Distance, VectorParams
+    from advanced_chunking import LegalSemanticChunker
+
+    openai_api_key = os.getenv("OPENAI_API_KEY")
+    if not openai_api_key:
+        raise ValueError("OPENAI_API_KEY environment variable is not set")
+    chunker = LegalSemanticChunker(openai_api_key)
+
+    embedding_model = SentenceTransformer('all-MiniLM-L6-v2')
+
+    qdrant_url = os.getenv("QDRANT_URL")
+    qdrant_api_key = os.getenv("QDRANT_API_KEY")
+
+    if not qdrant_url or not qdrant_api_key:
+        raise ValueError("QDRANT_URL and QDRANT_API_KEY environment variables must be set")
+
+    client = QdrantClient(
+        url=qdrant_url,
+        api_key=qdrant_api_key,
+    )
+
+    collection_name = "legal_regulations"
+
     try:
-        # Initialize user management
-        user_manager = UserManager()
-
-        # Initialize settings management
-        settings_manager = SettingsManager()
-        settings_manager.initialize_default_settings()
-
-        # Initialize chunker
-        openai_api_key = os.getenv("OPENAI_API_KEY")
-        if not openai_api_key:
-            st.error("OPENAI_API_KEY environment variable is not set")
-            st.stop()
-        chunker = LegalSemanticChunker(openai_api_key)
-
-        # Initialize local embedding model
-        embedding_model = SentenceTransformer('all-MiniLM-L6-v2')
-
-        # Initialize Qdrant client
-        qdrant_url = os.getenv("QDRANT_URL")
-        qdrant_api_key = os.getenv("QDRANT_API_KEY")
-
-        if not qdrant_url or not qdrant_api_key:
-            st.error("QDRANT_URL and QDRANT_API_KEY environment variables must be set")
-            st.stop()
-
-        client = QdrantClient(
-            url=qdrant_url,
-            api_key=qdrant_api_key,
+        client.get_collection(collection_name)
+    except Exception:
+        client.create_collection(
+            collection_name=collection_name,
+            vectors_config=VectorParams(size=384, distance=Distance.COSINE)
         )
 
-        collection_name = "legal_regulations"
-
-        # Create collection if it doesn't exist
-        try:
-            client.get_collection(collection_name)
-        except Exception:
-            client.create_collection(
-                collection_name=collection_name,
-                vectors_config=VectorParams(size=384, distance=Distance.COSINE)
-            )
-
-        # Always ensure payload index for source_file field exists
-        try:
-            client.create_payload_index(
-                collection_name=collection_name,
-                field_name="source_file",
-                field_schema="keyword"
-            )
-        except Exception as e:
-            # Index might already exist, which is fine
-            if "already exists" not in str(e).lower():
-                print(f"Warning: Could not create payload index: {e}")
-
-        # Ensure payload index for content_hash field exists
-        try:
-            client.create_payload_index(
-                collection_name=collection_name,
-                field_name="content_hash",
-                field_schema="keyword"
-            )
-        except Exception as e:
-            # Index might already exist, which is fine
-            if "already exists" not in str(e).lower():
-                print(f"Warning: Could not create content_hash payload index: {e}")
-
-        return user_manager, settings_manager, chunker, client, embedding_model
-
+    try:
+        client.create_payload_index(
+            collection_name=collection_name,
+            field_name="source_file",
+            field_schema="keyword"
+        )
     except Exception as e:
-        st.error(f"❌ System initialization failed: {str(e)}")
-        st.error("Please check your environment variables and try refreshing the page.")
-        st.info("If the problem persists, contact your system administrator.")
-        st.stop()
+        if "already exists" not in str(e).lower():
+            print(f"Warning: Could not create payload index: {e}")
+
+    try:
+        client.create_payload_index(
+            collection_name=collection_name,
+            field_name="content_hash",
+            field_schema="keyword"
+        )
+    except Exception as e:
+        if "already exists" not in str(e).lower():
+            print(f"Warning: Could not create content_hash payload index: {e}")
+
+    return chunker, client, embedding_model
 
 def admin_login():
     if 'admin_authenticated' not in st.session_state:
@@ -218,18 +206,17 @@ def admin_login():
 
 def process_uploaded_file(uploaded_file, chunker, qdrant_client, embedding_model, progress_bar=None, status_text=None):
     """Process uploaded file with progress tracking and idempotency"""
+    from qdrant_client.models import PointStruct, Filter, FieldCondition, MatchValue
+    from advanced_chunking import extract_pdf_text, extract_docx_text
     try:
-        # Read file content once and calculate hash for idempotency
         file_content = uploaded_file.read()
         content_hash = hashlib.md5(file_content).hexdigest()
-        
-        # Reset file pointer for text extraction
+
         uploaded_file.seek(0)
-        
+
         if status_text:
-            status_text.info(f"🔍 Checking if {uploaded_file.name} has already been processed...")
-        
-        # Check if this exact file content has already been processed
+            status_text.info(f"Checking if {uploaded_file.name} has already been processed...")
+
         try:
             existing_check = qdrant_client.scroll(
                 collection_name="legal_regulations",
@@ -393,18 +380,23 @@ def main():
                 toggle_admin_theme()
                 st.rerun()
         with logout_col:
-            if st.button("🚪 Logout"):
+            if st.button("Logout"):
                 st.session_state.admin_authenticated = False
                 st.rerun()
 
-        um, sm, chunker, coll, embedding_model = init_admin_systems()
-        tab1, tab2, tab3 = st.tabs(["👥 Users", "📚 Knowledge Base", "⚙️ Settings"])
+        tab1, tab2, tab3 = st.tabs(["Users", "Knowledge Base", "Settings"])
 
         with tab1:
-            st.markdown("### 👥 User Management")
+            st.markdown("### User Management")
+            try:
+                um = init_user_management()
+            except Exception as e:
+                st.error(f"Failed to initialize user management: {str(e)}")
+                st.stop()
+
             left, right = st.columns(2)
             with left:
-                st.markdown("#### ➕ Create New Access Code")
+                st.markdown("#### Create New Access Code")
                 with st.form("add_u"):
                     name = st.text_input("Client/Company *")
                     email = st.text_input("Email (optional)")
@@ -419,10 +411,10 @@ def main():
                             else:
                                 st.error("Name required")
                         except Exception as e:
-                            st.error(f"❌ Error creating user: {str(e)}")
+                            st.error(f"Error creating user: {str(e)}")
                             st.info("Please try again or contact your system administrator.")
             with right:
-                st.markdown("#### 👥 Active Users")
+                st.markdown("#### Active Users")
                 try:
                     users = um.get_all_users()
                     if users:
@@ -459,7 +451,26 @@ def main():
                     st.info("Please refresh the page or contact your system administrator.")
 
         with tab2:
-            st.markdown("### 📚 Knowledge Base Management")
+            st.markdown("### Knowledge Base Management")
+            from qdrant_client.models import Filter, FieldCondition, MatchValue
+
+            if 'kb_initialized' not in st.session_state:
+                st.session_state.kb_initialized = False
+                st.session_state.kb_resources = None
+
+            if not st.session_state.kb_initialized:
+                with st.spinner("Loading Knowledge Base systems (ML models and vector database)..."):
+                    try:
+                        chunker, coll, embedding_model = init_knowledge_base()
+                        st.session_state.kb_resources = (chunker, coll, embedding_model)
+                        st.session_state.kb_initialized = True
+                    except Exception as e:
+                        st.error(f"Failed to initialize Knowledge Base: {str(e)}")
+                        st.info("Please check your environment variables and refresh the page.")
+                        st.stop()
+            else:
+                chunker, coll, embedding_model = st.session_state.kb_resources
+
             try:
                 collection_info = coll.get_collection("legal_regulations")
                 total = collection_info.points_count
@@ -468,35 +479,33 @@ def main():
                 m2.metric("Jurisdictions", "NY,NJ,CT")
                 m3.metric("Status", "Active" if total > 0 else "Empty")
             except Exception as e:
-                st.warning(f"⚠️ Could not load database info: {str(e)}")
+                st.warning(f"Could not load database info: {str(e)}")
                 st.info("Database connection may be temporarily unavailable.")
 
             st.markdown("---")
-            st.markdown("#### 📄 Document Upload")
+            st.markdown("#### Document Upload")
             uploads = st.file_uploader("Upload documents", accept_multiple_files=True, type=['pdf','docx','txt'])
-            
-            if uploads and st.button("🚀 Process All Documents"):
+
+            if uploads and st.button("Process All Documents"):
                 try:
-                    with st.status("🔄 Processing documents...", expanded=True) as status:
+                    with st.status("Processing documents...", expanded=True) as status:
                         total_files = len(uploads)
                         processed_count = 0
                         skipped_count = 0
                         error_count = 0
-                        
-                        st.write(f"📋 **Processing Queue:** {total_files} files")
+
+                        st.write(f"**Processing Queue:** {total_files} files")
                         st.write("---")
-                        
+
                         for i, uploaded_file in enumerate(uploads, 1):
                             st.write(f"**File {i}/{total_files}: {uploaded_file.name}**")
-                            
-                            # Create progress bar and status text for this file
+
                             file_progress = st.progress(0)
                             file_status = st.empty()
-                            
+
                             try:
-                                # Process the file with progress tracking
                                 success, message, content_hash = process_uploaded_file(
-                                    uploaded_file, chunker, coll, embedding_model, 
+                                    uploaded_file, chunker, coll, embedding_model,
                                     progress_bar=file_progress, status_text=file_status
                                 )
                                 
@@ -676,6 +685,12 @@ def main():
             st.markdown("### System Settings")
             st.markdown("Configure system-wide behavior and features.")
 
+            try:
+                sm = init_settings()
+            except Exception as e:
+                st.error(f"Failed to initialize settings: {str(e)}")
+                st.stop()
+
             st.markdown("---")
             st.markdown("#### Display Settings")
 
@@ -684,12 +699,9 @@ def main():
             setting_details = None
 
             try:
-                if sm is None:
-                    settings_error = "Settings manager not initialized"
-                else:
-                    current_value = sm.get_setting('show_rag_chunks', 'true')
-                    current_enabled = current_value.lower() == 'true'
-                    setting_details = sm.get_setting_details('show_rag_chunks')
+                current_value = sm.get_setting('show_rag_chunks', 'true')
+                current_enabled = current_value.lower() == 'true'
+                setting_details = sm.get_setting_details('show_rag_chunks')
             except Exception as e:
                 settings_error = str(e)
 
