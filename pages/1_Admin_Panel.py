@@ -714,12 +714,25 @@ def main():
                             success = sm.update_setting('show_rag_chunks', new_value)
 
                             if success:
+                                # Step 1: Clear global SettingsManager cache (affects NEW sessions immediately)
+                                sm.clear_cache()
+
+                                # Step 2: Clear admin's session cache (affects current admin session)
+                                if 'settings_cache' in st.session_state:
+                                    st.session_state.settings_cache = {
+                                        'show_rag_chunks_enabled': show_chunks,
+                                        'initialized': True,
+                                        'load_timestamp': time.time(),
+                                        'error_count': 0
+                                    }
+
                                 st.success("✅ Setting saved successfully!")
-                                sm.clear_cache()  # Clear cache to ensure immediate effect
-                                time.sleep(1)
+                                st.info("ℹ️ **Note:** Existing user sessions will see changes on their next page refresh (Streamlit limitation)")
+
+                                time.sleep(1.5)
                                 st.rerun()
                             else:
-                                st.error("❌ Failed to save setting")
+                                st.error("❌ Failed to save setting to database")
                         except Exception as e:
                             st.error(f"❌ Error saving setting: {str(e)}")
                             st.info("Please try again or contact your system administrator.")

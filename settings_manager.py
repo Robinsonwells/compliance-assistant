@@ -41,33 +41,75 @@ class SettingsManager:
             print(f"Error refreshing settings cache: {e}")
             # Keep existing cache on error
 
-    def get_setting(self, key: str, default: str = None) -> Optional[str]:
+    def get_setting(self, key: str, default: str = 'true') -> str:
         """
-        Get a setting value by key
-        Returns the setting value or default if not found
+        Get a setting value by key, ALWAYS returns lowercase 'true' or 'false'
+        Handles: bool, int (0/1), string variants, None, corrupted data
         """
         try:
             # Check cache first
             if not self._is_cache_valid():
                 self._refresh_cache()
 
-            # Return from cache if available
+            # Get raw value from cache or database
+            raw_value = None
             if key in self._cache:
-                return self._cache[key]
+                raw_value = self._cache[key]
+            else:
+                # Fallback to direct database query
+                result = self.supabase.table('system_settings').select('setting_value').eq('setting_key', key).execute()
+                if result.data:
+                    raw_value = result.data[0]['setting_value']
+                    self._cache[key] = raw_value
 
-            # Fallback to direct database query
-            result = self.supabase.table('system_settings').select('setting_value').eq('setting_key', key).execute()
+            # Normalize value to canonical 'true' or 'false'
+            normalized = self._normalize_boolean_value(raw_value, default)
 
-            if result.data:
-                value = result.data[0]['setting_value']
-                self._cache[key] = value  # Update cache
-                return value
+            # Update cache with normalized value
+            if key in self._cache:
+                self._cache[key] = normalized
 
-            return default
+            return normalized
 
         except Exception as e:
             print(f"Error getting setting '{key}': {e}")
-            return default
+            return self._normalize_boolean_value(default, 'true')
+
+    def _normalize_boolean_value(self, value: Any, default: str = 'true') -> str:
+        """
+        Convert any value to canonical 'true' or 'false' string
+        Handles: bool, int (0/1), various string formats, None, corrupted data
+        """
+        if value is None:
+            return self._normalize_boolean_value(default, 'true')
+
+        # Handle boolean type
+        if isinstance(value, bool):
+            return 'true' if value else 'false'
+
+        # Handle integer (0/1 from some databases)
+        if isinstance(value, int):
+            return 'true' if value == 1 else 'false'
+
+        # Handle string variants
+        if isinstance(value, str):
+            value_lower = value.lower().strip()
+
+            # Truthy values
+            if value_lower in ('true', '1', 'yes', 't', 'y', 'on', 'enabled'):
+                return 'true'
+
+            # Falsy values
+            if value_lower in ('false', '0', 'no', 'f', 'n', 'off', 'disabled'):
+                return 'false'
+
+            # Corrupted/unexpected value - log warning
+            print(f"⚠️ WARNING: Unexpected setting value '{value}', using default '{default}'")
+            return self._normalize_boolean_value(default, 'true')
+
+        # Unknown type - log warning
+        print(f"⚠️ WARNING: Unknown setting type {type(value).__name__}, using default '{default}'")
+        return self._normalize_boolean_value(default, 'true')
 
     def update_setting(self, key: str, value: str) -> bool:
         """
@@ -162,3 +204,15 @@ class SettingsManager:
 
             except Exception as e:
                 print(f"Error initializing default setting '{setting['setting_key']}': {e}")
+
+        # Verify all default settings were initialized correctly
+        print("=" * 50)
+        print("📋 Settings Initialization Summary:")
+        for setting in default_settings:
+            key = setting['setting_key']
+            try:
+                current_value = self.get_setting(key, setting['setting_value'])
+                print(f"  ✅ {key}: {current_value}")
+            except Exception as e:
+                print(f"  ❌ {key}: ERROR - {e}")
+        print("=" * 50)

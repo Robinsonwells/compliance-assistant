@@ -86,8 +86,45 @@ try:
     # Initialize chat logger
     chat_logger = ChatLogger()
 
-    # Initialize settings manager
-    settings_manager = SettingsManager()
+    # Initialize settings manager with production-grade fallback
+    try:
+        settings_manager = SettingsManager()
+        settings_manager.initialize_default_settings()
+        print("✅ Settings manager initialized successfully")
+
+        # Verify settings are accessible
+        test_value = settings_manager.get_setting('show_rag_chunks', 'true')
+        print(f"✅ Settings verified: show_rag_chunks = {test_value}")
+
+    except Exception as e:
+        print(f"❌ Settings manager initialization failed: {e}")
+        print("⚠️ Using fallback settings manager - all settings will use safe defaults")
+
+        # Production-grade fallback with logging
+        class FallbackSettingsManager:
+            def __init__(self):
+                self.defaults = {
+                    'show_rag_chunks': 'true'
+                }
+                self.warned_keys = set()
+
+            def get_setting(self, key: str, default: str = 'true') -> str:
+                """Always returns safe default, logs once per key"""
+                value = self.defaults.get(key, default)
+
+                if key not in self.warned_keys:
+                    print(f"⚠️ Fallback mode: {key} = {value}")
+                    self.warned_keys.add(key)
+
+                return value
+
+            def clear_cache(self):
+                pass  # No-op in fallback mode
+
+            def initialize_default_settings(self):
+                pass  # No-op in fallback mode
+
+        settings_manager = FallbackSettingsManager()
 
 except Exception as e:
     st.error(f"Failed to initialize components: {e}")
@@ -646,7 +683,32 @@ def main():
     
     # Update session activity
     user_manager.update_session_activity(st.session_state.session_id)
-    
+
+    # Initialize settings cache in session state (once per session only)
+    if 'settings_cache' not in st.session_state:
+        st.session_state.settings_cache = {
+            'show_rag_chunks_enabled': True,  # Safe default
+            'initialized': False,
+            'load_timestamp': None,
+            'error_count': 0
+        }
+
+    # Load settings from database ONCE per session (not on every interaction)
+    if not st.session_state.settings_cache['initialized']:
+        try:
+            raw_value = settings_manager.get_setting('show_rag_chunks', 'true')
+            st.session_state.settings_cache['show_rag_chunks_enabled'] = (raw_value == 'true')
+            st.session_state.settings_cache['initialized'] = True
+            st.session_state.settings_cache['load_timestamp'] = None  # Will be set if needed for debugging
+            print(f"✅ Settings loaded: show_rag_chunks = {raw_value}")
+        except Exception as e:
+            st.session_state.settings_cache['error_count'] += 1
+            print(f"⚠️ Error loading settings (attempt {st.session_state.settings_cache['error_count']}): {e}")
+            # Keep default True, mark as initialized to prevent retry spam
+            if st.session_state.settings_cache['error_count'] >= 3:
+                st.session_state.settings_cache['initialized'] = True
+                print("⚠️ Max retries reached, using default: show_rag_chunks = true")
+
     # Show main application
     show_main_application()
 
@@ -729,6 +791,45 @@ def show_main_application():
     # Add visual separator
     st.markdown("<hr style='margin: 16px 0; border: none; border-top: 1px solid var(--border-light);'>", unsafe_allow_html=True)
 
+    # Debug sidebar for production troubleshooting
+    if st.sidebar.checkbox("🔧 Debug Mode", key="debug_mode_toggle"):
+        st.sidebar.markdown("---")
+        st.sidebar.markdown("### 🔍 Settings Debug")
+
+        # Show cache state
+        cache_state = st.session_state.get('settings_cache', {})
+        st.sidebar.write("**Cache State:**")
+        st.sidebar.json(cache_state)
+
+        # Show cache age
+        if cache_state.get('load_timestamp'):
+            import time
+            age = time.time() - cache_state['load_timestamp']
+            st.sidebar.write(f"**Cache Age:** {age:.1f}s")
+
+        # Show current effective value
+        show_chunks = cache_state.get('show_rag_chunks_enabled', True)
+        st.sidebar.write(f"**Effective Setting:** show_rag_chunks = {show_chunks}")
+
+        # Manual refresh button
+        if st.sidebar.button("🔄 Force Reload Settings"):
+            st.session_state.settings_cache = {
+                'show_rag_chunks_enabled': True,
+                'initialized': False,
+                'load_timestamp': None,
+                'error_count': 0
+            }
+            st.sidebar.success("Cache cleared - will reload on next interaction")
+            st.rerun()
+
+        # Direct DB query button
+        if st.sidebar.button("📊 Query Database"):
+            try:
+                db_value = settings_manager.get_setting('show_rag_chunks', 'true')
+                st.sidebar.success(f"DB value: {db_value}")
+            except Exception as e:
+                st.sidebar.error(f"DB error: {e}")
+
     # Show legal assistant content directly
     show_legal_assistant_content()
 
@@ -753,8 +854,8 @@ def show_legal_assistant_content():
                 st.markdown(message["content"])
 
                 # Display retrieved chunks in expander for assistant responses
-                # Check if showing chunks is enabled in settings
-                show_chunks_enabled = settings_manager.get_setting('show_rag_chunks', 'true').lower() == 'true'
+                # Check if showing chunks is enabled in settings (use cached setting from session state)
+                show_chunks_enabled = st.session_state.settings_cache.get('show_rag_chunks_enabled', True)
 
                 if show_chunks_enabled and message["role"] == "assistant" and message.get("chunks"):
                     chunks = message["chunks"]
@@ -889,8 +990,8 @@ def handle_chat_input(prompt):
                 st.caption(f"🔢 Input: {input_tokens:,} | Output: {output_tokens:,} | Reasoning: {reasoning_tokens:,} | Total: {total_tokens:,} | 🧠 Model: {model_short} | Effort: {reasoning_effort.upper()}")
 
             # Display retrieved chunks in expander
-            # Check if showing chunks is enabled in settings
-            show_chunks_enabled = settings_manager.get_setting('show_rag_chunks', 'true').lower() == 'true'
+            # Check if showing chunks is enabled in settings (use cached setting from session state)
+            show_chunks_enabled = st.session_state.settings_cache.get('show_rag_chunks_enabled', True)
 
             if show_chunks_enabled and search_results:
                 # Calculate average relevance score
@@ -921,7 +1022,8 @@ def handle_chat_input(prompt):
                             st.divider()
     
     # Add assistant response to chat history with chunks (only if setting is enabled)
-    show_chunks_enabled = settings_manager.get_setting('show_rag_chunks', 'true').lower() == 'true'
+    # Use cached setting from session state (loaded once per session)
+    show_chunks_enabled = st.session_state.settings_cache.get('show_rag_chunks_enabled', True)
     message_data = {
         "role": "assistant",
         "content": ai_response_text
