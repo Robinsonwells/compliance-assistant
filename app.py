@@ -687,7 +687,8 @@ def main():
     # Initialize settings cache in session state (once per session only)
     if 'settings_cache' not in st.session_state:
         st.session_state.settings_cache = {
-            'show_rag_chunks_enabled': True,  # Safe default
+            'show_rag_chunks_enabled': True,
+            'default_reasoning_effort': 'automatic',
             'initialized': False,
             'load_timestamp': None,
             'error_count': 0
@@ -698,16 +699,23 @@ def main():
         try:
             raw_value = settings_manager.get_setting('show_rag_chunks', 'true')
             st.session_state.settings_cache['show_rag_chunks_enabled'] = (raw_value == 'true')
+
+            effort_value = settings_manager.get_enum_setting(
+                'default_reasoning_effort',
+                'automatic',
+                ['automatic', 'medium', 'high']
+            )
+            st.session_state.settings_cache['default_reasoning_effort'] = effort_value
+
             st.session_state.settings_cache['initialized'] = True
-            st.session_state.settings_cache['load_timestamp'] = None  # Will be set if needed for debugging
-            print(f"✅ Settings loaded: show_rag_chunks = {raw_value}")
+            st.session_state.settings_cache['load_timestamp'] = None
+            print(f"Settings loaded: show_rag_chunks = {raw_value}, default_reasoning_effort = {effort_value}")
         except Exception as e:
             st.session_state.settings_cache['error_count'] += 1
-            print(f"⚠️ Error loading settings (attempt {st.session_state.settings_cache['error_count']}): {e}")
-            # Keep default True, mark as initialized to prevent retry spam
+            print(f"Error loading settings (attempt {st.session_state.settings_cache['error_count']}): {e}")
             if st.session_state.settings_cache['error_count'] >= 3:
                 st.session_state.settings_cache['initialized'] = True
-                print("⚠️ Max retries reached, using default: show_rag_chunks = true")
+                print("Max retries reached, using defaults")
 
     # Show main application
     show_main_application()
@@ -907,35 +915,29 @@ def handle_chat_input(prompt):
     with st.chat_message("assistant"):
         # Create status placeholder for real-time updates
         status_placeholder = st.empty()
-        
+
         with st.spinner("Processing your legal query..."):
-            # Step 1: Determine reasoning effort based on selected model
-            reasoning_effort_source = "Auto"  # Track whether effort is manual or auto
-            if selected_model == "GPT-5":
-                status_placeholder.info("🤔 Choosing reasoning effort...")
-                reasoning_effort = classify_reasoning_effort_with_gpt4o_mini(prompt)
-            else:  # Sonar Reasoning Pro (RAG Only)
-                # Check for manual override
-                manual_override = st.session_state.get('sonar_reasoning_effort_override', 'Auto')
-                if manual_override != "Auto":
-                    # Use manual override
-                    reasoning_effort = manual_override.lower()
-                    reasoning_effort_source = "Manual"
-                    status_placeholder.info(f"🎯 Using manual reasoning effort: {manual_override}...")
+            # Step 1: Determine reasoning effort based on global setting
+            global_effort_setting = st.session_state.settings_cache.get('default_reasoning_effort', 'automatic')
+            reasoning_effort_source = "Admin"
+
+            if global_effort_setting == 'automatic':
+                reasoning_effort_source = "Auto"
+                if selected_model == "GPT-5":
+                    status_placeholder.info("Choosing reasoning effort...")
+                    reasoning_effort = classify_reasoning_effort_with_gpt4o_mini(prompt)
                 else:
-                    # Use automatic complexity-based determination
-                    status_placeholder.info("🤔 Calculating complexity score...")
+                    status_placeholder.info("Calculating complexity score...")
                     complexity_score, _ = calculate_complexity_score(prompt)
                     reasoning_effort = get_reasoning_effort(complexity_score)
-                    reasoning_effort_source = "Auto"
+            else:
+                reasoning_effort = global_effort_setting
+                status_placeholder.info(f"Using admin-configured reasoning effort: {global_effort_setting}...")
             
             # Show determined effort level
             effort_emoji = {"medium": "🧠", "high": "🔬"}
             model_emoji = {"GPT-5": "🤖", "Sonar Reasoning Pro (RAG Only)": "🧠"}
-            # Add source indicator for Sonar Reasoning Pro
-            effort_display = reasoning_effort.upper()
-            if selected_model == "Sonar Reasoning Pro (RAG Only)" and reasoning_effort_source:
-                effort_display = f"{reasoning_effort.upper()} ({reasoning_effort_source})"
+            effort_display = f"{reasoning_effort.upper()} ({reasoning_effort_source})"
             status_placeholder.success(f"{model_emoji.get(selected_model, '🤖')} Model: **{selected_model}** | {effort_emoji.get(reasoning_effort, '🧠')} Effort: **{effort_display}**")
             
             # Brief pause to let user see the effort level
@@ -961,16 +963,14 @@ def handle_chat_input(prompt):
             # Step 3: Generate response with dynamic status based on effort
             if selected_model == "GPT-5":
                 if reasoning_effort == "medium":
-                    status_placeholder.info("🤖 GPT-5 analyzing with medium reasoning effort...")
+                    status_placeholder.info("GPT-5 analyzing with medium reasoning effort...")
                 else:
-                    status_placeholder.info("🤖 GPT-5 performing deep analysis with high reasoning effort... This may take 3-10 minutes.")
+                    status_placeholder.info("GPT-5 performing deep analysis with high reasoning effort... This may take 3-10 minutes.")
             else:
-                # Add source indicator for Sonar Reasoning Pro
-                source_indicator = f" ({reasoning_effort_source})" if reasoning_effort_source else ""
                 if reasoning_effort == "medium":
-                    status_placeholder.info(f"🧠 Sonar Reasoning Pro analyzing legal sources with medium effort{source_indicator}...")
+                    status_placeholder.info(f"Sonar Reasoning Pro analyzing legal sources with medium effort ({reasoning_effort_source})...")
                 else:
-                    status_placeholder.info(f"🧠 Sonar Reasoning Pro performing deep analysis with high effort{source_indicator}...")
+                    status_placeholder.info(f"Sonar Reasoning Pro performing deep analysis with high effort ({reasoning_effort_source})...")
             
             ai_response_text, total_tokens, estimated_cost, input_tokens, output_tokens, reasoning_tokens = generate_legal_response(prompt, search_results, selected_model, reasoning_effort)
             
@@ -982,12 +982,11 @@ def handle_chat_input(prompt):
 
             # Display itemized token info with model information
             model_short = "GPT-5" if selected_model == "GPT-5" else "Sonar-RP"
+            effort_with_source = f"{reasoning_effort.upper()} ({reasoning_effort_source})"
             if selected_model == "Sonar Reasoning Pro (RAG Only)":
-                # Add source indicator for Sonar
-                effort_with_source = f"{reasoning_effort.upper()} ({reasoning_effort_source})" if reasoning_effort_source else reasoning_effort.upper()
-                st.caption(f"🔢 Input: {input_tokens:,} | Output: {output_tokens:,} | Total: {total_tokens:,} | 🧠 Model: {model_short} | Effort: {effort_with_source} | *Cost estimate based on GPT-5 pricing")
+                st.caption(f"Input: {input_tokens:,} | Output: {output_tokens:,} | Total: {total_tokens:,} | Model: {model_short} | Effort: {effort_with_source} | *Cost estimate based on GPT-5 pricing")
             else:
-                st.caption(f"🔢 Input: {input_tokens:,} | Output: {output_tokens:,} | Reasoning: {reasoning_tokens:,} | Total: {total_tokens:,} | 🧠 Model: {model_short} | Effort: {reasoning_effort.upper()}")
+                st.caption(f"Input: {input_tokens:,} | Output: {output_tokens:,} | Reasoning: {reasoning_tokens:,} | Total: {total_tokens:,} | Model: {model_short} | Effort: {effort_with_source}")
 
             # Display retrieved chunks in expander
             # Check if showing chunks is enabled in settings (use cached setting from session state)

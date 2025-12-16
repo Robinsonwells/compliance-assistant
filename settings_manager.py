@@ -75,6 +75,38 @@ class SettingsManager:
             print(f"Error getting setting '{key}': {e}")
             return self._normalize_boolean_value(default, 'true')
 
+    def get_enum_setting(self, key: str, default: str, allowed_values: list) -> str:
+        """
+        Get an enum setting value by key
+        Returns the raw string value if valid, otherwise returns default
+        """
+        try:
+            if not self._is_cache_valid():
+                self._refresh_cache()
+
+            raw_value = None
+            if key in self._cache:
+                raw_value = self._cache[key]
+            else:
+                result = self.supabase.table('system_settings').select('setting_value').eq('setting_key', key).execute()
+                if result.data:
+                    raw_value = result.data[0]['setting_value']
+                    self._cache[key] = raw_value
+
+            if raw_value is None:
+                return default
+
+            value_lower = raw_value.lower().strip()
+            if value_lower in [v.lower() for v in allowed_values]:
+                return value_lower
+
+            print(f"Invalid enum value '{raw_value}' for '{key}', using default '{default}'")
+            return default
+
+        except Exception as e:
+            print(f"Error getting enum setting '{key}': {e}")
+            return default
+
     def _normalize_boolean_value(self, value: Any, default: str = 'true') -> str:
         """
         Convert any value to canonical 'true' or 'false' string
@@ -189,6 +221,12 @@ class SettingsManager:
                 'setting_value': 'true',
                 'setting_type': 'boolean',
                 'description': 'Display retrieved RAG chunks under AI responses'
+            },
+            {
+                'setting_key': 'default_reasoning_effort',
+                'setting_value': 'automatic',
+                'setting_type': 'enum',
+                'description': 'Default reasoning effort level: automatic, medium, or high'
             }
         ]
 

@@ -780,6 +780,116 @@ def main():
 
             st.info("Tip: Disabling this option will hide the technical details from users while still using RAG to generate accurate responses.")
 
+            st.markdown("---")
+            st.markdown("#### AI Reasoning Settings")
+
+            effort_options = ['automatic', 'medium', 'high']
+            effort_labels = {
+                'automatic': 'Automatic - AI classifies each query\'s complexity',
+                'medium': 'Medium - Standard analysis for most queries',
+                'high': 'High - Deep analysis for complex legal questions'
+            }
+
+            effort_error = None
+            current_effort = 'automatic'
+            effort_details = None
+
+            try:
+                current_effort = sm.get_enum_setting('default_reasoning_effort', 'automatic', effort_options)
+                effort_details = sm.get_setting_details('default_reasoning_effort')
+            except Exception as e:
+                effort_error = str(e)
+
+            if effort_error:
+                st.warning(f"Settings database unavailable: {effort_error}")
+                st.info("Using default values. Changes cannot be saved until connection is restored.")
+
+            if effort_details and effort_details.get('updated_at'):
+                last_updated = effort_details['updated_at']
+                st.caption(f"Last updated: {last_updated[:19].replace('T', ' ')}")
+
+            st.markdown("##### Default Reasoning Effort Level")
+            st.markdown("""
+            Control how much computational effort the AI uses when analyzing legal queries.
+            Higher effort levels provide more thorough analysis but take longer and cost more.
+            """)
+
+            current_index = effort_options.index(current_effort) if current_effort in effort_options else 0
+
+            selected_effort = st.radio(
+                "Select reasoning effort level:",
+                options=effort_options,
+                index=current_index,
+                format_func=lambda x: effort_labels.get(x, x),
+                key="effort_level_radio",
+                disabled=effort_error is not None
+            )
+
+            effort_descriptions = {
+                'automatic': "The AI will automatically determine the appropriate effort level based on query complexity. Simple questions use medium effort, complex multi-state or analytical questions use high effort.",
+                'medium': "All queries will use medium reasoning effort. Good balance of speed and thoroughness. Response time: 30-60 seconds.",
+                'high': "All queries will use high reasoning effort for maximum thoroughness. Best for complex legal analysis. Response time: 3-10 minutes."
+            }
+            st.info(effort_descriptions.get(selected_effort, ""))
+
+            col1, col2 = st.columns([3, 1])
+            with col2:
+                save_effort_disabled = effort_error is not None
+                if st.button("Save Effort Setting", type="primary", use_container_width=True, disabled=save_effort_disabled):
+                    try:
+                        success = sm.update_setting('default_reasoning_effort', selected_effort)
+
+                        if success:
+                            sm.clear_cache()
+
+                            if 'settings_cache' in st.session_state:
+                                del st.session_state['settings_cache']
+
+                            st.success("Reasoning effort setting saved successfully!")
+
+                            saved_value = sm.get_enum_setting('default_reasoning_effort', 'automatic', effort_options)
+                            if saved_value == selected_effort:
+                                st.success("Setting verified in database!")
+                            else:
+                                st.warning("Setting saved but verification failed")
+
+                            st.info("Note: Existing user sessions will see changes on their next page refresh")
+
+                            time.sleep(1.5)
+                            st.rerun()
+                        else:
+                            st.error("Failed to save setting to database")
+                    except Exception as e:
+                        st.error(f"Error saving setting: {str(e)}")
+                        st.info("Please try again or contact your system administrator.")
+
+            st.markdown("---")
+
+            effort_status_col1, effort_status_col2, effort_status_col3 = st.columns(3)
+            with effort_status_col1:
+                display_effort = current_effort.capitalize()
+                st.metric(
+                    "Current Effort Level",
+                    display_effort,
+                    delta="Auto" if current_effort == 'automatic' else "Fixed"
+                )
+            with effort_status_col2:
+                time_estimate = "Varies" if current_effort == 'automatic' else "30-60s" if current_effort == 'medium' else "3-10min"
+                st.metric(
+                    "Est. Response Time",
+                    time_estimate,
+                    help="Estimated time per query"
+                )
+            with effort_status_col3:
+                st.metric(
+                    "Affects",
+                    "All Users",
+                    help="This setting applies to all users system-wide"
+                )
+
+            if current_effort == 'high':
+                st.warning("High effort is enabled for all queries. This will significantly increase response times and API costs.")
+
     except Exception as e:
         st.error(f"🚨 Critical application error: {str(e)}")
         st.error("Your session remains active, but some features may be unavailable.")
