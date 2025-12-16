@@ -718,15 +718,19 @@ def main():
                                 sm.clear_cache()
 
                                 # Step 2: Clear admin's session cache (affects current admin session)
+                                # Force re-initialization by deleting the cache entirely
                                 if 'settings_cache' in st.session_state:
-                                    st.session_state.settings_cache = {
-                                        'show_rag_chunks_enabled': show_chunks,
-                                        'initialized': True,
-                                        'load_timestamp': time.time(),
-                                        'error_count': 0
-                                    }
+                                    del st.session_state['settings_cache']
 
                                 st.success("✅ Setting saved successfully!")
+
+                                # Step 3: Verify the setting was actually saved
+                                saved_value = sm.get_setting('show_rag_chunks', 'true')
+                                if (saved_value == 'true') == show_chunks:
+                                    st.success("✅ Setting verified in database!")
+                                else:
+                                    st.warning("⚠️ Setting saved but verification failed")
+
                                 st.info("ℹ️ **Note:** Existing user sessions will see changes on their next page refresh (Streamlit limitation)")
 
                                 time.sleep(1.5)
