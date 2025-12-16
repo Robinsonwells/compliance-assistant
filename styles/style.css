@@ -915,7 +915,217 @@ button[kind="primary"] * {
 
 .stTabs [aria-selected="true"] {
   background-color: var(--primary-blue) !important;
-  color: white !important;
+  color: var(--text-inverse) !important;
+}
+
+/* Tab Panel Content - CRITICAL for dark mode visibility */
+.stTabs [data-baseweb="tab-panel"],
+.stTabs [role="tabpanel"],
+.stTabs > div:last-child {
+  background-color: var(--bg-primary) !important;
+  color: var(--text-secondary) !important;
+}
+
+.stTabs [data-baseweb="tab-panel"] *,
+.stTabs [role="tabpanel"] * {
+  color: inherit;
+}
+
+.stTabs [data-baseweb="tab-panel"] h1,
+.stTabs [data-baseweb="tab-panel"] h2,
+.stTabs [data-baseweb="tab-panel"] h3,
+.stTabs [data-baseweb="tab-panel"] h4,
+.stTabs [role="tabpanel"] h1,
+.stTabs [role="tabpanel"] h2,
+.stTabs [role="tabpanel"] h3,
+.stTabs [role="tabpanel"] h4 {
+  color: var(--text-primary) !important;
+}
+
+.stTabs [data-baseweb="tab-panel"] p,
+.stTabs [data-baseweb="tab-panel"] span,
+.stTabs [data-baseweb="tab-panel"] label,
+.stTabs [role="tabpanel"] p,
+.stTabs [role="tabpanel"] span,
+.stTabs [role="tabpanel"] label {
+  color: var(--text-secondary) !important;
+}
+
+/* ===== CHECKBOX STYLING ===== */
+.stCheckbox {
+  color: var(--text-secondary) !important;
+}
+
+.stCheckbox label,
+.stCheckbox span,
+.stCheckbox [data-testid="stMarkdownContainer"],
+.stCheckbox [data-testid="stMarkdownContainer"] p {
+  color: var(--text-secondary) !important;
+}
+
+.stCheckbox > label > div:first-child {
+  background-color: var(--bg-tertiary) !important;
+  border: 1px solid var(--border-light) !important;
+  border-radius: var(--radius-sm) !important;
+}
+
+.stCheckbox > label > div:first-child[data-checked="true"],
+.stCheckbox input:checked + div {
+  background-color: var(--success-green) !important;
+  border-color: var(--success-green) !important;
+}
+
+/* ===== METRIC STYLING ===== */
+[data-testid="stMetric"],
+[data-testid="metric-container"],
+.stMetric {
+  background-color: var(--bg-secondary) !important;
+  border: 1px solid var(--border-light) !important;
+  border-radius: var(--radius-md) !important;
+  padding: var(--space-lg) !important;
+}
+
+[data-testid="stMetric"] label,
+[data-testid="stMetric"] [data-testid="stMetricLabel"],
+.stMetric label {
+  color: var(--text-muted) !important;
+  font-size: var(--font-size-sm) !important;
+  font-weight: 500 !important;
+}
+
+[data-testid="stMetric"] [data-testid="stMetricValue"],
+.stMetric [data-testid="stMetricValue"] {
+  color: var(--text-primary) !important;
+  font-size: var(--font-size-2xl) !important;
+  font-weight: 600 !important;
+}
+
+[data-testid="stMetric"] [data-testid="stMetricDelta"],
+.stMetric [data-testid="stMetricDelta"] {
+  color: var(--success-green) !important;
+}
+
+/* ===== SELECT BOX / DROPDOWN STYLING ===== */
+.stSelectbox label,
+.stSelectbox [data-testid="stMarkdownContainer"] p,
+[data-testid="stSelectbox"] label {
+  color: var(--text-primary) !important;
+  font-weight: 500 !important;
+}
+
+.stSelectbox > div > div,
+[data-baseweb="select"] > div {
+  background-color: var(--bg-tertiary) !important;
+  border: 1px solid var(--border-light) !important;
+  border-radius: var(--radius-md) !important;
+  color: var(--text-primary) !important;
+}
+
+[data-baseweb="select"] span,
+[data-baseweb="select"] div[class*="value"] {
+  color: var(--text-primary) !important;
+}
+
+[data-baseweb="popover"] [role="listbox"],
+[data-baseweb="menu"] {
+  background-color: var(--bg-secondary) !important;
+  border: 1px solid var(--border-light) !important;
+}
+
+[data-baseweb="popover"] [role="option"],
+[data-baseweb="menu"] li {
+  color: var(--text-secondary) !important;
+  background-color: var(--bg-secondary) !important;
+}
+
+[data-baseweb="popover"] [role="option"]:hover,
+[data-baseweb="menu"] li:hover {
+  background-color: var(--bg-accent) !important;
+  color: var(--text-primary) !important;
+}
+
+/* ===== RADIO BUTTON STYLING ===== */
+.stRadio label,
+.stRadio [data-testid="stMarkdownContainer"] p,
+[data-testid="stRadio"] label {
+  color: var(--text-secondary) !important;
+}
+
+.stRadio > div[role="radiogroup"] label {
+  color: var(--text-secondary) !important;
+}
+
+.stRadio > div[role="radiogroup"] label > div:first-child {
+  background-color: var(--bg-tertiary) !important;
+  border: 2px solid var(--border-light) !important;
+}
+
+/* ===== SLIDER STYLING ===== */
+.stSlider label,
+.stSlider [data-testid="stMarkdownContainer"] p {
+  color: var(--text-primary) !important;
+  font-weight: 500 !important;
+}
+
+.stSlider [data-baseweb="slider"] div {
+  color: var(--text-secondary) !important;
+}
+
+/* ===== NUMBER INPUT STYLING ===== */
+.stNumberInput label,
+.stNumberInput [data-testid="stMarkdownContainer"] p {
+  color: var(--text-primary) !important;
+  font-weight: 500 !important;
+}
+
+.stNumberInput input {
+  background-color: var(--bg-tertiary) !important;
+  border: 1px solid var(--border-light) !important;
+  border-radius: var(--radius-md) !important;
+  color: var(--text-primary) !important;
+}
+
+/* ===== TEXT AREA STYLING ===== */
+.stTextArea label,
+.stTextArea [data-testid="stMarkdownContainer"] p {
+  color: var(--text-primary) !important;
+  font-weight: 500 !important;
+}
+
+.stTextArea textarea {
+  background-color: var(--bg-tertiary) !important;
+  border: 1px solid var(--border-light) !important;
+  border-radius: var(--radius-md) !important;
+  color: var(--text-primary) !important;
+}
+
+/* ===== INFO/WARNING/SUCCESS/ERROR BOX STYLING ===== */
+[data-testid="stAlert"],
+.element-container .stAlert {
+  border-radius: var(--radius-md) !important;
+}
+
+[data-testid="stAlert"] p,
+.stAlert p {
+  color: inherit !important;
+}
+
+div[data-baseweb="notification"] {
+  background-color: var(--bg-secondary) !important;
+  color: var(--text-secondary) !important;
+}
+
+/* ===== CAPTION STYLING ===== */
+.stCaption,
+[data-testid="stCaption"],
+[data-testid="stCaptionContainer"] {
+  color: var(--text-muted) !important;
+}
+
+/* ===== DIVIDER STYLING ===== */
+hr, .stDivider {
+  border-color: var(--border-light) !important;
+  background-color: var(--border-light) !important;
 }
 
 /* ===== TABLES ===== */
