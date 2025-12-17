@@ -218,7 +218,7 @@ class SettingsManager:
         default_settings = [
             {
                 'setting_key': 'show_rag_chunks',
-                'setting_value': 'true',
+                'setting_value': 'false',
                 'setting_type': 'boolean',
                 'description': 'Display retrieved RAG chunks under AI responses'
             },

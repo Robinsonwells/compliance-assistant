@@ -695,11 +695,11 @@ def main():
             st.markdown("#### Display Settings")
 
             settings_error = None
-            current_enabled = True
+            current_enabled = False
             setting_details = None
 
             try:
-                current_value = sm.get_setting('show_rag_chunks', 'true')
+                current_value = sm.get_setting('show_rag_chunks', 'false')
                 current_enabled = current_value.lower() == 'true'
                 setting_details = sm.get_setting_details('show_rag_chunks')
             except Exception as e:
@@ -746,7 +746,7 @@ def main():
 
                             st.success("Setting saved successfully!")
 
-                            saved_value = sm.get_setting('show_rag_chunks', 'true')
+                            saved_value = sm.get_setting('show_rag_chunks', 'false')
                             if (saved_value == 'true') == show_chunks:
                                 st.success("Setting verified in database!")
                             else:

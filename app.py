@@ -93,7 +93,7 @@ try:
         print("✅ Settings manager initialized successfully")
 
         # Verify settings are accessible
-        test_value = settings_manager.get_setting('show_rag_chunks', 'true')
+        test_value = settings_manager.get_setting('show_rag_chunks', 'false')
         print(f"✅ Settings verified: show_rag_chunks = {test_value}")
 
     except Exception as e:
@@ -104,7 +104,7 @@ try:
         class FallbackSettingsManager:
             def __init__(self):
                 self.defaults = {
-                    'show_rag_chunks': 'true'
+                    'show_rag_chunks': 'false'
                 }
                 self.warned_keys = set()
 
@@ -687,7 +687,7 @@ def main():
     # Initialize settings cache in session state (once per session only)
     if 'settings_cache' not in st.session_state:
         st.session_state.settings_cache = {
-            'show_rag_chunks_enabled': True,
+            'show_rag_chunks_enabled': False,
             'default_reasoning_effort': 'automatic',
             'initialized': False,
             'load_timestamp': None,
@@ -697,7 +697,7 @@ def main():
     # Load settings from database ONCE per session (not on every interaction)
     if not st.session_state.settings_cache['initialized']:
         try:
-            raw_value = settings_manager.get_setting('show_rag_chunks', 'true')
+            raw_value = settings_manager.get_setting('show_rag_chunks', 'false')
             st.session_state.settings_cache['show_rag_chunks_enabled'] = (raw_value == 'true')
 
             effort_value = settings_manager.get_enum_setting(
@@ -869,7 +869,7 @@ def show_main_application():
         # Direct DB query button
         if st.sidebar.button("📊 Query Database"):
             try:
-                db_value = settings_manager.get_setting('show_rag_chunks', 'true')
+                db_value = settings_manager.get_setting('show_rag_chunks', 'false')
                 st.sidebar.success(f"DB value: {db_value}")
             except Exception as e:
                 st.sidebar.error(f"DB error: {e}")
@@ -899,7 +899,7 @@ def show_legal_assistant_content():
 
                 # Display retrieved chunks in expander for assistant responses
                 # Check if showing chunks is enabled in settings (use cached setting from session state)
-                show_chunks_enabled = st.session_state.settings_cache.get('show_rag_chunks_enabled', True)
+                show_chunks_enabled = st.session_state.settings_cache.get('show_rag_chunks_enabled', False)
 
                 if show_chunks_enabled and message["role"] == "assistant" and message.get("chunks"):
                     chunks = message["chunks"]
@@ -1028,7 +1028,7 @@ def handle_chat_input(prompt):
 
             # Display retrieved chunks in expander
             # Check if showing chunks is enabled in settings (use cached setting from session state)
-            show_chunks_enabled = st.session_state.settings_cache.get('show_rag_chunks_enabled', True)
+            show_chunks_enabled = st.session_state.settings_cache.get('show_rag_chunks_enabled', False)
 
             if show_chunks_enabled and search_results:
                 # Calculate average relevance score
@@ -1060,7 +1060,7 @@ def handle_chat_input(prompt):
     
     # Add assistant response to chat history with chunks (only if setting is enabled)
     # Use cached setting from session state (loaded once per session)
-    show_chunks_enabled = st.session_state.settings_cache.get('show_rag_chunks_enabled', True)
+    show_chunks_enabled = st.session_state.settings_cache.get('show_rag_chunks_enabled', False)
     message_data = {
         "role": "assistant",
         "content": ai_response_text
