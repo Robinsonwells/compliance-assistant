@@ -569,30 +569,55 @@ def generate_legal_response(query: str, search_results: List[Dict[str, Any]], se
             output_tokens = 0
             reasoning_tokens = 0
             total_tokens = 0
+            event_count = 0
 
             print("=== GPT-5 Streaming Response ===")
 
             for event in response:
-                # Process content delta events
-                if event.type == 'content_block_delta':
-                    if hasattr(event.delta, 'text'):
-                        ai_response += event.delta.text
+                event_count += 1
 
-                # Capture usage information from response_done event
-                elif event.type == 'response_done':
+                # Debug: Log first 5 event types
+                if event_count <= 5:
+                    print(f"Event {event_count}: {event.type}")
+
+                # Process text delta events (Responses API)
+                if event.type == 'response.output_text.delta':
+                    # Extract delta text
+                    delta_text = getattr(event, 'delta', None)
+                    if delta_text:
+                        ai_response += delta_text
+                        if event_count <= 5:
+                            print(f"  Text delta: {delta_text[:50]}...")
+
+                # Capture usage information from completed event (Responses API)
+                elif event.type == 'response.completed':
                     if hasattr(event, 'response') and hasattr(event.response, 'usage'):
                         usage = event.response.usage
-                        input_tokens = usage.input_tokens
-                        output_tokens = usage.output_tokens
-                        reasoning_tokens = getattr(getattr(usage, 'output_tokens_details', None), 'reasoning_tokens', 0)
-                        total_tokens = usage.total_tokens
-                        print(f"Streaming complete - Total tokens: {total_tokens}")
+                        input_tokens = getattr(usage, 'input_tokens', 0)
+                        output_tokens = getattr(usage, 'output_tokens', 0)
+                        reasoning_tokens = getattr(usage, 'reasoning_tokens', 0)
+                        total_tokens = getattr(usage, 'total_tokens', input_tokens + output_tokens + reasoning_tokens)
+                        print(f"✓ Streaming complete - Total tokens: {total_tokens:,}")
 
+                # Handle errors
+                elif event.type == 'error':
+                    error_info = getattr(event, 'error', event)
+                    print(f"❌ Stream error: {error_info}")
+                    ai_response = f"Error from GPT-5: {error_info}"
+                    break
+
+                # Log unknown event types for debugging
+                elif event_count <= 5:
+                    print(f"  Unknown event type: {event.type}")
+                    print(f"  Event attributes: {dir(event)}")
+
+            print(f"Total events processed: {event_count}")
             print("=" * 50)
 
             # Verify we got a response
             if not ai_response:
-                print("ERROR: No text received from streaming response!")
+                print("❌ ERROR: No text received from streaming response!")
+                print(f"Events processed: {event_count}")
                 ai_response = "Error: No response received from GPT-5 API"
             
         else:  # Sonar Reasoning Pro (RAG Only)
@@ -646,13 +671,23 @@ def generate_legal_response(query: str, search_results: List[Dict[str, Any]], se
         return ai_response, total_tokens, estimated_cost, input_tokens, output_tokens, reasoning_tokens
         
     except Exception as e:
+        import traceback
         error_msg = str(e).lower()
-        print(f"Error generating response with {selected_model}: {e}")
-        
+
+        # Print full traceback for debugging
+        print("\n" + "=" * 50)
+        print(f"❌ ERROR generating response with {selected_model}")
+        print(f"Exception Type: {type(e).__name__}")
+        print(f"Exception Message: {str(e)}")
+        print("\nFull Traceback:")
+        traceback.print_exc()
+        print("=" * 50 + "\n")
+
         if "timeout" in error_msg:
             return "The query is taking longer than expected to process. Please try simplifying your question or try again later.", 0, 0.0, 0, 0, 0
         else:
             st.error(f"Error generating response with {selected_model}: {e}")
+            return f"Error: {str(e)}", 0, 0.0, 0, 0, 0
 
 # Authentication functions
 def check_authentication():
