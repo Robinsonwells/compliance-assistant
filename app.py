@@ -552,69 +552,48 @@ def generate_legal_response(query: str, search_results: List[Dict[str, Any]], se
             context += f"Content: {result['text']}\n"
         
         if selected_model == "GPT-5":
-            # Generate response using GPT-5 Responses API with correct format
+            # Generate response using GPT-5 Responses API with streaming enabled
             response = openai_client.responses.create(
                 model="gpt-5",
                 instructions=LEGAL_COMPLIANCE_SYSTEM_PROMPT,
                 input=f"Query: {query}\n\nRelevant Legal Sources:\n{context}",
                 max_output_tokens=None,  # No token limit - track usage
                 reasoning={"effort": reasoning_effort},
-                text={"verbosity": "high"}
+                text={"verbosity": "high"},
+                stream=True  # Enable streaming
             )
 
-            # DEBUG: Print response structure
-            print("=== GPT-5 Response Debug ===")
-            print("Response type:", type(response))
-            print("Response attributes:", dir(response))
-            print("Full response:", response)
+            # Process streaming response
+            ai_response = ""
+            input_tokens = 0
+            output_tokens = 0
+            reasoning_tokens = 0
+            total_tokens = 0
+
+            print("=== GPT-5 Streaming Response ===")
+
+            for event in response:
+                # Process content delta events
+                if event.type == 'content_block_delta':
+                    if hasattr(event.delta, 'text'):
+                        ai_response += event.delta.text
+
+                # Capture usage information from response_done event
+                elif event.type == 'response_done':
+                    if hasattr(event, 'response') and hasattr(event.response, 'usage'):
+                        usage = event.response.usage
+                        input_tokens = usage.input_tokens
+                        output_tokens = usage.output_tokens
+                        reasoning_tokens = getattr(getattr(usage, 'output_tokens_details', None), 'reasoning_tokens', 0)
+                        total_tokens = usage.total_tokens
+                        print(f"Streaming complete - Total tokens: {total_tokens}")
+
             print("=" * 50)
 
-            # Extract token usage information
-            usage = response.usage
-            input_tokens = usage.input_tokens
-            output_tokens = usage.output_tokens
-            reasoning_tokens = getattr(getattr(usage, 'output_tokens_details', None), 'reasoning_tokens', 0)
-            total_tokens = usage.total_tokens
-
-            # Get the AI response text - trying multiple extraction methods
-            ai_response = None
-
-            # Method 1: Try output_text attribute
-            if hasattr(response, 'output_text'):
-                ai_response = response.output_text
-                print(f"DEBUG: Got response via output_text: {ai_response[:100] if ai_response else 'EMPTY'}")
-
-            # Method 2: Try output array
-            if not ai_response and hasattr(response, 'output'):
-                print(f"DEBUG: Response has 'output' attribute, type: {type(response.output)}")
-                if isinstance(response.output, list) and len(response.output) > 0:
-                    output_item = response.output[0]
-                    print(f"DEBUG: First output item type: {type(output_item)}, attributes: {dir(output_item)}")
-
-                    # Try content array
-                    if hasattr(output_item, 'content'):
-                        print(f"DEBUG: Output item has 'content', type: {type(output_item.content)}")
-                        if isinstance(output_item.content, list) and len(output_item.content) > 0:
-                            content_item = output_item.content[0]
-                            print(f"DEBUG: First content item type: {type(content_item)}, attributes: {dir(content_item)}")
-
-                            if hasattr(content_item, 'text'):
-                                ai_response = content_item.text
-                                print(f"DEBUG: Got response via output[0].content[0].text: {ai_response[:100] if ai_response else 'EMPTY'}")
-
-            # Method 3: Try choices array (ChatCompletion style)
-            if not ai_response and hasattr(response, 'choices'):
-                print(f"DEBUG: Response has 'choices' attribute")
-                if len(response.choices) > 0:
-                    choice = response.choices[0]
-                    if hasattr(choice, 'message') and hasattr(choice.message, 'content'):
-                        ai_response = choice.message.content
-                        print(f"DEBUG: Got response via choices[0].message.content: {ai_response[:100] if ai_response else 'EMPTY'}")
-
-            # Final check
+            # Verify we got a response
             if not ai_response:
-                print("ERROR: Could not extract response text from any known method!")
-                ai_response = "Error: Unable to extract response from GPT-5 API"
+                print("ERROR: No text received from streaming response!")
+                ai_response = "Error: No response received from GPT-5 API"
             
         else:  # Sonar Reasoning Pro (RAG Only)
             # Prepare messages for Perplexity API
