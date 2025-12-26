@@ -540,8 +540,8 @@ def format_audit_with_citations(audit_content: str, citations: List[Dict]) -> st
         print(f"Error formatting citations: {e}")
         return audit_content
 
-def generate_legal_response(query: str, search_results: List[Dict[str, Any]], selected_model: str, reasoning_effort: str) -> str:
-    """Generate response using OpenAI with legal context"""
+def generate_legal_response(query: str, search_results: List[Dict[str, Any]], selected_model: str, reasoning_effort: str):
+    """Generate response using OpenAI with legal context - yields text chunks for streaming display"""
     try:
         # Prepare context from search results
         context = ""
@@ -550,7 +550,7 @@ def generate_legal_response(query: str, search_results: List[Dict[str, Any]], se
             context += f"Citation: {result['citation']}\n"
             context += f"Jurisdiction: {result['jurisdiction']}\n"
             context += f"Content: {result['text']}\n"
-        
+
         if selected_model == "GPT-5":
             # Generate response using GPT-5 Responses API with streaming enabled
             response = openai_client.responses.create(
@@ -586,6 +586,7 @@ def generate_legal_response(query: str, search_results: List[Dict[str, Any]], se
                     delta_text = getattr(event, 'delta', None)
                     if delta_text:
                         ai_response += delta_text
+                        yield delta_text  # Yield each chunk for real-time display
                         if event_count <= 5:
                             print(f"  Text delta: {delta_text[:50]}...")
 
@@ -604,6 +605,7 @@ def generate_legal_response(query: str, search_results: List[Dict[str, Any]], se
                     error_info = getattr(event, 'error', event)
                     print(f"❌ Stream error: {error_info}")
                     ai_response = f"Error from GPT-5: {error_info}"
+                    yield ai_response
                     break
 
                 # Log unknown event types for debugging
@@ -619,14 +621,15 @@ def generate_legal_response(query: str, search_results: List[Dict[str, Any]], se
                 print("❌ ERROR: No text received from streaming response!")
                 print(f"Events processed: {event_count}")
                 ai_response = "Error: No response received from GPT-5 API"
-            
+                yield ai_response
+
         else:  # Sonar Reasoning Pro (RAG Only)
             # Prepare messages for Perplexity API
             messages = [
                 {"role": "system", "content": LEGAL_COMPLIANCE_SYSTEM_PROMPT},
                 {"role": "user", "content": f"Query: {query}\n\nRelevant Legal Sources:\n{context}"}
             ]
-            
+
             # Make request to Perplexity API with search disabled
             url = "https://api.perplexity.ai/chat/completions"
             payload = {
@@ -635,27 +638,30 @@ def generate_legal_response(query: str, search_results: List[Dict[str, Any]], se
                 "disable_search": True,  # Disable web search - use only provided context
                 "stream": False
             }
-            
+
             headers = {
                 "Authorization": f"Bearer {PERPLEXITY_API_KEY}",
                 "Content-Type": "application/json"
             }
-            
+
             response = requests.post(url, json=payload, headers=headers, timeout=300)
             response.raise_for_status()
-            
+
             response_data = response.json()
-            
+
             # Extract the message content
             ai_response = response_data["choices"][0]["message"]["content"]
-            
+
+            # For non-streaming model, yield the entire response at once
+            yield ai_response
+
             # Extract usage information
             usage = response_data.get("usage", {})
             input_tokens = usage.get("prompt_tokens", 0)
             output_tokens = usage.get("completion_tokens", 0)
             reasoning_tokens = 0  # Sonar Reasoning Pro doesn't separate reasoning tokens
             total_tokens = usage.get("total_tokens", input_tokens + output_tokens)
-        
+
         # Log token usage to console
         print(f"Model: {selected_model}")
         print(f"Query: {query[:100]}...")
@@ -664,12 +670,13 @@ def generate_legal_response(query: str, search_results: List[Dict[str, Any]], se
         print(f"Output Tokens: {output_tokens:,}")
         print(f"Reasoning Tokens: {reasoning_tokens:,}")
         print(f"Total Tokens: {total_tokens:,}")
-        
+
         # Calculate estimated cost (using GPT-5 pricing as baseline)
         estimated_cost = calculate_estimated_cost(total_tokens, reasoning_effort)
-        
-        return ai_response, total_tokens, estimated_cost, input_tokens, output_tokens, reasoning_tokens
-        
+
+        # Return metadata as a tuple at the end
+        return (ai_response, total_tokens, estimated_cost, input_tokens, output_tokens, reasoning_tokens)
+
     except Exception as e:
         import traceback
         error_msg = str(e).lower()
@@ -684,10 +691,14 @@ def generate_legal_response(query: str, search_results: List[Dict[str, Any]], se
         print("=" * 50 + "\n")
 
         if "timeout" in error_msg:
-            return "The query is taking longer than expected to process. Please try simplifying your question or try again later.", 0, 0.0, 0, 0, 0
+            error_response = "The query is taking longer than expected to process. Please try simplifying your question or try again later."
+            yield error_response
+            return (error_response, 0, 0.0, 0, 0, 0)
         else:
             st.error(f"Error generating response with {selected_model}: {e}")
-            return f"Error: {str(e)}", 0, 0.0, 0, 0, 0
+            error_response = f"Error: {str(e)}"
+            yield error_response
+            return (error_response, 0, 0.0, 0, 0, 0)
 
 # Authentication functions
 def check_authentication():
@@ -1076,13 +1087,40 @@ def handle_chat_input(prompt):
                 else:
                     status_placeholder.info(f"Sonar Reasoning Pro performing deep analysis with high effort ({reasoning_effort_source})...")
             
-            ai_response_text, total_tokens, estimated_cost, input_tokens, output_tokens, reasoning_tokens = generate_legal_response(prompt, search_results, selected_model, reasoning_effort)
-            
-            # Clear status placeholder before showing final response
+            # Clear status placeholder before showing streaming response
             status_placeholder.empty()
-            
-            # Display response
-            st.markdown(ai_response_text)
+
+            # Create a wrapper to handle streaming and metadata extraction
+            def stream_with_metadata():
+                """Wrapper generator that yields text and captures metadata"""
+                response_gen = generate_legal_response(prompt, search_results, selected_model, reasoning_effort)
+                metadata = None
+
+                try:
+                    while True:
+                        chunk = next(response_gen)
+                        yield chunk
+                except StopIteration as e:
+                    # Capture the return value (metadata tuple)
+                    metadata = e.value if hasattr(e, 'value') else None
+
+                # Store metadata in session state for access after streaming
+                st.session_state._stream_metadata = metadata
+
+            # Stream response in real-time
+            ai_response_text = st.write_stream(stream_with_metadata())
+
+            # Extract metadata from session state
+            metadata = st.session_state.get('_stream_metadata')
+            if metadata and isinstance(metadata, tuple) and len(metadata) == 6:
+                _, total_tokens, estimated_cost, input_tokens, output_tokens, reasoning_tokens = metadata
+            else:
+                # Fallback values if metadata parsing fails
+                total_tokens = 0
+                estimated_cost = 0.0
+                input_tokens = 0
+                output_tokens = 0
+                reasoning_tokens = 0
 
             # Display itemized token info with model information
             model_short = "GPT-5" if selected_model == "GPT-5" else "Sonar-RP"
