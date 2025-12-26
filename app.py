@@ -68,11 +68,21 @@ try:
     except:
         device = 'cpu'
 
-    embedding_model = SentenceTransformer('all-MiniLM-L6-v2', device=device)
-    embedding_model = embedding_model.to(device)
+    # Load model on CPU first to avoid meta tensor issues
+    print(f"Loading embedding model on CPU first...")
+    embedding_model = SentenceTransformer('all-MiniLM-L6-v2', device='cpu')
+
+    # Then move to target device if it's CUDA
+    if device == 'cuda':
+        print(f"Moving model to CUDA...")
+        try:
+            embedding_model = embedding_model.to(device)
+        except Exception as e:
+            print(f"Warning: Could not move model to CUDA: {e}. Using CPU instead.")
+            device = 'cpu'
 
     # Log which device is being used
-    print(f"Using device: {device} for embeddings")
+    print(f"✅ Embedding model loaded on device: {device}")
     
     # Initialize OpenAI client with extended timeout for GPT-5
     openai_client = OpenAI(
