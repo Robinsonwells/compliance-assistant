@@ -552,15 +552,59 @@ def generate_legal_response(query: str, search_results: List[Dict[str, Any]], se
                 text={"verbosity": "high"}
             )
 
+            # DEBUG: Print response structure
+            print("=== GPT-5 Response Debug ===")
+            print("Response type:", type(response))
+            print("Response attributes:", dir(response))
+            print("Full response:", response)
+            print("=" * 50)
+
             # Extract token usage information
             usage = response.usage
             input_tokens = usage.input_tokens
             output_tokens = usage.output_tokens
             reasoning_tokens = getattr(getattr(usage, 'output_tokens_details', None), 'reasoning_tokens', 0)
             total_tokens = usage.total_tokens
-            
-            # Get the AI response text
-            ai_response = response.output_text
+
+            # Get the AI response text - trying multiple extraction methods
+            ai_response = None
+
+            # Method 1: Try output_text attribute
+            if hasattr(response, 'output_text'):
+                ai_response = response.output_text
+                print(f"DEBUG: Got response via output_text: {ai_response[:100] if ai_response else 'EMPTY'}")
+
+            # Method 2: Try output array
+            if not ai_response and hasattr(response, 'output'):
+                print(f"DEBUG: Response has 'output' attribute, type: {type(response.output)}")
+                if isinstance(response.output, list) and len(response.output) > 0:
+                    output_item = response.output[0]
+                    print(f"DEBUG: First output item type: {type(output_item)}, attributes: {dir(output_item)}")
+
+                    # Try content array
+                    if hasattr(output_item, 'content'):
+                        print(f"DEBUG: Output item has 'content', type: {type(output_item.content)}")
+                        if isinstance(output_item.content, list) and len(output_item.content) > 0:
+                            content_item = output_item.content[0]
+                            print(f"DEBUG: First content item type: {type(content_item)}, attributes: {dir(content_item)}")
+
+                            if hasattr(content_item, 'text'):
+                                ai_response = content_item.text
+                                print(f"DEBUG: Got response via output[0].content[0].text: {ai_response[:100] if ai_response else 'EMPTY'}")
+
+            # Method 3: Try choices array (ChatCompletion style)
+            if not ai_response and hasattr(response, 'choices'):
+                print(f"DEBUG: Response has 'choices' attribute")
+                if len(response.choices) > 0:
+                    choice = response.choices[0]
+                    if hasattr(choice, 'message') and hasattr(choice.message, 'content'):
+                        ai_response = choice.message.content
+                        print(f"DEBUG: Got response via choices[0].message.content: {ai_response[:100] if ai_response else 'EMPTY'}")
+
+            # Final check
+            if not ai_response:
+                print("ERROR: Could not extract response text from any known method!")
+                ai_response = "Error: Unable to extract response from GPT-5 API"
             
         else:  # Sonar Reasoning Pro (RAG Only)
             # Prepare messages for Perplexity API
