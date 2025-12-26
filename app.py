@@ -542,19 +542,11 @@ def generate_legal_response(query: str, search_results: List[Dict[str, Any]], se
             context += f"Content: {result['text']}\n"
         
         if selected_model == "GPT-5":
-            # Generate response using GPT-5 Responses API with structured input
+            # Generate response using GPT-5 Responses API with correct format
             response = openai_client.responses.create(
                 model="gpt-5",
-                input=[
-                    {
-                        "role": "system",
-                        "content": LEGAL_COMPLIANCE_SYSTEM_PROMPT
-                    },
-                    {
-                        "role": "user",
-                        "content": f"Query: {query}\n\nRelevant Legal Sources:\n{context}"
-                    }
-                ],
+                instructions=LEGAL_COMPLIANCE_SYSTEM_PROMPT,
+                input=f"Query: {query}\n\nRelevant Legal Sources:\n{context}",
                 max_output_tokens=None,  # No token limit - track usage
                 reasoning={"effort": reasoning_effort},
                 text={"verbosity": "high"}
