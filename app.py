@@ -42,6 +42,94 @@ COST_PER_TOKEN = {
     "high": COST_PER_15K_TOKENS["high"] / 15000
 }
 
+
+def get_error_suggestions(error_type: str, error_message: str) -> str:
+    """Return troubleshooting suggestions based on error type."""
+    suggestions = {
+        "AuthenticationError": "Check that your OPENAI_API_KEY is valid and has not expired.",
+        "InvalidRequestError": "The model name or parameters may be incorrect. Verify 'gpt-5' is available on your account.",
+        "BadRequestError": "The API rejected the request. This may indicate incompatible parameters (e.g., background + stream).",
+        "RateLimitError": "Too many requests. Wait a moment and try again.",
+        "APIConnectionError": "Network issue connecting to OpenAI. Check your internet connection.",
+        "Timeout": "The request took too long. The model may be overloaded.",
+        "APIError": "OpenAI API returned an error. This may be temporary.",
+    }
+
+    for key, suggestion in suggestions.items():
+        if key.lower() in error_type.lower():
+            return suggestion
+
+    if "timeout" in error_message.lower():
+        return suggestions["Timeout"]
+    if "rate" in error_message.lower() and "limit" in error_message.lower():
+        return suggestions["RateLimitError"]
+
+    return "An unexpected error occurred. Check the error details below."
+
+
+def display_streaming_error(
+    exception: Exception,
+    elapsed_time: float,
+    placeholder
+) -> dict:
+    """Display a detailed error card in the Streamlit UI for debugging streaming failures."""
+    error_type = type(exception).__name__
+    error_message = str(exception)
+    error_repr = repr(exception)
+
+    status_code = getattr(exception, 'status_code', None)
+    response_body = None
+    if hasattr(exception, 'response'):
+        try:
+            response_body = str(exception.response)
+        except:
+            pass
+
+    suggestion = get_error_suggestions(error_type, error_message)
+
+    error_details = {
+        "type": error_type,
+        "message": error_message,
+        "elapsed": elapsed_time,
+        "status_code": status_code,
+        "suggestion": suggestion
+    }
+
+    with placeholder.container():
+        st.error(f"Streaming Failed: {error_type}")
+
+        col1, col2 = st.columns(2)
+        with col1:
+            st.markdown(f"**Error Type:** `{error_type}`")
+            if status_code:
+                st.markdown(f"**HTTP Status:** `{status_code}`")
+        with col2:
+            st.markdown(f"**Elapsed Time:** `{elapsed_time:.1f}s`")
+
+        st.markdown(f"**Suggestion:** {suggestion}")
+
+        with st.expander("Full Error Details (click to expand)", expanded=True):
+            st.markdown("**Error Message:**")
+            st.code(error_message, language=None)
+
+            if response_body:
+                st.markdown("**API Response:**")
+                st.code(response_body, language=None)
+
+            st.markdown("**Copy-Paste Debug Info:**")
+            debug_text = f"""STREAMING ERROR REPORT
+Type: {error_type}
+Message: {error_message}
+Status Code: {status_code}
+Elapsed: {elapsed_time:.1f}s
+Full Repr: {error_repr}"""
+            st.code(debug_text, language=None)
+
+        st.info("Attempting fallback to non-streaming mode...")
+
+    return error_details
+
+
 # Import custom modules
 from user_management import UserManager
 from settings_manager import SettingsManager
@@ -1268,8 +1356,10 @@ def handle_chat_input(prompt):
             except Exception as e:
                 status_placeholder.empty()
                 elapsed_placeholder.empty()
-                error_msg = str(e)
-                print(f"Streaming failed: {error_msg}")
+                elapsed_time = time.time() - start_time
+
+                error_placeholder = st.empty()
+                display_streaming_error(e, elapsed_time, error_placeholder)
 
                 if streaming_text[0]:
                     ai_response_text = streaming_text[0] + "\n\n[Response interrupted - partial content shown]"
@@ -1280,7 +1370,6 @@ def handle_chat_input(prompt):
                     output_tokens = 0
                     reasoning_tokens = 0
                 else:
-                    status_placeholder.info("Streaming unavailable, using standard request...")
                     ai_response_text, total_tokens, estimated_cost, input_tokens, output_tokens, reasoning_tokens = generate_legal_response(
                         prompt, search_results, selected_model, reasoning_effort
                     )
