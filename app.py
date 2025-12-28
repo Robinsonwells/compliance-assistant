@@ -755,162 +755,9 @@ def extract_output_text_from_response(response) -> str:
 
     return ""
 
-
-def generate_legal_response_streaming(
-    query: str,
-    search_results: List[Dict[str, Any]],
-    reasoning_effort: str,
-    access_code: str,
-    session_id: str,
-    status_callback=None,
-    text_callback=None
-) -> Tuple[str, int, float, int, int, int, Optional[str]]:
-    """
-    Generate GPT-5 response using background mode with streaming for progressive display.
-    Returns: (response_text, total_tokens, cost, input_tokens, output_tokens, reasoning_tokens, response_id)
-    """
-    context = ""
-    for i, result in enumerate(search_results, 1):
-        context += f"\n--- Source {i} ---\n"
-        context += f"Citation: {result['citation']}\n"
-        context += f"Jurisdiction: {result['jurisdiction']}\n"
-        context += f"Content: {result['text']}\n"
-
-    input_text = f"{LEGAL_COMPLIANCE_SYSTEM_PROMPT}\n\nQuery: {query}\n\nRelevant Legal Sources:\n{context}"
-
-    start_time = time.time()
-    first_token_time = None
-    accumulated_text = ""
-    sequence_number = 0
-    response_id = None
-
-    input_tokens = 0
-    output_tokens = 0
-    reasoning_tokens = 0
-    total_tokens = 0
-
-    try:
-        stream = openai_client.responses.create(
-            model="gpt-5",
-            input=input_text,
-            max_output_tokens=None,
-            reasoning={"effort": reasoning_effort},
-            text={"verbosity": "high"},
-            background=True,
-            stream=True,
-            store=True
-        )
-
-        last_event_time = time.time()
-        last_save_time = time.time()
-        chunk_count = 0
-        pending_response_created = False
-
-        for event in stream:
-            current_time = time.time()
-            elapsed = current_time - start_time
-            event_type = event.type
-
-            if event_type == "response.created":
-                response_id = event.response.id
-                print(f"[STREAMING] Started background response: {response_id}")
-
-                background_manager.create_pending_response(
-                    response_id=response_id,
-                    access_code=access_code,
-                    session_id=session_id,
-                    user_query=query,
-                    search_results=search_results,
-                    reasoning_effort=reasoning_effort
-                )
-                background_manager.update_status(response_id, "in_progress")
-                pending_response_created = True
-
-            elif event_type == "response.output_text.delta":
-                if first_token_time is None:
-                    first_token_time = elapsed
-                    ttft = first_token_time
-                    background_manager.set_time_to_first_token(response_id, ttft)
-                    print(f"[STREAMING] First token received at {ttft:.2f}s")
-
-                chunk = event.delta
-                accumulated_text += chunk
-                sequence_number += 1
-                chunk_count += 1
-                last_event_time = current_time
-
-                if text_callback:
-                    text_callback(accumulated_text)
-
-                if current_time - last_save_time > 10:
-                    background_manager.update_partial_response(
-                        response_id, accumulated_text, sequence_number
-                    )
-                    last_save_time = current_time
-
-            elif event_type == "response.output_text.done":
-                print(f"[STREAMING] Text output complete: {len(accumulated_text)} chars")
-
-            elif event_type == "response.completed":
-                usage = event.response.usage
-                input_tokens = usage.input_tokens
-                output_tokens = usage.output_tokens
-                total_tokens = usage.total_tokens
-
-                if hasattr(usage, 'output_tokens_details') and usage.output_tokens_details:
-                    reasoning_tokens = getattr(usage.output_tokens_details, 'reasoning_tokens', 0)
-
-                elapsed = time.time() - start_time
-                print(f"[STREAMING] Complete in {elapsed:.1f}s")
-                print(f"[STREAMING] Tokens - Input: {input_tokens}, Output: {output_tokens}, Reasoning: {reasoning_tokens}, Total: {total_tokens}")
-
-                token_usage = {
-                    "input_tokens": input_tokens,
-                    "output_tokens": output_tokens,
-                    "reasoning_tokens": reasoning_tokens,
-                    "total_tokens": total_tokens
-                }
-                background_manager.mark_completed(response_id, accumulated_text, token_usage)
-
-            elif event_type == "response.incomplete":
-                reason = getattr(event.response.incomplete_details, 'reason', 'unknown')
-                print(f"[STREAMING] Response incomplete: {reason}")
-                if status_callback:
-                    status_callback(f"Response incomplete: {reason}")
-
-            elif event_type == "response.failed":
-                error_msg = getattr(event.response.error, 'message', 'Unknown error')
-                print(f"[STREAMING] Response failed: {error_msg}")
-                background_manager.mark_failed(response_id, error_msg)
-                raise Exception(f"OpenAI response failed: {error_msg}")
-
-            time_since_last = current_time - last_event_time
-            if first_token_time is None and time_since_last > 30:
-                if status_callback:
-                    if time_since_last > 90:
-                        status_callback("Extended reasoning in progress... Your response is saved and safe to refresh.")
-                    elif time_since_last > 60:
-                        status_callback("Deep reasoning in progress... This query requires extensive analysis.")
-                    else:
-                        status_callback("GPT-5 is thinking deeply...")
-
-        estimated_cost = calculate_estimated_cost(total_tokens, reasoning_effort)
-        return accumulated_text, total_tokens, estimated_cost, input_tokens, output_tokens, reasoning_tokens, response_id
-
-    except Exception as e:
-        elapsed = time.time() - start_time
-        error_msg = str(e)
-        print(f"[STREAMING] Error after {elapsed:.1f}s: {error_msg}")
-
-        if response_id:
-            background_manager.mark_failed(response_id, error_msg)
-
-        if "timeout" in error_msg.lower() or elapsed > 90:
-            if response_id and accumulated_text:
-                background_manager.update_partial_response(response_id, accumulated_text, sequence_number)
-                return accumulated_text + "\n\n[Response may be incomplete due to timeout]", 0, 0.0, 0, 0, 0, response_id
-
-        raise
+# REMOVED: generate_legal_response_streaming() - caused Cloudflare timeouts
+# Issue: stream=True kept connection open for 5-10 minutes → Cloudflare cut at ~100-120s
+# Solution: Use generate_legal_response_polling() instead (stream=False with 2s polls)
 
 
 def get_polling_status_message(elapsed_seconds: float) -> str:
@@ -960,6 +807,8 @@ def generate_legal_response_polling(
     total_tokens = 0
 
     try:
+        # CRITICAL: stream=False prevents Cloudflare timeouts
+        # Polling works because each .retrieve() call is only ~2s, not 10 minutes
         response = openai_client.responses.create(
             model="gpt-5",
             input=input_text,
@@ -967,7 +816,7 @@ def generate_legal_response_polling(
             reasoning={"effort": reasoning_effort},
             text={"verbosity": "high"},
             background=True,
-            stream=False,
+            stream=False,  # Must be False - streaming causes 100s timeout on long queries
             store=True
         )
 
@@ -1059,11 +908,16 @@ def generate_legal_response_smart(
 ) -> Tuple[str, int, float, int, int, int, Optional[str]]:
     """
     Unified response generator using pure polling (background=True, stream=False).
-    This approach avoids Cloudflare timeouts by using short polling requests.
-    Each poll is < 1 second, so the connection never times out.
+
+    WHY POLLING INSTEAD OF STREAMING:
+    - Streaming (stream=True) keeps a single connection open for 5-10 minutes
+    - Cloudflare/Streamlit Cloud times out connections at ~100-120 seconds
+    - Polling (stream=False) uses many short 2-second requests that never timeout
+    - Result: Complex queries can run for 10+ minutes without any timeout issues
+
+    Returns: (response_text, total_tokens, cost, input_tokens, output_tokens, reasoning_tokens, response_id)
     """
-    complexity_score, _ = calculate_complexity_score(query)
-    print(f"[SMART] Query complexity: {complexity_score} - using background polling for reliability")
+    print(f"[SMART] Using background polling (avoids Cloudflare 100s timeout)")
 
     if status_callback:
         status_callback("Processing your query...")
