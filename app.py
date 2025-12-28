@@ -717,6 +717,45 @@ def generate_legal_response(query: str, search_results: List[Dict[str, Any]], se
             st.error(f"Error generating response with {selected_model}: {e}")
 
 
+def extract_output_text_from_response(response) -> str:
+    """
+    Extract output text from an OpenAI Responses API response object.
+    Handles multiple possible response structures with fallbacks.
+    """
+    if hasattr(response, 'output_text') and response.output_text:
+        return response.output_text
+
+    if hasattr(response, 'output') and response.output:
+        output_items = response.output
+        text_parts = []
+        for item in output_items:
+            if hasattr(item, 'content') and item.content:
+                for content_block in item.content:
+                    if hasattr(content_block, 'text') and content_block.text:
+                        text_parts.append(content_block.text)
+            elif hasattr(item, 'text') and item.text:
+                text_parts.append(item.text)
+        if text_parts:
+            return "\n".join(text_parts)
+
+    if hasattr(response, 'text') and response.text:
+        return response.text
+
+    if hasattr(response, 'content') and response.content:
+        return response.content
+
+    print(f"[DEBUG] Response structure: {type(response)}")
+    print(f"[DEBUG] Response attributes: {dir(response)}")
+    if hasattr(response, 'output'):
+        print(f"[DEBUG] Output type: {type(response.output)}")
+        if response.output:
+            print(f"[DEBUG] First output item: {response.output[0] if response.output else 'None'}")
+            if response.output and hasattr(response.output[0], '__dict__'):
+                print(f"[DEBUG] First output item attrs: {response.output[0].__dict__}")
+
+    return ""
+
+
 def generate_legal_response_streaming(
     query: str,
     search_results: List[Dict[str, Any]],
@@ -963,9 +1002,12 @@ def generate_legal_response_polling(
                 if hasattr(usage, 'output_tokens_details') and usage.output_tokens_details:
                     reasoning_tokens = getattr(usage.output_tokens_details, 'reasoning_tokens', 0)
 
-                response_text = result.output_text
+                response_text = extract_output_text_from_response(result)
+                if not response_text:
+                    print(f"[POLLING] WARNING: No output text extracted from response")
+                    print(f"[POLLING] Response object: {result}")
                 elapsed = time.time() - start_time
-                print(f"[POLLING] Complete in {elapsed:.1f}s")
+                print(f"[POLLING] Complete in {elapsed:.1f}s, text length: {len(response_text)}")
                 print(f"[POLLING] Tokens - Input: {input_tokens}, Output: {output_tokens}, Reasoning: {reasoning_tokens}, Total: {total_tokens}")
 
                 token_usage = {
@@ -1016,56 +1058,25 @@ def generate_legal_response_smart(
     text_callback=None
 ) -> Tuple[str, int, float, int, int, int, Optional[str]]:
     """
-    Smart router that chooses between streaming and polling based on query complexity.
-    - Simple queries (complexity < 15): Try streaming first, fall back to polling
-    - Complex queries (complexity >= 15): Use polling directly for reliability
+    Unified response generator using pure polling (background=True, stream=False).
+    This approach avoids Cloudflare timeouts by using short polling requests.
+    Each poll is < 1 second, so the connection never times out.
     """
     complexity_score, _ = calculate_complexity_score(query)
-    complexity_threshold = 15
+    print(f"[SMART] Query complexity: {complexity_score} - using background polling for reliability")
 
-    print(f"[SMART] Query complexity: {complexity_score} (threshold: {complexity_threshold})")
+    if status_callback:
+        status_callback("Processing your query...")
 
-    if complexity_score < complexity_threshold:
-        print(f"[SMART] Using streaming for simple query")
-        try:
-            return generate_legal_response_streaming(
-                query=query,
-                search_results=search_results,
-                reasoning_effort=reasoning_effort,
-                access_code=access_code,
-                session_id=session_id,
-                status_callback=status_callback,
-                text_callback=text_callback
-            )
-        except Exception as e:
-            error_msg = str(e).lower()
-            if "timeout" in error_msg or "stream" in error_msg:
-                print(f"[SMART] Streaming failed, falling back to polling: {e}")
-                if status_callback:
-                    status_callback("Switching to background processing...")
-                return generate_legal_response_polling(
-                    query=query,
-                    search_results=search_results,
-                    reasoning_effort=reasoning_effort,
-                    access_code=access_code,
-                    session_id=session_id,
-                    status_callback=status_callback,
-                    text_callback=text_callback
-                )
-            raise
-    else:
-        print(f"[SMART] Using polling for complex query")
-        if status_callback:
-            status_callback("Complex query detected - using reliable background processing...")
-        return generate_legal_response_polling(
-            query=query,
-            search_results=search_results,
-            reasoning_effort=reasoning_effort,
-            access_code=access_code,
-            session_id=session_id,
-            status_callback=status_callback,
-            text_callback=text_callback
-        )
+    return generate_legal_response_polling(
+        query=query,
+        search_results=search_results,
+        reasoning_effort=reasoning_effort,
+        access_code=access_code,
+        session_id=session_id,
+        status_callback=status_callback,
+        text_callback=text_callback
+    )
 
 
 def check_and_recover_pending_response(session_id: str) -> Optional[Dict[str, Any]]:
@@ -1088,9 +1099,10 @@ def retrieve_background_response(response_id: str) -> Optional[Dict[str, Any]]:
 
         if response.status == "completed":
             usage = response.usage
+            output_text = extract_output_text_from_response(response)
             return {
                 "status": "completed",
-                "text": response.output_text,
+                "text": output_text,
                 "input_tokens": usage.input_tokens if usage else 0,
                 "output_tokens": usage.output_tokens if usage else 0,
                 "reasoning_tokens": getattr(getattr(usage, 'output_tokens_details', None), 'reasoning_tokens', 0) if usage else 0,
