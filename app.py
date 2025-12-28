@@ -751,7 +751,7 @@ def generate_legal_response_streaming(
     total_tokens = 0
 
     try:
-        response = openai_client.responses.create(
+        stream = openai_client.responses.create(
             model="gpt-5",
             input=input_text,
             max_output_tokens=None,
@@ -762,30 +762,32 @@ def generate_legal_response_streaming(
             store=True
         )
 
-        response_id = response.id
-        print(f"[STREAMING] Started background response: {response_id}")
-
-        background_manager.create_pending_response(
-            response_id=response_id,
-            access_code=access_code,
-            session_id=session_id,
-            user_query=query,
-            search_results=search_results,
-            reasoning_effort=reasoning_effort
-        )
-
-        background_manager.update_status(response_id, "in_progress")
-
         last_event_time = time.time()
         last_save_time = time.time()
         chunk_count = 0
+        pending_response_created = False
 
-        for event in response:
+        for event in stream:
             current_time = time.time()
             elapsed = current_time - start_time
             event_type = event.type
 
-            if event_type == "response.output_text.delta":
+            if event_type == "response.created":
+                response_id = event.response.id
+                print(f"[STREAMING] Started background response: {response_id}")
+
+                background_manager.create_pending_response(
+                    response_id=response_id,
+                    access_code=access_code,
+                    session_id=session_id,
+                    user_query=query,
+                    search_results=search_results,
+                    reasoning_effort=reasoning_effort
+                )
+                background_manager.update_status(response_id, "in_progress")
+                pending_response_created = True
+
+            elif event_type == "response.output_text.delta":
                 if first_token_time is None:
                     first_token_time = elapsed
                     ttft = first_token_time
