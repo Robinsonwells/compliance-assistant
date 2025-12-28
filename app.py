@@ -874,6 +874,200 @@ def generate_legal_response_streaming(
         raise
 
 
+def get_polling_status_message(elapsed_seconds: float) -> str:
+    """Return context-aware status message based on elapsed time."""
+    if elapsed_seconds < 5:
+        return "Processing your query..."
+    elif elapsed_seconds < 30:
+        return f"Analyzing... ({int(elapsed_seconds)}s)"
+    elif elapsed_seconds < 60:
+        return f"Researching legal sources... ({int(elapsed_seconds)}s)"
+    elif elapsed_seconds < 180:
+        return f"Deep reasoning in progress... ({int(elapsed_seconds)}s)\nYour response is being prepared."
+    else:
+        return f"Processing extended analysis... ({int(elapsed_seconds)}s)\nComplex reasoning still in progress."
+
+
+def generate_legal_response_polling(
+    query: str,
+    search_results: List[Dict[str, Any]],
+    reasoning_effort: str,
+    access_code: str,
+    session_id: str,
+    status_callback=None,
+    text_callback=None
+) -> Tuple[str, int, float, int, int, int, Optional[str]]:
+    """
+    Generate GPT-5 response using polling for complex/long-running queries.
+    More reliable than streaming for extended reasoning tasks.
+    Returns: (response_text, total_tokens, cost, input_tokens, output_tokens, reasoning_tokens, response_id)
+    """
+    context = ""
+    for i, result in enumerate(search_results, 1):
+        context += f"\n--- Source {i} ---\n"
+        context += f"Citation: {result['citation']}\n"
+        context += f"Jurisdiction: {result['jurisdiction']}\n"
+        context += f"Content: {result['text']}\n"
+
+    input_text = f"{LEGAL_COMPLIANCE_SYSTEM_PROMPT}\n\nQuery: {query}\n\nRelevant Legal Sources:\n{context}"
+
+    start_time = time.time()
+    response_id = None
+    polling_interval = 2.0
+
+    input_tokens = 0
+    output_tokens = 0
+    reasoning_tokens = 0
+    total_tokens = 0
+
+    try:
+        response = openai_client.responses.create(
+            model="gpt-5",
+            input=input_text,
+            max_output_tokens=None,
+            reasoning={"effort": reasoning_effort},
+            text={"verbosity": "high"},
+            background=True,
+            stream=False,
+            store=True
+        )
+
+        response_id = response.id
+        print(f"[POLLING] Started background response: {response_id}")
+
+        background_manager.create_pending_response(
+            response_id=response_id,
+            access_code=access_code,
+            session_id=session_id,
+            user_query=query,
+            search_results=search_results,
+            reasoning_effort=reasoning_effort
+        )
+        background_manager.update_status(response_id, "in_progress")
+
+        while True:
+            elapsed = time.time() - start_time
+
+            if status_callback:
+                status_msg = get_polling_status_message(elapsed)
+                status_callback(status_msg)
+
+            result = openai_client.responses.retrieve(response_id)
+
+            if result.status == "completed":
+                usage = result.usage
+                input_tokens = usage.input_tokens if usage else 0
+                output_tokens = usage.output_tokens if usage else 0
+                total_tokens = usage.total_tokens if usage else 0
+
+                if hasattr(usage, 'output_tokens_details') and usage.output_tokens_details:
+                    reasoning_tokens = getattr(usage.output_tokens_details, 'reasoning_tokens', 0)
+
+                response_text = result.output_text
+                elapsed = time.time() - start_time
+                print(f"[POLLING] Complete in {elapsed:.1f}s")
+                print(f"[POLLING] Tokens - Input: {input_tokens}, Output: {output_tokens}, Reasoning: {reasoning_tokens}, Total: {total_tokens}")
+
+                token_usage = {
+                    "input_tokens": input_tokens,
+                    "output_tokens": output_tokens,
+                    "reasoning_tokens": reasoning_tokens,
+                    "total_tokens": total_tokens
+                }
+                background_manager.mark_completed(response_id, response_text, token_usage)
+
+                if text_callback:
+                    text_callback(response_text)
+
+                estimated_cost = calculate_estimated_cost(total_tokens, reasoning_effort)
+                return response_text, total_tokens, estimated_cost, input_tokens, output_tokens, reasoning_tokens, response_id
+
+            elif result.status == "failed":
+                error_msg = getattr(result.error, 'message', 'Unknown error') if result.error else 'Unknown error'
+                print(f"[POLLING] Response failed: {error_msg}")
+                background_manager.mark_failed(response_id, error_msg)
+                raise Exception(f"OpenAI response failed: {error_msg}")
+
+            elif result.status in ["queued", "in_progress"]:
+                time.sleep(polling_interval)
+
+            else:
+                print(f"[POLLING] Unknown status: {result.status}")
+                time.sleep(polling_interval)
+
+    except Exception as e:
+        elapsed = time.time() - start_time
+        error_msg = str(e)
+        print(f"[POLLING] Error after {elapsed:.1f}s: {error_msg}")
+
+        if response_id:
+            background_manager.mark_failed(response_id, error_msg)
+
+        raise
+
+
+def generate_legal_response_smart(
+    query: str,
+    search_results: List[Dict[str, Any]],
+    reasoning_effort: str,
+    access_code: str,
+    session_id: str,
+    status_callback=None,
+    text_callback=None
+) -> Tuple[str, int, float, int, int, int, Optional[str]]:
+    """
+    Smart router that chooses between streaming and polling based on query complexity.
+    - Simple queries (complexity < 15): Try streaming first, fall back to polling
+    - Complex queries (complexity >= 15): Use polling directly for reliability
+    """
+    complexity_score, _ = calculate_complexity_score(query)
+    complexity_threshold = 15
+
+    print(f"[SMART] Query complexity: {complexity_score} (threshold: {complexity_threshold})")
+
+    if complexity_score < complexity_threshold:
+        print(f"[SMART] Using streaming for simple query")
+        try:
+            return generate_legal_response_streaming(
+                query=query,
+                search_results=search_results,
+                reasoning_effort=reasoning_effort,
+                access_code=access_code,
+                session_id=session_id,
+                status_callback=status_callback,
+                text_callback=text_callback
+            )
+        except Exception as e:
+            error_msg = str(e).lower()
+            if "timeout" in error_msg or "stream" in error_msg:
+                print(f"[SMART] Streaming failed, falling back to polling: {e}")
+                if status_callback:
+                    status_callback("Switching to background processing...")
+                return generate_legal_response_polling(
+                    query=query,
+                    search_results=search_results,
+                    reasoning_effort=reasoning_effort,
+                    access_code=access_code,
+                    session_id=session_id,
+                    status_callback=status_callback,
+                    text_callback=text_callback
+                )
+            raise
+    else:
+        print(f"[SMART] Using polling for complex query")
+        if status_callback:
+            status_callback("Complex query detected - using reliable background processing...")
+        return generate_legal_response_polling(
+            query=query,
+            search_results=search_results,
+            reasoning_effort=reasoning_effort,
+            access_code=access_code,
+            session_id=session_id,
+            status_callback=status_callback,
+            text_callback=text_callback
+        )
+
+
 def check_and_recover_pending_response(session_id: str) -> Optional[Dict[str, Any]]:
     """Check for any pending or recently completed responses for this session"""
     active = background_manager.get_active_response_for_session(session_id)
@@ -1321,10 +1515,15 @@ def handle_chat_input(prompt):
         time.sleep(0.5)
 
         if selected_model == "GPT-5":
-            if reasoning_effort == "medium":
+            complexity_score, _ = calculate_complexity_score(prompt)
+            use_polling = complexity_score >= 15
+
+            if use_polling:
+                status_placeholder.info(f"Complex query detected (score: {complexity_score}) - using reliable background processing...")
+            elif reasoning_effort == "medium":
                 status_placeholder.info("GPT-5 analyzing with streaming (medium effort)...")
             else:
-                status_placeholder.info("GPT-5 performing deep analysis with streaming (high effort)... Text will appear as it's generated.")
+                status_placeholder.info("GPT-5 performing deep analysis (high effort)... Text will appear as it's generated.")
 
             start_time = time.time()
             streaming_text = [""]
@@ -1336,10 +1535,10 @@ def handle_chat_input(prompt):
                 elapsed_placeholder.caption(f"Elapsed: {elapsed:.0f}s")
 
             def update_status(msg):
-                status_placeholder.warning(msg)
+                status_placeholder.info(msg)
 
             try:
-                result = generate_legal_response_streaming(
+                result = generate_legal_response_smart(
                     query=prompt,
                     search_results=search_results,
                     reasoning_effort=reasoning_effort,
