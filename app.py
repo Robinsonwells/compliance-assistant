@@ -4,7 +4,8 @@ from dotenv import load_dotenv
 import uuid
 import requests
 import re
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Generator, Tuple, Optional
+import time
 
 # Load environment variables
 load_dotenv()
@@ -46,6 +47,7 @@ from user_management import UserManager
 from settings_manager import SettingsManager
 from system_prompts import LEGAL_COMPLIANCE_SYSTEM_PROMPT
 from chat_logger import ChatLogger
+from background_response_manager import BackgroundResponseManager
 
 # Initialize components
 try:
@@ -85,6 +87,9 @@ try:
 
     # Initialize chat logger
     chat_logger = ChatLogger()
+
+    # Initialize background response manager
+    background_manager = BackgroundResponseManager()
 
     # Initialize settings manager with production-grade fallback
     try:
@@ -623,6 +628,205 @@ def generate_legal_response(query: str, search_results: List[Dict[str, Any]], se
         else:
             st.error(f"Error generating response with {selected_model}: {e}")
 
+
+def generate_legal_response_streaming(
+    query: str,
+    search_results: List[Dict[str, Any]],
+    reasoning_effort: str,
+    access_code: str,
+    session_id: str,
+    status_callback=None,
+    text_callback=None
+) -> Tuple[str, int, float, int, int, int, Optional[str]]:
+    """
+    Generate GPT-5 response using background mode with streaming for progressive display.
+    Returns: (response_text, total_tokens, cost, input_tokens, output_tokens, reasoning_tokens, response_id)
+    """
+    context = ""
+    for i, result in enumerate(search_results, 1):
+        context += f"\n--- Source {i} ---\n"
+        context += f"Citation: {result['citation']}\n"
+        context += f"Jurisdiction: {result['jurisdiction']}\n"
+        context += f"Content: {result['text']}\n"
+
+    input_text = f"{LEGAL_COMPLIANCE_SYSTEM_PROMPT}\n\nQuery: {query}\n\nRelevant Legal Sources:\n{context}"
+
+    start_time = time.time()
+    first_token_time = None
+    accumulated_text = ""
+    sequence_number = 0
+    response_id = None
+
+    input_tokens = 0
+    output_tokens = 0
+    reasoning_tokens = 0
+    total_tokens = 0
+
+    try:
+        response = openai_client.responses.create(
+            model="gpt-5",
+            input=input_text,
+            max_output_tokens=None,
+            reasoning={"effort": reasoning_effort},
+            text={"verbosity": "high"},
+            background=True,
+            stream=True,
+            store=True
+        )
+
+        response_id = response.id
+        print(f"[STREAMING] Started background response: {response_id}")
+
+        background_manager.create_pending_response(
+            response_id=response_id,
+            access_code=access_code,
+            session_id=session_id,
+            user_query=query,
+            search_results=search_results,
+            reasoning_effort=reasoning_effort
+        )
+
+        background_manager.update_status(response_id, "in_progress")
+
+        last_event_time = time.time()
+        last_save_time = time.time()
+        chunk_count = 0
+
+        for event in response:
+            current_time = time.time()
+            elapsed = current_time - start_time
+            event_type = event.type
+
+            if event_type == "response.output_text.delta":
+                if first_token_time is None:
+                    first_token_time = elapsed
+                    ttft = first_token_time
+                    background_manager.set_time_to_first_token(response_id, ttft)
+                    print(f"[STREAMING] First token received at {ttft:.2f}s")
+
+                chunk = event.delta
+                accumulated_text += chunk
+                sequence_number += 1
+                chunk_count += 1
+                last_event_time = current_time
+
+                if text_callback:
+                    text_callback(accumulated_text)
+
+                if current_time - last_save_time > 10:
+                    background_manager.update_partial_response(
+                        response_id, accumulated_text, sequence_number
+                    )
+                    last_save_time = current_time
+
+            elif event_type == "response.output_text.done":
+                print(f"[STREAMING] Text output complete: {len(accumulated_text)} chars")
+
+            elif event_type == "response.completed":
+                usage = event.response.usage
+                input_tokens = usage.input_tokens
+                output_tokens = usage.output_tokens
+                total_tokens = usage.total_tokens
+
+                if hasattr(usage, 'output_tokens_details') and usage.output_tokens_details:
+                    reasoning_tokens = getattr(usage.output_tokens_details, 'reasoning_tokens', 0)
+
+                elapsed = time.time() - start_time
+                print(f"[STREAMING] Complete in {elapsed:.1f}s")
+                print(f"[STREAMING] Tokens - Input: {input_tokens}, Output: {output_tokens}, Reasoning: {reasoning_tokens}, Total: {total_tokens}")
+
+                token_usage = {
+                    "input_tokens": input_tokens,
+                    "output_tokens": output_tokens,
+                    "reasoning_tokens": reasoning_tokens,
+                    "total_tokens": total_tokens
+                }
+                background_manager.mark_completed(response_id, accumulated_text, token_usage)
+
+            elif event_type == "response.incomplete":
+                reason = getattr(event.response.incomplete_details, 'reason', 'unknown')
+                print(f"[STREAMING] Response incomplete: {reason}")
+                if status_callback:
+                    status_callback(f"Response incomplete: {reason}")
+
+            elif event_type == "response.failed":
+                error_msg = getattr(event.response.error, 'message', 'Unknown error')
+                print(f"[STREAMING] Response failed: {error_msg}")
+                background_manager.mark_failed(response_id, error_msg)
+                raise Exception(f"OpenAI response failed: {error_msg}")
+
+            time_since_last = current_time - last_event_time
+            if first_token_time is None and time_since_last > 30:
+                if status_callback:
+                    if time_since_last > 90:
+                        status_callback("Extended reasoning in progress... Your response is saved and safe to refresh.")
+                    elif time_since_last > 60:
+                        status_callback("Deep reasoning in progress... This query requires extensive analysis.")
+                    else:
+                        status_callback("GPT-5 is thinking deeply...")
+
+        estimated_cost = calculate_estimated_cost(total_tokens, reasoning_effort)
+        return accumulated_text, total_tokens, estimated_cost, input_tokens, output_tokens, reasoning_tokens, response_id
+
+    except Exception as e:
+        elapsed = time.time() - start_time
+        error_msg = str(e)
+        print(f"[STREAMING] Error after {elapsed:.1f}s: {error_msg}")
+
+        if response_id:
+            background_manager.mark_failed(response_id, error_msg)
+
+        if "timeout" in error_msg.lower() or elapsed > 90:
+            if response_id and accumulated_text:
+                background_manager.update_partial_response(response_id, accumulated_text, sequence_number)
+                return accumulated_text + "\n\n[Response may be incomplete due to timeout]", 0, 0.0, 0, 0, 0, response_id
+
+        raise
+
+
+def check_and_recover_pending_response(session_id: str) -> Optional[Dict[str, Any]]:
+    """Check for any pending or recently completed responses for this session"""
+    active = background_manager.get_active_response_for_session(session_id)
+    if active:
+        return active
+
+    recent = background_manager.get_recently_completed_response(session_id, minutes=5)
+    if recent:
+        return recent
+
+    return None
+
+
+def retrieve_background_response(response_id: str) -> Optional[Dict[str, Any]]:
+    """Retrieve a background response by its ID"""
+    try:
+        response = openai_client.responses.retrieve(response_id)
+
+        if response.status == "completed":
+            usage = response.usage
+            return {
+                "status": "completed",
+                "text": response.output_text,
+                "input_tokens": usage.input_tokens if usage else 0,
+                "output_tokens": usage.output_tokens if usage else 0,
+                "reasoning_tokens": getattr(getattr(usage, 'output_tokens_details', None), 'reasoning_tokens', 0) if usage else 0,
+                "total_tokens": usage.total_tokens if usage else 0
+            }
+        elif response.status == "failed":
+            return {
+                "status": "failed",
+                "error": getattr(response.error, 'message', 'Unknown error') if response.error else 'Unknown error'
+            }
+        else:
+            return {
+                "status": response.status,
+                "text": None
+            }
+    except Exception as e:
+        print(f"Error retrieving response {response_id}: {e}")
+        return None
+
+
 # Authentication functions
 def check_authentication():
     """Check if user is authenticated"""
@@ -776,15 +980,57 @@ def show_login_page():
 def show_main_application():
     """Display main application interface"""
 
-    # Initialize model selection in session state
     if 'selected_model' not in st.session_state:
         st.session_state.selected_model = "GPT-5"
 
-    # Initialize Sonar reasoning effort override
     if 'sonar_reasoning_effort_override' not in st.session_state:
         st.session_state.sonar_reasoning_effort_override = "Auto"
 
-    # Optimized header for mobile-first design
+    if 'recovery_checked' not in st.session_state:
+        st.session_state.recovery_checked = False
+
+    if not st.session_state.recovery_checked and 'session_id' in st.session_state:
+        st.session_state.recovery_checked = True
+        try:
+            pending = check_and_recover_pending_response(st.session_state.session_id)
+            if pending:
+                if pending.get('status') in ['queued', 'in_progress', 'streaming']:
+                    st.info(f"📡 **Previous query still processing:** \"{pending.get('user_query', 'Unknown')[:100]}...\"")
+
+                    response_id = pending.get('response_id')
+                    if response_id:
+                        result = retrieve_background_response(response_id)
+                        if result and result.get('status') == 'completed':
+                            st.success("Your previous query has completed!")
+                            with st.expander("View recovered response", expanded=True):
+                                st.markdown(result.get('text', 'No content available'))
+                                st.caption(f"Tokens: {result.get('total_tokens', 0):,}")
+
+                            if "messages" not in st.session_state:
+                                st.session_state.messages = []
+                            st.session_state.messages.append({
+                                "role": "user",
+                                "content": pending.get('user_query', '')
+                            })
+                            st.session_state.messages.append({
+                                "role": "assistant",
+                                "content": result.get('text', '')
+                            })
+                        elif result and result.get('status') == 'failed':
+                            st.error(f"Previous query failed: {result.get('error', 'Unknown error')}")
+                        else:
+                            st.warning("Query is still processing. Check back in a moment.")
+
+                elif pending.get('status') == 'completed':
+                    final_response = pending.get('final_response')
+                    if final_response and final_response not in str(st.session_state.get('messages', [])):
+                        st.success("Found a recently completed response!")
+                        with st.expander("View recovered response", expanded=False):
+                            st.markdown(final_response)
+
+        except Exception as e:
+            print(f"Recovery check failed: {e}")
+
     header_col1, header_col2 = st.columns([4, 1])
     with header_col1:
         st.markdown("<h1 style='margin-bottom: 4px;'>Compliance Assistant</h1>", unsafe_allow_html=True)
@@ -847,7 +1093,6 @@ def show_main_application():
 
         # Show cache age
         if cache_state.get('load_timestamp'):
-            import time
             age = time.time() - cache_state['load_timestamp']
             st.sidebar.write(f"**Cache Age:** {age:.1f}s")
 
@@ -932,131 +1177,158 @@ def show_legal_assistant_content():
                                 st.divider()
 
 def handle_chat_input(prompt):
-    """Handle chat input and generate response"""
-    # Ensure session_id exists
+    """Handle chat input and generate response with streaming support"""
     if 'session_id' not in st.session_state:
         st.session_state.session_id = str(uuid.uuid4())
-    
-    # Get selected model from session state
+
     selected_model = st.session_state.get('selected_model', 'GPT-5')
-    
-    # Add user message to chat history
+    access_code = st.session_state.get('access_code', 'unknown')
+
     st.session_state.messages.append({"role": "user", "content": prompt})
-    
-    # Display user message
+
     with st.chat_message("user"):
         st.markdown(prompt)
-    
-    # Generate and display assistant response
+
     with st.chat_message("assistant"):
-        # Create status placeholder for real-time updates
         status_placeholder = st.empty()
+        text_placeholder = st.empty()
+        elapsed_placeholder = st.empty()
 
-        with st.spinner("Processing your legal query..."):
-            # Step 1: Determine reasoning effort based on user preference (overrides admin setting)
-            user_effort_preference = st.session_state.get('user_effort_preference', 'automatic')
-            reasoning_effort_source = "User"
+        user_effort_preference = st.session_state.get('user_effort_preference', 'automatic')
+        reasoning_effort_source = "User"
 
-            if user_effort_preference == 'automatic':
-                # Use automatic classification
-                reasoning_effort_source = "Auto"
-                if selected_model == "GPT-5":
-                    status_placeholder.info("Choosing reasoning effort automatically...")
-                    reasoning_effort = classify_reasoning_effort_with_gpt4o_mini(prompt)
-                else:
-                    status_placeholder.info("Calculating complexity score...")
-                    complexity_score, _ = calculate_complexity_score(prompt)
-                    reasoning_effort = get_reasoning_effort(complexity_score)
-            else:
-                # Use user's explicit choice (medium or high)
-                reasoning_effort = user_effort_preference
-                status_placeholder.info(f"Using your selected reasoning effort: {user_effort_preference}...")
-            
-            # Show determined effort level
-            effort_emoji = {"medium": "🧠", "high": "🔬"}
-            model_emoji = {"GPT-5": "🤖", "Sonar Reasoning Pro (RAG Only)": "🧠"}
-            effort_display = f"{reasoning_effort.upper()} ({reasoning_effort_source})"
-            status_placeholder.success(f"{model_emoji.get(selected_model, '🤖')} Model: **{selected_model}** | {effort_emoji.get(reasoning_effort, '🧠')} Effort: **{effort_display}**")
-            
-            # Brief pause to let user see the effort level
-            import time
-            time.sleep(0.5)
-            
-            # Step 2: Search legal database
-            status_placeholder.info("🔍 Searching legal database...")
-            search_results = search_legal_database(prompt)
-
-            # Sort search results by relevance score (highest first)
-            if search_results:
-                search_results = sorted(search_results, key=lambda x: x.get('score', 0), reverse=True)
-
-            # Show search results count
-            if search_results:
-                status_placeholder.success(f"📚 Found {len(search_results)} relevant legal sources")
-            else:
-                status_placeholder.warning("📚 No specific legal sources found - using general knowledge")
-            
-            time.sleep(0.5)
-            
-            # Step 3: Generate response with dynamic status based on effort
+        if user_effort_preference == 'automatic':
+            reasoning_effort_source = "Auto"
             if selected_model == "GPT-5":
-                if reasoning_effort == "medium":
-                    status_placeholder.info("GPT-5 analyzing with medium reasoning effort...")
-                else:
-                    status_placeholder.info("GPT-5 performing deep analysis with high reasoning effort... This may take 3-10 minutes.")
+                status_placeholder.info("Choosing reasoning effort automatically...")
+                reasoning_effort = classify_reasoning_effort_with_gpt4o_mini(prompt)
             else:
-                if reasoning_effort == "medium":
-                    status_placeholder.info(f"Sonar Reasoning Pro analyzing legal sources with medium effort ({reasoning_effort_source})...")
+                status_placeholder.info("Calculating complexity score...")
+                complexity_score, _ = calculate_complexity_score(prompt)
+                reasoning_effort = get_reasoning_effort(complexity_score)
+        else:
+            reasoning_effort = user_effort_preference
+            status_placeholder.info(f"Using your selected reasoning effort: {user_effort_preference}...")
+
+        effort_emoji = {"medium": "🧠", "high": "🔬"}
+        model_emoji = {"GPT-5": "🤖", "Sonar Reasoning Pro (RAG Only)": "🧠"}
+        effort_display = f"{reasoning_effort.upper()} ({reasoning_effort_source})"
+        status_placeholder.success(f"{model_emoji.get(selected_model, '🤖')} Model: **{selected_model}** | {effort_emoji.get(reasoning_effort, '🧠')} Effort: **{effort_display}**")
+
+        time.sleep(0.5)
+
+        status_placeholder.info("🔍 Searching legal database...")
+        search_results = search_legal_database(prompt)
+
+        if search_results:
+            search_results = sorted(search_results, key=lambda x: x.get('score', 0), reverse=True)
+
+        if search_results:
+            status_placeholder.success(f"📚 Found {len(search_results)} relevant legal sources")
+        else:
+            status_placeholder.warning("📚 No specific legal sources found - using general knowledge")
+
+        time.sleep(0.5)
+
+        if selected_model == "GPT-5":
+            if reasoning_effort == "medium":
+                status_placeholder.info("GPT-5 analyzing with streaming (medium effort)...")
+            else:
+                status_placeholder.info("GPT-5 performing deep analysis with streaming (high effort)... Text will appear as it's generated.")
+
+            start_time = time.time()
+            streaming_text = [""]
+
+            def update_text(text):
+                streaming_text[0] = text
+                text_placeholder.markdown(text + " ▌")
+                elapsed = time.time() - start_time
+                elapsed_placeholder.caption(f"Elapsed: {elapsed:.0f}s")
+
+            def update_status(msg):
+                status_placeholder.warning(msg)
+
+            try:
+                result = generate_legal_response_streaming(
+                    query=prompt,
+                    search_results=search_results,
+                    reasoning_effort=reasoning_effort,
+                    access_code=access_code,
+                    session_id=st.session_state.session_id,
+                    status_callback=update_status,
+                    text_callback=update_text
+                )
+
+                ai_response_text, total_tokens, estimated_cost, input_tokens, output_tokens, reasoning_tokens, response_id = result
+
+                status_placeholder.empty()
+                elapsed_placeholder.empty()
+                text_placeholder.markdown(ai_response_text)
+
+            except Exception as e:
+                status_placeholder.empty()
+                elapsed_placeholder.empty()
+                error_msg = str(e)
+                print(f"Streaming failed: {error_msg}")
+
+                if streaming_text[0]:
+                    ai_response_text = streaming_text[0] + "\n\n[Response interrupted - partial content shown]"
+                    text_placeholder.markdown(ai_response_text)
+                    total_tokens = 0
+                    estimated_cost = 0.0
+                    input_tokens = 0
+                    output_tokens = 0
+                    reasoning_tokens = 0
                 else:
-                    status_placeholder.info(f"Sonar Reasoning Pro performing deep analysis with high effort ({reasoning_effort_source})...")
-            
-            ai_response_text, total_tokens, estimated_cost, input_tokens, output_tokens, reasoning_tokens = generate_legal_response(prompt, search_results, selected_model, reasoning_effort)
-            
-            # Clear status placeholder before showing final response
+                    status_placeholder.info("Streaming unavailable, using standard request...")
+                    ai_response_text, total_tokens, estimated_cost, input_tokens, output_tokens, reasoning_tokens = generate_legal_response(
+                        prompt, search_results, selected_model, reasoning_effort
+                    )
+                    text_placeholder.markdown(ai_response_text)
+
+        else:
+            if reasoning_effort == "medium":
+                status_placeholder.info(f"Sonar Reasoning Pro analyzing legal sources with medium effort ({reasoning_effort_source})...")
+            else:
+                status_placeholder.info(f"Sonar Reasoning Pro performing deep analysis with high effort ({reasoning_effort_source})...")
+
+            ai_response_text, total_tokens, estimated_cost, input_tokens, output_tokens, reasoning_tokens = generate_legal_response(
+                prompt, search_results, selected_model, reasoning_effort
+            )
+
             status_placeholder.empty()
-            
-            # Display response
-            st.markdown(ai_response_text)
+            text_placeholder.markdown(ai_response_text)
 
-            # Display itemized token info with model information
-            model_short = "GPT-5" if selected_model == "GPT-5" else "Sonar-RP"
-            effort_with_source = f"{reasoning_effort.upper()} ({reasoning_effort_source})"
-            if selected_model == "Sonar Reasoning Pro (RAG Only)":
-                st.caption(f"Input: {input_tokens:,} | Output: {output_tokens:,} | Total: {total_tokens:,} | Model: {model_short} | Effort: {effort_with_source} | *Cost estimate based on GPT-5 pricing")
-            else:
-                st.caption(f"Input: {input_tokens:,} | Output: {output_tokens:,} | Reasoning: {reasoning_tokens:,} | Total: {total_tokens:,} | Model: {model_short} | Effort: {effort_with_source}")
+        model_short = "GPT-5" if selected_model == "GPT-5" else "Sonar-RP"
+        effort_with_source = f"{reasoning_effort.upper()} ({reasoning_effort_source})"
+        if selected_model == "Sonar Reasoning Pro (RAG Only)":
+            st.caption(f"Input: {input_tokens:,} | Output: {output_tokens:,} | Total: {total_tokens:,} | Model: {model_short} | Effort: {effort_with_source} | *Cost estimate based on GPT-5 pricing")
+        else:
+            st.caption(f"Input: {input_tokens:,} | Output: {output_tokens:,} | Reasoning: {reasoning_tokens:,} | Total: {total_tokens:,} | Model: {model_short} | Effort: {effort_with_source}")
 
-            # Display retrieved chunks in expander
-            # Check if showing chunks is enabled in settings (use cached setting from session state)
-            show_chunks_enabled = st.session_state.settings_cache.get('show_rag_chunks_enabled', False)
+        show_chunks_enabled = st.session_state.settings_cache.get('show_rag_chunks_enabled', False)
 
-            if show_chunks_enabled and search_results:
-                # Calculate average relevance score
-                avg_score = sum(chunk.get('score', 0) for chunk in search_results) / len(search_results)
+        if show_chunks_enabled and search_results:
+            avg_score = sum(chunk.get('score', 0) for chunk in search_results) / len(search_results)
 
-                with st.expander(f"📚 View {len(search_results)} Retrieved Legal Sources (Avg Relevance: {avg_score:.1%})", expanded=False):
-                    for i, chunk in enumerate(search_results, 1):
-                        # Display chunk citation as header
-                        st.markdown(f"### Source {i}: {chunk.get('citation', 'Unknown')}")
+            with st.expander(f"📚 View {len(search_results)} Retrieved Legal Sources (Avg Relevance: {avg_score:.1%})", expanded=False):
+                for i, chunk in enumerate(search_results, 1):
+                    st.markdown(f"### Source {i}: {chunk.get('citation', 'Unknown')}")
 
-                        # Display relevance score with visual indicator
-                        score = chunk.get('score', 0)
-                        score_color = "🟢" if score >= 0.8 else "🟡" if score >= 0.6 else "🟠"
-                        st.markdown(f"{score_color} **Relevance Score:** {score:.1%}")
+                    score = chunk.get('score', 0)
+                    score_color = "🟢" if score >= 0.8 else "🟡" if score >= 0.6 else "🟠"
+                    st.markdown(f"{score_color} **Relevance Score:** {score:.1%}")
 
-                        # Display metadata
-                        st.markdown(f"**Jurisdiction:** {chunk.get('jurisdiction', 'Unknown')} | **Section:** {chunk.get('section_number', 'Unknown')}")
+                    st.markdown(f"**Jurisdiction:** {chunk.get('jurisdiction', 'Unknown')} | **Section:** {chunk.get('section_number', 'Unknown')}")
 
-                        if chunk.get('source_file'):
-                            st.markdown(f"**Source File:** {chunk.get('source_file')}")
+                    if chunk.get('source_file'):
+                        st.markdown(f"**Source File:** {chunk.get('source_file')}")
 
-                        # Display chunk text content
-                        st.markdown("**Content:**")
-                        st.markdown(f"> {chunk.get('text', 'No content available')}")
+                    st.markdown("**Content:**")
+                    st.markdown(f"> {chunk.get('text', 'No content available')}")
 
-                        # Add separator between chunks
-                        if i < len(search_results):
-                            st.divider()
+                    if i < len(search_results):
+                        st.divider()
     
     # Add assistant response to chat history with chunks (only if setting is enabled)
     # Use cached setting from session state (loaded once per session)
