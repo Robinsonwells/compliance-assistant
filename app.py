@@ -1474,14 +1474,14 @@ def show_main_application():
         prompt = st.session_state.pending_prompt
         del st.session_state['pending_prompt']  # Clear it
 
-        # Remove the last two messages (user's blocked question + assistant's policy block message)
-        # This makes the rewrite appear as if it was the original question
-        if len(st.session_state.messages) >= 2:
-            st.session_state.messages = st.session_state.messages[:-2]
+        # Remove only the assistant's block message (last message), keep the original user prompt
+        # This prevents accidentally deleting messages from previous turns
+        if len(st.session_state.messages) >= 1 and st.session_state.messages[-1]["role"] == "assistant":
+            st.session_state.messages = st.session_state.messages[:-1]
 
         # Now submit the rewritten prompt as a fresh query
         handle_chat_input(prompt)
-        # Don't fall through to chat_input
+        st.stop()  # Stop execution immediately after handling pending prompt
     else:
         # Handle chat input outside of tabs (only if no pending_prompt)
         if prompt := st.chat_input("Ask any compliance question"):
@@ -1715,6 +1715,7 @@ def handle_chat_input(prompt):
                                     # Set flag to indicate this is a rewrite attempt
                                     st.session_state.just_used_rewrite = True
                                     st.rerun()
+                                    st.stop()  # Stop execution immediately after rerun
 
                                 # Show full text below button
                                 st.caption(rewrite)
