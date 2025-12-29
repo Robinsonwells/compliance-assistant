@@ -6,6 +6,7 @@ import requests
 import re
 from typing import List, Dict, Any, Generator, Tuple, Optional
 import time
+import traceback
 
 # Load environment variables
 load_dotenv()
@@ -680,6 +681,82 @@ def get_polling_status_message(elapsed_seconds: float) -> str:
         return f"Processing extended analysis... ({int(elapsed_seconds)}s)\nComplex reasoning still in progress."
 
 
+def generate_sonar_response(
+    query: str,
+    search_results: List[Dict[str, Any]],
+    reasoning_effort: str
+) -> Tuple[str, int, float, int, int, int]:
+    """
+    Generate response using Sonar Reasoning Pro (Perplexity API) with RAG context.
+    Returns: (response_text, total_tokens, cost, input_tokens, output_tokens, reasoning_tokens)
+    """
+    try:
+        # Prepare context from search results
+        context = ""
+        for i, result in enumerate(search_results, 1):
+            context += f"\n--- Source {i} ---\n"
+            context += f"Citation: {result['citation']}\n"
+            context += f"Jurisdiction: {result['jurisdiction']}\n"
+            context += f"Content: {result['text']}\n"
+
+        # Prepare messages for Perplexity API
+        messages = [
+            {"role": "system", "content": LEGAL_COMPLIANCE_SYSTEM_PROMPT},
+            {"role": "user", "content": f"Query: {query}\n\nRelevant Legal Sources:\n{context}"}
+        ]
+
+        # Make request to Perplexity API with search disabled
+        url = "https://api.perplexity.ai/chat/completions"
+        payload = {
+            "model": "sonar-reasoning-pro",
+            "messages": messages,
+            "disable_search": True,  # Disable web search - use only provided context
+            "stream": False
+        }
+
+        headers = {
+            "Authorization": f"Bearer {PERPLEXITY_API_KEY}",
+            "Content-Type": "application/json"
+        }
+
+        print(f"[SONAR] Starting Sonar Reasoning Pro request...")
+        print(f"[SONAR] Query length: {len(query)} chars, Context length: {len(context)} chars")
+
+        response = requests.post(url, json=payload, headers=headers, timeout=300)
+        response.raise_for_status()
+
+        response_data = response.json()
+
+        # Extract the message content
+        ai_response = response_data["choices"][0]["message"]["content"]
+
+        # Extract usage information
+        usage = response_data.get("usage", {})
+        input_tokens = usage.get("prompt_tokens", 0)
+        output_tokens = usage.get("completion_tokens", 0)
+        reasoning_tokens = 0  # Sonar Reasoning Pro doesn't separate reasoning tokens
+        total_tokens = usage.get("total_tokens", input_tokens + output_tokens)
+
+        # Log token usage to console
+        print(f"[SONAR] Complete - Response length: {len(ai_response)} characters")
+        print(f"[SONAR] Tokens - Input: {input_tokens:,}, Output: {output_tokens:,}, Total: {total_tokens:,}")
+
+        # Calculate estimated cost (using GPT-5 pricing as baseline)
+        estimated_cost = calculate_estimated_cost(total_tokens, reasoning_effort)
+
+        return ai_response, total_tokens, estimated_cost, input_tokens, output_tokens, reasoning_tokens
+
+    except Exception as e:
+        error_msg = str(e).lower()
+        print(f"[SONAR] Error: {e}")
+        print(f"[SONAR] Full traceback:\n{traceback.format_exc()}")
+
+        if "timeout" in error_msg:
+            return "The query is taking longer than expected to process. Please try simplifying your question or try again later.", 0, 0.0, 0, 0, 0
+        else:
+            raise
+
+
 def generate_legal_response_polling(
     query: str,
     search_results: List[Dict[str, Any]],
@@ -728,6 +805,8 @@ def generate_legal_response_polling(
 
         response_id = response.id
         print(f"[POLLING] Started background response: {response_id}")
+        print(f"[POLLING] Reasoning effort: {reasoning_effort}")
+        print(f"[POLLING] Query length: {len(query)} chars, Context length: {len(context)} chars")
 
         background_manager.create_pending_response(
             response_id=response_id,
@@ -739,14 +818,27 @@ def generate_legal_response_polling(
         )
         background_manager.update_status(response_id, "in_progress")
 
+        print(f"[POLLING] Entering polling loop with {polling_interval}s interval...")
+        poll_count = 0
         while True:
             elapsed = time.time() - start_time
+            poll_count += 1
+
+            # Cloudflare detection markers
+            if 89 <= elapsed < 91:
+                print(f"[CLOUDFLARE-WARNING] 90s mark reached - Cloudflare timeout zone approaching")
+            elif 99 <= elapsed < 101:
+                print(f"[CLOUDFLARE-THRESHOLD] 100s mark - typical Cloudflare timeout threshold")
+            elif 119 <= elapsed < 121:
+                print(f"[CLOUDFLARE-EXCEEDED] 120s mark - if still running, likely NOT Cloudflare issue")
 
             if status_callback:
                 status_msg = get_polling_status_message(elapsed)
                 status_callback(status_msg)
 
+            print(f"[POLL] Poll #{poll_count}, elapsed={elapsed:.1f}s, retrieving status...")
             result = openai_client.responses.retrieve(response_id)
+            print(f"[POLL] Poll #{poll_count}, elapsed={elapsed:.1f}s, status={result.status}")
 
             if result.status == "completed":
                 usage = result.usage
@@ -762,8 +854,10 @@ def generate_legal_response_polling(
                     print(f"[POLLING] WARNING: No output text extracted from response")
                     print(f"[POLLING] Response object: {result}")
                 elapsed = time.time() - start_time
-                print(f"[POLLING] Complete in {elapsed:.1f}s, text length: {len(response_text)}")
-                print(f"[POLLING] Tokens - Input: {input_tokens}, Output: {output_tokens}, Reasoning: {reasoning_tokens}, Total: {total_tokens}")
+                print(f"[COMPLETE] ✅ Finished successfully in {elapsed:.1f}s ({elapsed/60:.1f} minutes)")
+                print(f"[COMPLETE] Response length: {len(response_text)} characters")
+                print(f"[COMPLETE] Tokens - Input: {input_tokens}, Output: {output_tokens}, Reasoning: {reasoning_tokens}, Total: {total_tokens}")
+                print(f"[COMPLETE] Total polls: {poll_count}")
 
                 token_usage = {
                     "input_tokens": input_tokens,
@@ -1331,6 +1425,12 @@ def handle_chat_input(prompt):
                 elapsed_placeholder.empty()
                 elapsed_time = time.time() - start_time
 
+                # Enhanced error logging for debugging
+                error_msg = str(e)
+                st.error(f"ERROR: {error_msg}")
+                print(f"[ERROR] Exception after {elapsed_time:.1f}s: {error_msg}")
+                print(f"[ERROR] Full traceback:\n{traceback.format_exc()}")
+
                 error_placeholder = st.empty()
                 display_streaming_error(e, elapsed_time, error_placeholder)
 
@@ -1343,8 +1443,14 @@ def handle_chat_input(prompt):
                     output_tokens = 0
                     reasoning_tokens = 0
                 else:
-                    ai_response_text, total_tokens, estimated_cost, input_tokens, output_tokens, reasoning_tokens = generate_legal_response_smart(
-                        prompt, search_results, selected_model, reasoning_effort
+                    ai_response_text, total_tokens, estimated_cost, input_tokens, output_tokens, reasoning_tokens, response_id = generate_legal_response_smart(
+                        query=prompt,
+                        search_results=search_results,
+                        reasoning_effort=reasoning_effort,
+                        access_code=access_code,
+                        session_id=st.session_state.session_id,
+                        status_callback=None,
+                        text_callback=None
                     )
                     text_placeholder.markdown(ai_response_text)
 
@@ -1354,8 +1460,10 @@ def handle_chat_input(prompt):
             else:
                 status_placeholder.info(f"Sonar Reasoning Pro performing deep analysis with high effort ({reasoning_effort_source})...")
 
-            ai_response_text, total_tokens, estimated_cost, input_tokens, output_tokens, reasoning_tokens = generate_legal_response_smart(
-                prompt, search_results, selected_model, reasoning_effort
+            ai_response_text, total_tokens, estimated_cost, input_tokens, output_tokens, reasoning_tokens = generate_sonar_response(
+                query=prompt,
+                search_results=search_results,
+                reasoning_effort=reasoning_effort
             )
 
             status_placeholder.empty()
