@@ -623,100 +623,6 @@ def format_audit_with_citations(audit_content: str, citations: List[Dict]) -> st
         print(f"Error formatting citations: {e}")
         return audit_content
 
-def generate_legal_response(query: str, search_results: List[Dict[str, Any]], selected_model: str, reasoning_effort: str) -> str:
-    """Generate response using OpenAI with legal context"""
-    try:
-        # Prepare context from search results
-        context = ""
-        for i, result in enumerate(search_results, 1):
-            context += f"\n--- Source {i} ---\n"
-            context += f"Citation: {result['citation']}\n"
-            context += f"Jurisdiction: {result['jurisdiction']}\n"
-            context += f"Content: {result['text']}\n"
-        
-        if selected_model == "GPT-5":
-            # Prepare input for GPT-5 Responses API
-            input_text = f"{LEGAL_COMPLIANCE_SYSTEM_PROMPT}\n\nQuery: {query}\n\nRelevant Legal Sources:\n{context}"
-            
-            # Generate response using GPT-5 Responses API
-            response = openai_client.responses.create(
-                model="gpt-5",
-                input=input_text,
-                max_output_tokens=None,  # No token limit - track usage
-                reasoning={"effort": reasoning_effort},
-                text={"verbosity": "high"}
-            )
-
-            # Extract token usage information
-            usage = response.usage
-            input_tokens = usage.input_tokens
-            output_tokens = usage.output_tokens
-            reasoning_tokens = getattr(getattr(usage, 'output_tokens_details', None), 'reasoning_tokens', 0)
-            total_tokens = usage.total_tokens
-            
-            # Get the AI response text
-            ai_response = response.output_text
-            
-        else:  # Sonar Reasoning Pro (RAG Only)
-            # Prepare messages for Perplexity API
-            messages = [
-                {"role": "system", "content": LEGAL_COMPLIANCE_SYSTEM_PROMPT},
-                {"role": "user", "content": f"Query: {query}\n\nRelevant Legal Sources:\n{context}"}
-            ]
-            
-            # Make request to Perplexity API with search disabled
-            url = "https://api.perplexity.ai/chat/completions"
-            payload = {
-                "model": "sonar-reasoning-pro",
-                "messages": messages,
-                "disable_search": True,  # Disable web search - use only provided context
-                "stream": False
-            }
-            
-            headers = {
-                "Authorization": f"Bearer {PERPLEXITY_API_KEY}",
-                "Content-Type": "application/json"
-            }
-            
-            response = requests.post(url, json=payload, headers=headers, timeout=300)
-            response.raise_for_status()
-            
-            response_data = response.json()
-            
-            # Extract the message content
-            ai_response = response_data["choices"][0]["message"]["content"]
-            
-            # Extract usage information
-            usage = response_data.get("usage", {})
-            input_tokens = usage.get("prompt_tokens", 0)
-            output_tokens = usage.get("completion_tokens", 0)
-            reasoning_tokens = 0  # Sonar Reasoning Pro doesn't separate reasoning tokens
-            total_tokens = usage.get("total_tokens", input_tokens + output_tokens)
-        
-        # Log token usage to console
-        print(f"Model: {selected_model}")
-        print(f"Query: {query[:100]}...")
-        print(f"Reasoning Effort: {reasoning_effort}")
-        print(f"Input Tokens: {input_tokens:,}")
-        print(f"Output Tokens: {output_tokens:,}")
-        print(f"Reasoning Tokens: {reasoning_tokens:,}")
-        print(f"Total Tokens: {total_tokens:,}")
-        
-        # Calculate estimated cost (using GPT-5 pricing as baseline)
-        estimated_cost = calculate_estimated_cost(total_tokens, reasoning_effort)
-        
-        return ai_response, total_tokens, estimated_cost, input_tokens, output_tokens, reasoning_tokens
-        
-    except Exception as e:
-        error_msg = str(e).lower()
-        print(f"Error generating response with {selected_model}: {e}")
-        
-        if "timeout" in error_msg:
-            return "The query is taking longer than expected to process. Please try simplifying your question or try again later.", 0, 0.0, 0, 0, 0
-        else:
-            st.error(f"Error generating response with {selected_model}: {e}")
-
-
 def extract_output_text_from_response(response) -> str:
     """
     Extract output text from an OpenAI Responses API response object.
@@ -1437,7 +1343,7 @@ def handle_chat_input(prompt):
                     output_tokens = 0
                     reasoning_tokens = 0
                 else:
-                    ai_response_text, total_tokens, estimated_cost, input_tokens, output_tokens, reasoning_tokens = generate_legal_response(
+                    ai_response_text, total_tokens, estimated_cost, input_tokens, output_tokens, reasoning_tokens = generate_legal_response_smart(
                         prompt, search_results, selected_model, reasoning_effort
                     )
                     text_placeholder.markdown(ai_response_text)
@@ -1448,7 +1354,7 @@ def handle_chat_input(prompt):
             else:
                 status_placeholder.info(f"Sonar Reasoning Pro performing deep analysis with high effort ({reasoning_effort_source})...")
 
-            ai_response_text, total_tokens, estimated_cost, input_tokens, output_tokens, reasoning_tokens = generate_legal_response(
+            ai_response_text, total_tokens, estimated_cost, input_tokens, output_tokens, reasoning_tokens = generate_legal_response_smart(
                 prompt, search_results, selected_model, reasoning_effort
             )
 
