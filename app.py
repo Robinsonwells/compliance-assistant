@@ -256,7 +256,7 @@ def search_legal_database(query: str, limit: int = 20) -> List[Dict[str, Any]]:
         search_results = qdrant_client.search(
             collection_name="legal_regulations",
             query_vector=query_embedding,
-            limit=50,
+            limit=5,
             with_payload=True
         )
         
