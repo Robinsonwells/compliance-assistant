@@ -837,6 +837,112 @@ def generate_legal_response_smart(
     )
 
 
+def generate_legal_response_via_fastapi(
+    query: str,
+    search_results: List[Dict[str, Any]],
+    reasoning_effort: str,
+    access_code: str,
+    session_id: str,
+    status_callback=None,
+    text_callback=None
+) -> Tuple[str, int, float, int, int, int, Optional[str]]:
+    """
+    NEW: Cloudflare-safe response generator using FastAPI backend polling.
+
+    This is the ONLY method that guarantees no Cloudflare timeouts:
+    - Submits query to FastAPI backend (returns immediately)
+    - FastAPI spawns true background task (decoupled from HTTP)
+    - Streamlit polls FastAPI status endpoint (each poll is <100ms)
+    - No HTTP request ever exceeds Cloudflare's 100s limit
+
+    Returns: (response_text, total_tokens, cost, input_tokens, output_tokens, reasoning_tokens, response_id)
+    """
+    fastapi_url = os.getenv("FASTAPI_URL", "http://localhost:8000")
+
+    try:
+        if status_callback:
+            status_callback("Submitting query to backend...")
+
+        response = requests.post(
+            f"{fastapi_url}/api/chat",
+            json={
+                "query": query,
+                "session_id": session_id,
+                "access_code": access_code,
+                "reasoning_effort": reasoning_effort,
+                "search_results": search_results
+            },
+            timeout=10
+        )
+        response.raise_for_status()
+        data = response.json()
+        response_id = data["response_id"]
+
+        print(f"[FASTAPI] Submitted query, response_id: {response_id}")
+
+        start_time = time.time()
+        last_sequence = 0
+
+        while True:
+            elapsed = time.time() - start_time
+
+            status_msg = get_polling_status_message(elapsed)
+            if status_callback:
+                status_callback(status_msg)
+
+            try:
+                status_response = requests.get(
+                    f"{fastapi_url}/api/response/{response_id}",
+                    timeout=5
+                )
+                status_response.raise_for_status()
+                status_data = status_response.json()
+
+                status = status_data["status"]
+                partial = status_data.get("partial_response", "")
+                sequence = status_data.get("sequence_number", 0)
+
+                if sequence > last_sequence and partial and text_callback:
+                    text_callback(partial)
+                    last_sequence = sequence
+
+                if status == "completed":
+                    final_response = requests.get(
+                        f"{fastapi_url}/api/response/{response_id}/final",
+                        timeout=5
+                    )
+                    final_response.raise_for_status()
+                    final_data = final_response.json()
+
+                    response_text = final_data.get("text", "")
+                    token_usage = final_data.get("token_usage", {})
+
+                    total_tokens = token_usage.get("total_tokens", 0)
+                    input_tokens = token_usage.get("input_tokens", 0)
+                    output_tokens = token_usage.get("output_tokens", 0)
+                    reasoning_tokens = token_usage.get("reasoning_tokens", 0)
+
+                    estimated_cost = calculate_estimated_cost(total_tokens, reasoning_effort)
+
+                    print(f"[FASTAPI] Completed in {elapsed:.1f}s")
+                    return response_text, total_tokens, estimated_cost, input_tokens, output_tokens, reasoning_tokens, response_id
+
+                elif status == "failed":
+                    error_msg = status_data.get("error_message", "Unknown error")
+                    raise Exception(f"Backend processing failed: {error_msg}")
+
+                interval = 0.5 if status == "streaming" else 1.0 if status == "in_progress" else 2.0
+                time.sleep(interval)
+
+            except requests.exceptions.RequestException as e:
+                print(f"[FASTAPI] Poll error: {e}")
+                time.sleep(2.0)
+
+    except Exception as e:
+        print(f"[FASTAPI] Error: {e}")
+        raise
+
+
 def check_and_recover_pending_response(session_id: str) -> Optional[Dict[str, Any]]:
     """Check for any pending or recently completed responses for this session"""
     active = background_manager.get_active_response_for_session(session_id)
@@ -1308,7 +1414,7 @@ def handle_chat_input(prompt):
                 status_placeholder.info(msg)
 
             try:
-                result = generate_legal_response_smart(
+                result = generate_legal_response_via_fastapi(
                     query=prompt,
                     search_results=search_results,
                     reasoning_effort=reasoning_effort,
