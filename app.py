@@ -1094,7 +1094,7 @@ def generate_legal_response_polling(
                     background_manager.mark_failed(response_id, error_msg)
 
                     # Raise ContentFilterError (stops polling immediately)
-                    # Rewrite will be generated in UI layer via generate_safe_rewrite()
+                    # UI layer will show simple error message asking user to rephrase
                     raise ContentFilterError(
                         response_id=response_id,
                         elapsed=elapsed,
@@ -1674,10 +1674,6 @@ def handle_chat_input(prompt):
 
                 ai_response_text, total_tokens, estimated_cost, input_tokens, output_tokens, reasoning_tokens, response_id = result
 
-                # Clear rewrite flag on success
-                if 'just_used_rewrite' in st.session_state:
-                    del st.session_state['just_used_rewrite']
-
                 status_placeholder.empty()
                 elapsed_placeholder.empty()
                 text_placeholder.markdown(ai_response_text)
@@ -1697,97 +1693,19 @@ def handle_chat_input(prompt):
                 # Store response_id for tagging the block message
                 policy_block_response_id = e.response_id
 
-                # Check if this is a repeated content filter (from a rewrite that also got blocked)
-                # If so, don't offer more rewrites (prevent infinite loop)
-                is_rewrite_attempt = 'just_used_rewrite' in st.session_state
+                # Display simple policy block message
+                text_placeholder.error("⚠️ **Response Blocked by Content Policy**")
+                st.error(
+                    "Your request was blocked by OpenAI's content filter. "
+                    "Please rephrase your question to more closely follow OpenAI's policies on requesting legal advice."
+                )
 
-                if is_rewrite_attempt:
-                    # Clear the flag consistently (always use del)
-                    del st.session_state['just_used_rewrite']
-                    # This is a rewrite that also got blocked - show simpler message
-                    text_placeholder.error("⚠️ **Still Blocked by Content Policy**")
-                    st.error(
-                        f"The suggested rephrase was also blocked by OpenAI's content filter.\n\n"
-                        f"This topic may not be answerable through this system. "
-                        f"Please try a fundamentally different question focused on general governance principles."
-                    )
-
-                    # Provide guaranteed-safe fallback button
-                    st.markdown("### 💡 Try a Governance-Focused Question")
-                    safe_fallback = (
-                        "What governance controls and ethics safeguards are recommended to ensure "
-                        "litigation finance arrangements preserve attorney independence and comply with "
-                        "professional responsibility rules?"
-                    )
-                    if st.button("Ask governance-only version", key=f"safe_fallback_{e.response_id}", use_container_width=True):
-                        print(f"[POLICY-BLOCK] User clicked safe fallback button")
-                        st.session_state.pending_prompt = safe_fallback
-                        st.rerun()
-                        st.stop()
-                    st.caption(safe_fallback)
-
-                    ai_response_text = (
-                        f"⚠️ **Content Policy Block (Repeated)**\n\n"
-                        f"The suggested rephrase was also blocked. This topic may require a different approach."
-                    )
-                else:
-                    # First content filter - offer rewrites
-                    # Display prominent policy block warning
-                    text_placeholder.error("⚠️ **Response Blocked by Content Policy**")
-                    st.warning(
-                        f"**This request couldn't be answered due to content restrictions.** "
-                        f"OpenAI's content filter blocked this response (reason: `{e.reason}`).\n\n"
-                        f"**Response ID:** `{e.response_id}`  \n"
-                        f"**Elapsed:** {e.elapsed:.1f}s\n\n"
-                        f"Generating safer ways to ask your question..."
-                    )
-
-                    # Generate safe rewrites using OpenAI API
-                    try:
-                        rewrites = generate_safe_rewrite(e.original_prompt)
-                        print(f"[POLICY-BLOCK] Generated {len(rewrites)} compliant rewrites")
-                    except Exception as rewrite_error:
-                        print(f"[POLICY-BLOCK] Rewrite generation failed: {repr(rewrite_error)}")
-                        # Fallback to default rewrites
-                        rewrites = [
-                            "What are the key compliance considerations and risk management factors when evaluating legal matters?",
-                            "How do legal organizations approach capacity planning and budget allocation while maintaining professional standards?",
-                            "What ethical oversight mechanisms guide professional decision-making in accordance with regulatory standards?"
-                        ]
-
-                    # Show suggested safe rephrases in a container OUTSIDE chat history
-                    # This prevents them from persisting across reruns
-                    rewrite_container = st.container()
-                    with rewrite_container:
-                        st.markdown("### 💡 Safer Ways to Ask This Question")
-                        st.markdown(
-                            "Click a button below to automatically submit that version of your question:"
-                        )
-
-                        # Display suggestions as buttons with pending_prompt pattern
-                        cols = st.columns(3)
-                        for i, rewrite in enumerate(rewrites, 1):
-                            with cols[i-1]:
-                                # Show abbreviated text on button
-                                button_label = f"Option {i}"
-                                if st.button(button_label, key=f"rewrite_{e.response_id}_{i}", use_container_width=True):
-                                    print(f"[POLICY-BLOCK] User selected rewrite option {i}")
-                                    st.session_state.pending_prompt = rewrite
-                                    # Set flag to indicate this is a rewrite attempt
-                                    st.session_state.just_used_rewrite = True
-                                    st.rerun()
-                                    st.stop()  # Stop execution immediately after rerun
-
-                                # Show full text below button
-                                st.caption(rewrite)
-
-                    # Create assistant message documenting the block (for chat history)
-                    block_message = (
-                        f"⚠️ **Content Policy Block**\n\n"
-                        f"Your prompt was blocked by OpenAI's content filter (reason: `{e.reason}`). "
-                        f"Three alternative ways to ask this question are shown above."
-                    )
-                    ai_response_text = block_message
+                # Create assistant message documenting the block (for chat history)
+                ai_response_text = (
+                    f"⚠️ **Content Policy Block**\n\n"
+                    f"Your prompt was blocked by OpenAI's content filter (reason: `{e.reason}`). "
+                    f"Please rephrase your question to align with content policies."
+                )
 
                 total_tokens = 0
                 estimated_cost = 0.0
