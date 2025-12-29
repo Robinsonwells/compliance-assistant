@@ -1697,7 +1697,8 @@ def handle_chat_input(prompt):
                 text_placeholder.error("⚠️ **Response Blocked by Content Policy**")
                 st.error(
                     "Your request was blocked by OpenAI's content filter. "
-                    "Please rephrase your question to more closely follow OpenAI's policies on requesting legal advice."
+                    "Please rephrase your question to more closely follow OpenAI's policies on requesting legal advice.\n\n"
+                    "OpenAI most likely considered your request to be asking for legal advice. Try changing the request."
                 )
 
                 # Create assistant message documenting the block (for chat history)
