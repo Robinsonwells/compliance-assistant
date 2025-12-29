@@ -1470,10 +1470,12 @@ def show_main_application():
         prompt = st.session_state.pending_prompt
         del st.session_state['pending_prompt']  # Clear it
 
-        # Remove only the assistant's block message (last message), keep the original user prompt
-        # This prevents accidentally deleting messages from previous turns
-        if len(st.session_state.messages) >= 1 and st.session_state.messages[-1]["role"] == "assistant":
-            st.session_state.messages = st.session_state.messages[:-1]
+        # Remove the policy block message by tag (robust removal)
+        # This prevents accidentally deleting the wrong message if anything else was appended
+        st.session_state.messages = [
+            msg for msg in st.session_state.messages
+            if not msg.get("policy_block", False)
+        ]
 
         # Show legal assistant content (after cleanup)
         show_legal_assistant_content()
@@ -1559,6 +1561,9 @@ def handle_chat_input(prompt):
 
         user_effort_preference = st.session_state.get('user_effort_preference', 'automatic')
         reasoning_effort_source = "User"
+
+        # Initialize policy block response ID (set if ContentFilterError occurs)
+        policy_block_response_id = None
 
         if user_effort_preference == 'automatic':
             reasoning_effort_source = "Auto"
@@ -1652,13 +1657,16 @@ def handle_chat_input(prompt):
                 # Set flag to skip fact-checking
                 content_filter_triggered = True
 
+                # Store response_id for tagging the block message
+                policy_block_response_id = e.response_id
+
                 # Check if this is a repeated content filter (from a rewrite that also got blocked)
                 # If so, don't offer more rewrites (prevent infinite loop)
-                is_rewrite_attempt = st.session_state.get('just_used_rewrite', False)
+                is_rewrite_attempt = 'just_used_rewrite' in st.session_state
 
                 if is_rewrite_attempt:
-                    # Clear the flag
-                    st.session_state.just_used_rewrite = False
+                    # Clear the flag consistently (always use del)
+                    del st.session_state['just_used_rewrite']
                     # This is a rewrite that also got blocked - show simpler message
                     text_placeholder.error("⚠️ **Still Blocked by Content Policy**")
                     st.error(
@@ -1829,6 +1837,11 @@ def handle_chat_input(prompt):
     # Only include chunks in message history if the setting is enabled
     if show_chunks_enabled:
         message_data["chunks"] = search_results if search_results else []
+
+    # Tag policy block messages for reliable removal
+    if policy_block_response_id is not None:
+        message_data["policy_block"] = True
+        message_data["response_id"] = policy_block_response_id
 
     st.session_state.messages.append(message_data)
 
