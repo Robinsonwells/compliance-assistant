@@ -63,21 +63,40 @@ def generate_safe_rewrite(original_prompt: str) -> List[str]:
     """
     import json
 
-    system_prompt = """You are a compliance assistant that rewrites user prompts to be policy-compliant and non-actionable.
+    # Banned phrases that indicate noncompliant rewrites
+    BANNED_PHRASES = [
+        "technically comply", "work around", "circumvent", "loophole",
+        "preserving funder control", "retain control", "control over outcomes",
+        "pressure defendants", "force settlement", "avoid disclosure",
+        "exploit", "manipulate", "game the", "maximize leverage"
+    ]
 
-Your task: Rewrite the user's prompt into 3 alternatives that are compliant, educational, and focused on understanding governance frameworks.
+    def is_noncompliant(rewrite: str) -> bool:
+        """Check if a rewrite contains banned phrases"""
+        text_lower = rewrite.lower()
+        return any(phrase in text_lower for phrase in BANNED_PHRASES)
 
-Guidelines:
-- Preserve the topic and complexity of the original question
-- Reframe AWAY from: litigation optimization, tactical strategy, selecting targets, maximizing recovery, gaming processes, case selection for profit
-- Reframe TOWARD: governance, risk management, budgeting, compliance, capacity planning, ethics, attorney oversight, professional responsibility, regulatory requirements
-- Focus on understanding systems, not optimizing outcomes
-- Make questions educational and policy-oriented
+    system_prompt = """You are a compliance assistant that rewrites user prompts to be policy-compliant.
 
-Output ONLY valid JSON in this exact format:
+Goal: produce 3 alternative questions that are educational, compliance-oriented, and non-actionable.
+
+HARD RULES (MUST FOLLOW):
+- Do NOT ask how to "technically comply", "work around", "circumvent", "exploit loopholes", "avoid detection", "preserve control", "retain veto", "control outcomes", or "pressure" any party.
+- Do NOT propose tactics to manipulate litigation, opponents, courts, funding disclosures, or ethics rules.
+- Do NOT include language about maximizing leverage, forcing settlement, targeting defendants, or gaming process.
+
+MUST REFRAME TOWARD:
+- Governance and oversight models
+- Professional responsibility and independence of counsel
+- Risk management, disclosures, privilege/work-product protection (high-level)
+- Non-control funding structures and ethical safeguards
+- Conflicts checks, client consent, reporting, and auditability
+- General compliance frameworks and regulatory requirements
+
+Output ONLY valid JSON:
 {"rewrites":["rewrite1","rewrite2","rewrite3"]}
 
-Each rewrite should be a complete, standalone question that is substantive and preserves complexity."""
+Each rewrite must be a complete standalone question."""
 
     try:
         # Call gpt-4o-mini with JSON mode
@@ -103,16 +122,34 @@ Each rewrite should be a complete, standalone question that is substantive and p
             rewrites = data.get("rewrites", [])
 
             if isinstance(rewrites, list) and len(rewrites) >= 3:
-                print(f"[REWRITE] SUCCESS: Generated {len(rewrites)} rewrites")
-                return rewrites[:3]  # Take first 3
+                # Filter out noncompliant rewrites
+                compliant_rewrites = [r for r in rewrites if not is_noncompliant(r)]
+
+                if len(compliant_rewrites) >= 3:
+                    print(f"[REWRITE] SUCCESS: Generated {len(compliant_rewrites)} compliant rewrites")
+                    return compliant_rewrites[:3]
+                else:
+                    # Some rewrites were filtered out - pad with safe defaults
+                    print(f"[REWRITE] WARNING: Only {len(compliant_rewrites)} compliant rewrites after filtering, padding to 3")
+                    safe_defaults = [
+                        "What are the key governance frameworks and compliance standards that guide professional decision-making in this domain?",
+                        "What ethical oversight mechanisms ensure attorney independence and compliance with professional responsibility rules?",
+                        "How do legal organizations approach risk management and disclosure requirements while maintaining regulatory compliance?"
+                    ]
+                    # Combine compliant rewrites with safe defaults
+                    combined = compliant_rewrites + safe_defaults
+                    return combined[:3]
             elif isinstance(rewrites, list) and len(rewrites) > 0:
-                # Pad with conservative rewrites
-                print(f"[REWRITE] WARNING: Only got {len(rewrites)} rewrites, padding to 3")
-                while len(rewrites) < 3:
-                    rewrites.append(
-                        "What are the key governance frameworks and compliance standards that guide professional decision-making in this domain?"
-                    )
-                return rewrites[:3]
+                # Filter and pad with conservative rewrites
+                compliant_rewrites = [r for r in rewrites if not is_noncompliant(r)]
+                print(f"[REWRITE] WARNING: Only got {len(compliant_rewrites)} compliant rewrites after filtering, padding to 3")
+                safe_defaults = [
+                    "What are the key governance frameworks and compliance standards that guide professional decision-making in this domain?",
+                    "What ethical oversight mechanisms ensure attorney independence and compliance with professional responsibility rules?",
+                    "How do legal organizations approach risk management and disclosure requirements while maintaining regulatory compliance?"
+                ]
+                combined = compliant_rewrites + safe_defaults
+                return combined[:3]
         except json.JSONDecodeError as e:
             print(f"[REWRITE] JSON parse failed: {e}, attempting fallback parsing")
             # Fallback: try to extract lines
@@ -1674,6 +1711,20 @@ def handle_chat_input(prompt):
                         f"This topic may not be answerable through this system. "
                         f"Please try a fundamentally different question focused on general governance principles."
                     )
+
+                    # Provide guaranteed-safe fallback button
+                    st.markdown("### 💡 Try a Governance-Focused Question")
+                    safe_fallback = (
+                        "What governance controls and ethics safeguards are recommended to ensure "
+                        "litigation finance arrangements preserve attorney independence and comply with "
+                        "professional responsibility rules?"
+                    )
+                    if st.button("Ask governance-only version", key=f"safe_fallback_{e.response_id}", use_container_width=True):
+                        print(f"[POLICY-BLOCK] User clicked safe fallback button")
+                        st.session_state.pending_prompt = safe_fallback
+                        st.rerun()
+                        st.stop()
+                    st.caption(safe_fallback)
 
                     ai_response_text = (
                         f"⚠️ **Content Policy Block (Repeated)**\n\n"
