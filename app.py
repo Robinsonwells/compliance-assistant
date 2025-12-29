@@ -1591,6 +1591,9 @@ def handle_chat_input(prompt):
 
         time.sleep(0.5)
 
+        # Initialize content filter flag (used to skip fact-checking if triggered)
+        content_filter_triggered = False
+
         if selected_model == "GPT-5":
             complexity_score, _ = calculate_complexity_score(prompt)
             use_polling = complexity_score >= 15
@@ -1643,6 +1646,9 @@ def handle_chat_input(prompt):
                 # Log the content filter event
                 print(f"[POLICY-BLOCK] ContentFilterError caught in UI: response_id={e.response_id} elapsed={e.elapsed:.1f}s")
                 print(f"[POLICY-BLOCK] RAG meta: {e.rag_meta}")
+
+                # Set flag to skip fact-checking
+                content_filter_triggered = True
 
                 # Check if this is a repeated content filter (from a rewrite that also got blocked)
                 # If so, don't offer more rewrites (prevent infinite loop)
@@ -1822,21 +1828,24 @@ def handle_chat_input(prompt):
         message_data["chunks"] = search_results if search_results else []
 
     st.session_state.messages.append(message_data)
-    
+
     # Step 4: Independent Fact-Checking (separate message)
-    with st.chat_message("assistant"):
-        st.markdown("### 🕵️ Independent Fact-Check Report")
-        st.markdown("*Audit performed by Sonar Reasoning Pro for objectivity*")
-        
-        # Create status placeholder for auditor
-        audit_status = st.empty()
-        
-        try:
-            with st.spinner("Fact-checking with web search..."):
-                audit_status.info("🌐 Sonar Reasoning Pro searching current legal sources...")
-                
-                # Call independent auditor
-                audit_result = call_perplexity_auditor(prompt, ai_response_text)
+    # Skip fact-checking if content filter was triggered
+    if not content_filter_triggered:
+        print("[FACT-CHECK] Running fact-checking with Sonar Reasoning Pro...")
+        with st.chat_message("assistant"):
+            st.markdown("### 🕵️ Independent Fact-Check Report")
+            st.markdown("*Audit performed by Sonar Reasoning Pro for objectivity*")
+
+            # Create status placeholder for auditor
+            audit_status = st.empty()
+
+            try:
+                with st.spinner("Fact-checking with web search..."):
+                    audit_status.info("🌐 Sonar Reasoning Pro searching current legal sources...")
+
+                    # Call independent auditor
+                    audit_result = call_perplexity_auditor(prompt, ai_response_text)
                 
                 audit_status.info("📋 Generating audit report by Sonar Reasoning Pro...")
                 time.sleep(0.5)
@@ -1893,14 +1902,16 @@ def handle_chat_input(prompt):
                 else:
                     st.caption("⚠️ Sonar Reasoning Pro: No web sources found - manual verification recommended")
         
-        except Exception as e:
-            audit_status.empty()
-            st.error(f"⚠️ **Fact-checking unavailable:** {str(e)}")
-            st.info("Please verify the information independently using official government sources.")
-    
-    # Add audit report to chat history as separate message
-    audit_content = f"### 🕵️ Independent Fact-Check Report\n\n{audit_result.get('report', 'Fact-checking unavailable')}"
-    st.session_state.messages.append({"role": "assistant", "content": audit_content})
+            except Exception as e:
+                audit_status.empty()
+                st.error(f"⚠️ **Fact-checking unavailable:** {str(e)}")
+                st.info("Please verify the information independently using official government sources.")
+
+        # Add audit report to chat history as separate message
+        audit_content = f"### 🕵️ Independent Fact-Check Report\n\n{audit_result.get('report', 'Fact-checking unavailable')}"
+        st.session_state.messages.append({"role": "assistant", "content": audit_content})
+    else:
+        print("[FACT-CHECK] Skipping fact-checking - content filter was triggered")
 
 if __name__ == "__main__":
     main()
