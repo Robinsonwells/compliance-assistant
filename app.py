@@ -552,9 +552,9 @@ def call_perplexity_auditor(original_query: str, main_answer: str) -> Dict[str, 
 
         prompt = f"""You are an independent legal auditor with web search access. Your job is NOT to verify every claim, but rather to catch material issues and add important context.
 
-CRITICAL: SEARCH ONLY FOR LABOR AND EMPLOYMENT LAW
+SCOPE: COMPREHENSIVE LEGAL FACT-CHECKING
 This query is about: {original_query}
-Only search for and cite sources about labor law, employment regulations, wage/hour law, worker classification, or workplace compliance. DO NOT search for or cite property law, tax law, criminal law, or any non-employment topics.
+Search for and cite relevant authoritative sources related to the legal topic in the query. Focus on primary legal sources (statutes, regulations, case law) and official government sources from the appropriate jurisdiction and legal domain.
 
 1. MORE RECENT, CONTRADICTORY information (not just missing details)
 
@@ -565,12 +565,15 @@ IMPORTANT CONTEXT:
 This is normal and acceptable. Only flag if you find a MORE RECENT source that contradicts the core claim.
 
 PRIORITIZE THESE OFFICIAL SOURCES FOR CURRENT INFORMATION:
-- State legislature websites (.gov domains) - most current
+- Federal and state legislature websites (.gov domains) - most current
 - Cornell Legal Information Institute (law.cornell.edu) - authoritative summaries
 - Federal regulations (ecfr.gov, regulations.gov) - official versions
-- State Department of Labor websites - current enforcement info
-- Official case law databases - recent rulings
-- Commercial legal advice websites
+- Official government agency websites (relevant to the legal domain)
+- Official case law databases and court websites - recent rulings
+- Bar association and legal profession guidance
+
+AVOID THESE SOURCES:
+- Commercial legal advice websites (unless citing official sources)
 - Legal services marketing content
 - Non-authoritative sources
 - Wikipedia or user-generated content
@@ -594,11 +597,11 @@ YOUR TASK - FOCUS ONLY ON MATERIAL ISSUES:
    - Are there recent state law changes that provide important nuance?
    - Is there a recent federal law that interacts with state law differently?
    - Are there upcoming bills or pending amendments (within next 12 months)?
-   - Are there enforcement priorities or recent guidance from DOL/EEOC/NLRB?
+   - Are there enforcement priorities or recent guidance from relevant government agencies?
 
 3. SEARCH FOR STATUTE UPDATES
-   - Extract each statute cited: (e.g., "Cal. Lab. Code § 510")
-   - Search: "[State] [statute code] [statute number] current"
+   - Extract each statute cited (e.g., specific code sections)
+   - Search: "[Jurisdiction] [statute code] [statute number] current"
    - Check: Last amendment date, current version, recent changes
    - Only flag if: More recent version contradicts the answer
 
