@@ -44,6 +44,79 @@ COST_PER_TOKEN = {
 }
 
 
+class ContentFilterError(Exception):
+    """Exception raised when OpenAI blocks content due to content policy."""
+    def __init__(self, reason: str, response_id: str, elapsed: float, suggested_prompts: List[str], partial_len: int = 0):
+        self.reason = reason
+        self.response_id = response_id
+        self.elapsed = elapsed
+        self.suggested_prompts = suggested_prompts
+        self.partial_len = partial_len
+        super().__init__(f"Content blocked by policy: {reason}")
+
+
+def suggest_safe_rephrases(original: str) -> List[str]:
+    """
+    Generate 3 safe alternative prompts that preserve complexity but reframe
+    away from potentially problematic language toward governance/compliance/risk-management language.
+    This is a deterministic, rule-based rewrite (no AI calls).
+    """
+    original_lower = original.lower()
+
+    # Check for various problematic patterns and create targeted rephrases
+    has_litigation = any(word in original_lower for word in ['litigation', 'sue', 'lawsuit', 'case', 'litigate'])
+    has_strategy = any(word in original_lower for word in ['strategy', 'tactics', 'approach', 'plan'])
+    has_maximize = any(word in original_lower for word in ['maximize', 'optimize', 'best', 'winning'])
+    has_selection = any(word in original_lower for word in ['select', 'choose', 'pick', 'which'])
+    has_funding = any(word in original_lower for word in ['funding', 'finance', 'payment', 'cost'])
+
+    suggestions = []
+
+    # Suggestion 1: Reframe toward risk management and compliance
+    if has_litigation or has_strategy:
+        suggestions.append(
+            "What are the key compliance considerations and risk management factors when evaluating "
+            "legal disputes, including regulatory requirements and ethical obligations that govern "
+            "attorney decision-making processes?"
+        )
+    else:
+        suggestions.append(
+            "What governance frameworks and compliance standards should attorneys follow when "
+            "making decisions about resource allocation and case management, with emphasis on "
+            "professional responsibility and ethical guidelines?"
+        )
+
+    # Suggestion 2: Reframe toward capacity planning and budgeting
+    if has_funding or has_selection:
+        suggestions.append(
+            "How do law firms approach capacity planning and budget allocation for legal matters, "
+            "including assessment criteria for resource deployment that align with fiduciary duties "
+            "and professional standards?"
+        )
+    else:
+        suggestions.append(
+            "What budgeting methodologies and capacity planning frameworks do legal organizations "
+            "use to manage caseloads, ensuring compliance with professional responsibility rules "
+            "and maintaining quality client service?"
+        )
+
+    # Suggestion 3: Reframe toward ethical controls and oversight
+    if has_maximize or has_strategy:
+        suggestions.append(
+            "What ethical oversight mechanisms and quality control processes guide legal decision-making, "
+            "including peer review systems, compliance audits, and professional conduct standards that "
+            "ensure adherence to bar association rules and client protection regulations?"
+        )
+    else:
+        suggestions.append(
+            "How do legal ethics rules and professional responsibility standards inform attorney "
+            "decision-making processes, including oversight by bar associations, internal compliance "
+            "reviews, and adherence to client protection guidelines?"
+        )
+
+    return suggestions
+
+
 def get_error_suggestions(error_type: str, error_message: str) -> str:
     """Return troubleshooting suggestions based on error type."""
     suggestions = {
@@ -930,63 +1003,50 @@ def generate_legal_response_polling(
                 raise Exception(f"OpenAI response failed: {error_msg}")
 
             elif result.status == "incomplete":
-                # Dump comprehensive diagnostics once
+                # Extract incomplete details and reason
+                details = getattr(result, "incomplete_details", None)
+                reason = getattr(details, "reason", None) if details else None
+                partial = extract_output_text_from_response(result)
+                partial_len = len(partial) if isinstance(partial, str) else 0
+
+                # Log concise diagnostic info once
                 if not dumped_incomplete:
                     dumped_incomplete = True
-                    print("[POLLING] === INCOMPLETE DUMP BEGIN ===")
-                    print(f"[POLLING] response_id: {response_id}")
-                    print(f"[POLLING] elapsed_time: {elapsed:.1f}s")
-                    print(f"[POLLING] poll_count: {poll_count}")
+                    print(f"[INCOMPLETE] response_id={response_id} elapsed={elapsed:.1f}s status=incomplete reason={reason} partial_len={partial_len}")
 
-                    # Try to extract full response object
-                    try:
-                        if hasattr(result, "model_dump"):
-                            d = result.model_dump()
-                            print(f"[POLLING] model_dump keys: {list(d.keys())}")
-                            print(f"[POLLING] model_dump: {d}")
-                        elif hasattr(result, "to_dict"):
-                            d = result.to_dict()
-                            print(f"[POLLING] to_dict keys: {list(d.keys())}")
-                            print(f"[POLLING] to_dict: {d}")
-                        else:
-                            print(f"[POLLING] repr: {repr(result)}")
-                            print(f"[POLLING] __dict__: {getattr(result, '__dict__', None)}")
-                    except Exception as e:
-                        print(f"[POLLING] dump failed: {repr(e)}")
-
-                    # Try to extract partial output text
-                    try:
-                        partial = extract_output_text_from_response(result)
-                        print(f"[POLLING] partial_text_len: {len(partial or '')}")
-                        if partial:
-                            print(f"[POLLING] partial_text_head: {partial[:500]}")
-                    except Exception as e:
-                        print(f"[POLLING] partial extract failed: {repr(e)}")
-
-                    # Try to log error/incomplete fields explicitly
-                    for field in ["error", "incomplete_details", "last_error"]:
-                        try:
-                            val = getattr(result, field, None)
-                            if val:
-                                print(f"[POLLING] {field}: {val}")
-                        except Exception:
-                            pass
-
-                    # Log usage if present
+                    # Try to log usage if present
                     try:
                         usage = getattr(result, "usage", None)
                         if usage:
-                            print(f"[POLLING] usage: {usage}")
+                            print(f"[INCOMPLETE] usage: {usage}")
                     except Exception:
                         pass
 
-                    print("[POLLING] === INCOMPLETE DUMP END ===")
+                # CRITICAL: Handle content_filter explicitly
+                if reason == "content_filter":
+                    input_chars = len(query)
+                    rag_chunks = len(search_results)
+                    print(f"[POLICY] response_id={response_id} elapsed={elapsed:.1f}s reason=content_filter input_chars={input_chars} rag_chunks={rag_chunks} partial_len={partial_len}")
 
-                # Treat incomplete as terminal - extract partial text and fail
-                partial = extract_output_text_from_response(result)
-                details = getattr(result, "incomplete_details", None)
-                error_msg = f"OpenAI returned status=incomplete. details={details} partial_len={len(partial or '')}"
-                print(f"[POLLING] TERMINAL: {error_msg}")
+                    # Generate safe rephrases
+                    suggested_prompts = suggest_safe_rephrases(query)
+
+                    # Mark as failed in background manager
+                    error_msg = f"Content blocked by policy: content_filter"
+                    background_manager.mark_failed(response_id, error_msg)
+
+                    # Raise ContentFilterError (stops polling immediately)
+                    raise ContentFilterError(
+                        reason="content_filter",
+                        response_id=response_id,
+                        elapsed=elapsed,
+                        suggested_prompts=suggested_prompts,
+                        partial_len=partial_len
+                    )
+
+                # For other incomplete reasons, log and fail
+                error_msg = f"OpenAI returned status=incomplete. reason={reason} partial_len={partial_len}"
+                print(f"[INCOMPLETE] TERMINAL: {error_msg}")
                 background_manager.mark_failed(response_id, error_msg)
                 raise TimeoutError(error_msg)
 
@@ -994,8 +1054,11 @@ def generate_legal_response_polling(
                 time.sleep(polling_interval)
 
             else:
-                print(f"[POLLING] Unknown status: {result.status}")
-                time.sleep(polling_interval)
+                # Unknown status - log and raise to prevent infinite loop
+                error_msg = f"Unknown response status: {result.status} (not completed/failed/incomplete/queued/in_progress)"
+                print(f"[POLLING] UNKNOWN STATUS ERROR: {error_msg}")
+                background_manager.mark_failed(response_id, error_msg)
+                raise Exception(error_msg)
 
     except Exception as e:
         elapsed = time.time() - start_time
@@ -1383,8 +1446,14 @@ def show_main_application():
     # Show legal assistant content directly
     show_legal_assistant_content()
 
+    # Check if user selected a suggested rephrase (from content filter)
+    if st.session_state.get('selected_suggestion'):
+        prompt = st.session_state.selected_suggestion
+        st.session_state.selected_suggestion = None  # Clear it
+        handle_chat_input(prompt)
+
     # Handle chat input outside of tabs
-    if prompt := st.chat_input("Ask any compliance question"):
+    elif prompt := st.chat_input("Ask any compliance question"):
         handle_chat_input(prompt)
 
 def show_legal_assistant_content():
@@ -1530,6 +1599,61 @@ def handle_chat_input(prompt):
                 status_placeholder.empty()
                 elapsed_placeholder.empty()
                 text_placeholder.markdown(ai_response_text)
+
+            except ContentFilterError as e:
+                # CRITICAL: Handle content policy block explicitly (NOT a timeout)
+                status_placeholder.empty()
+                elapsed_placeholder.empty()
+                elapsed_time = time.time() - start_time
+
+                # Log the content filter event
+                print(f"[POLICY-BLOCK] ContentFilterError caught in UI: response_id={e.response_id} elapsed={e.elapsed:.1f}s")
+
+                # Display prominent policy block warning
+                text_placeholder.error("⚠️ **Response Blocked by Content Policy**")
+                st.warning(
+                    f"**This is NOT a timeout.** OpenAI's content filter blocked this response due to policy restrictions "
+                    f"(reason: `{e.reason}`).\n\n"
+                    f"**Response ID:** `{e.response_id}`  \n"
+                    f"**Elapsed:** {e.elapsed:.1f}s"
+                )
+
+                # Show suggested safe rephrases
+                st.markdown("### 💡 Suggested Safe Rephrases")
+                st.markdown(
+                    "These alternatives preserve the complexity of your question but reframe it using "
+                    "governance, compliance, and risk-management language:"
+                )
+
+                # Create session state variable for selected suggestion if not exists
+                if 'selected_suggestion' not in st.session_state:
+                    st.session_state.selected_suggestion = None
+
+                # Display suggestions as buttons
+                for i, suggestion in enumerate(e.suggested_prompts, 1):
+                    if st.button(f"**Option {i}:** {suggestion[:100]}...", key=f"suggest_{e.response_id}_{i}"):
+                        st.session_state.selected_suggestion = suggestion
+                        st.rerun()
+
+                # Create assistant message documenting the block
+                block_message = (
+                    f"⚠️ **Content Policy Block**\n\n"
+                    f"Your prompt was blocked by OpenAI's content filter (reason: `{e.reason}`). "
+                    f"This is a policy restriction, not a technical error.\n\n"
+                    f"**Suggested rephrases:**\n\n"
+                )
+                for i, suggestion in enumerate(e.suggested_prompts, 1):
+                    block_message += f"{i}. {suggestion}\n\n"
+
+                ai_response_text = block_message
+                total_tokens = 0
+                estimated_cost = 0.0
+                input_tokens = 0
+                output_tokens = 0
+                reasoning_tokens = 0
+
+                # Do NOT attempt fallback generation for content filter errors
+                # Do NOT call display_streaming_error for content filter errors
 
             except Exception as e:
                 status_placeholder.empty()
