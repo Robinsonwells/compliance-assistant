@@ -170,7 +170,12 @@ try:
         api_key=os.getenv("OPENAI_API_KEY"),
         timeout=600.0  # 10 minute timeout for GPT-5 reasoning
     )
-    
+
+    # Log version information for diagnostics
+    import sys
+    print(f"[VERSIONS] Python: {sys.version}")
+    print(f"[VERSIONS] OpenAI SDK: {getattr(OpenAI, '__version__', 'unknown')}")
+
     # Initialize user manager
     user_manager = UserManager()
 
@@ -804,9 +809,13 @@ def generate_legal_response_polling(
         )
 
         response_id = response.id
+
+        # Log request parameters for diagnostics
+        context_chars = sum(len(r.get("text", "")) for r in search_results)
         print(f"[POLLING] Started background response: {response_id}")
-        print(f"[POLLING] Reasoning effort: {reasoning_effort}")
-        print(f"[POLLING] Query length: {len(query)} chars, Context length: {len(context)} chars")
+        print(f"[POLLING] Request params: model=gpt-5, background=True, stream=False, effort={reasoning_effort}, verbosity=high")
+        print(f"[POLLING] Input size: query={len(query)} chars, context={len(context)} chars, input_text={len(input_text)} chars")
+        print(f"[POLLING] RAG data: chunks={len(search_results)}, rag_text_chars={context_chars}")
 
         background_manager.create_pending_response(
             response_id=response_id,
@@ -820,9 +829,19 @@ def generate_legal_response_polling(
 
         print(f"[POLLING] Entering polling loop with {polling_interval}s interval...")
         poll_count = 0
+        dumped_incomplete = False  # Track if we've already dumped incomplete details
+        MAX_POLLING_SECONDS = 600  # 10 minutes hard cap
+
         while True:
             elapsed = time.time() - start_time
             poll_count += 1
+
+            # Hard wall-clock timeout to prevent runaway polling
+            if elapsed > MAX_POLLING_SECONDS:
+                error_msg = f"Polling exceeded {MAX_POLLING_SECONDS}s maximum; last_status=unknown"
+                print(f"[POLLING] TIMEOUT: {error_msg}")
+                background_manager.mark_failed(response_id, error_msg)
+                raise TimeoutError(error_msg)
 
             # Cloudflare detection markers
             if 89 <= elapsed < 91:
@@ -878,6 +897,67 @@ def generate_legal_response_polling(
                 print(f"[POLLING] Response failed: {error_msg}")
                 background_manager.mark_failed(response_id, error_msg)
                 raise Exception(f"OpenAI response failed: {error_msg}")
+
+            elif result.status == "incomplete":
+                # Dump comprehensive diagnostics once
+                if not dumped_incomplete:
+                    dumped_incomplete = True
+                    print("[POLLING] === INCOMPLETE DUMP BEGIN ===")
+                    print(f"[POLLING] response_id: {response_id}")
+                    print(f"[POLLING] elapsed_time: {elapsed:.1f}s")
+                    print(f"[POLLING] poll_count: {poll_count}")
+
+                    # Try to extract full response object
+                    try:
+                        if hasattr(result, "model_dump"):
+                            d = result.model_dump()
+                            print(f"[POLLING] model_dump keys: {list(d.keys())}")
+                            print(f"[POLLING] model_dump: {d}")
+                        elif hasattr(result, "to_dict"):
+                            d = result.to_dict()
+                            print(f"[POLLING] to_dict keys: {list(d.keys())}")
+                            print(f"[POLLING] to_dict: {d}")
+                        else:
+                            print(f"[POLLING] repr: {repr(result)}")
+                            print(f"[POLLING] __dict__: {getattr(result, '__dict__', None)}")
+                    except Exception as e:
+                        print(f"[POLLING] dump failed: {repr(e)}")
+
+                    # Try to extract partial output text
+                    try:
+                        partial = extract_output_text_from_response(result)
+                        print(f"[POLLING] partial_text_len: {len(partial or '')}")
+                        if partial:
+                            print(f"[POLLING] partial_text_head: {partial[:500]}")
+                    except Exception as e:
+                        print(f"[POLLING] partial extract failed: {repr(e)}")
+
+                    # Try to log error/incomplete fields explicitly
+                    for field in ["error", "incomplete_details", "last_error"]:
+                        try:
+                            val = getattr(result, field, None)
+                            if val:
+                                print(f"[POLLING] {field}: {val}")
+                        except Exception:
+                            pass
+
+                    # Log usage if present
+                    try:
+                        usage = getattr(result, "usage", None)
+                        if usage:
+                            print(f"[POLLING] usage: {usage}")
+                    except Exception:
+                        pass
+
+                    print("[POLLING] === INCOMPLETE DUMP END ===")
+
+                # Treat incomplete as terminal - extract partial text and fail
+                partial = extract_output_text_from_response(result)
+                details = getattr(result, "incomplete_details", None)
+                error_msg = f"OpenAI returned status=incomplete. details={details} partial_len={len(partial or '')}"
+                print(f"[POLLING] TERMINAL: {error_msg}")
+                background_manager.mark_failed(response_id, error_msg)
+                raise TimeoutError(error_msg)
 
             elif result.status in ["queued", "in_progress"]:
                 time.sleep(polling_interval)
