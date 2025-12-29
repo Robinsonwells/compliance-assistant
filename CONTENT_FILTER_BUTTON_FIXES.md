@@ -222,39 +222,80 @@ block_message = (
 ✅ **Safety:** Prevents repeated rewrites
 ✅ **Clean:** Simplified chat history
 
+## Additional User-Requested Fixes (Round 2)
+
+### Fix 6: Remove Caption Truncation ✅
+**Location:** `app.py` line 1705
+
+**Problem:** Captions were truncated at 150 characters with "..."
+```
+What governance frameworks can a contingency-fee plaintiffs' firm...
+```
+
+**Solution:** Remove truncation logic and show full text
+```python
+# Before
+st.caption(rewrite[:150] + "..." if len(rewrite) > 150 else rewrite)
+
+# After
+st.caption(rewrite)
+```
+
+### Fix 7: Clean History on Rewrite ✅
+**Location:** `app.py` lines 1474-1477
+
+**Problem:** When clicking a button, the blocked question and policy block message remained in chat history, making it confusing.
+
+**Solution:** Remove the last 2 messages before submitting the rewrite
+```python
+# Remove the last two messages (user's blocked question + assistant's policy block message)
+# This makes the rewrite appear as if it was the original question
+if len(st.session_state.messages) >= 2:
+    st.session_state.messages = st.session_state.messages[:-2]
+```
+
+**Result:** The rewritten prompt appears as if the user typed it originally, creating a clean, seamless experience.
+
 ## Files Modified
 
 | File | Lines Changed | Purpose |
 |------|---------------|---------|
-| `app.py` | 1468-1479 | Improved pending_prompt logic |
+| `app.py` | 1468-1485 | Improved pending_prompt logic + clean history |
 | `app.py` | 1621-1623 | Clear flag on success |
 | `app.py` | 1634-1652 | Detect repeated content filter |
-| `app.py` | 1678-1702 | New 3-column button layout |
-| `app.py` | 1704-1710 | Simplified chat history message |
+| `app.py` | 1678-1705 | New 3-column button layout + full captions |
+| `app.py` | 1707-1710 | Simplified chat history message |
 
 ## Summary of Improvements
 
 1. **Better button layout:** 3 columns instead of expandable sections
 2. **Prevents infinite loops:** Detects and stops repeated content filters
-3. **Clearer UX:** Simpler labels and captions
+3. **Clearer UX:** Simpler labels and full-text captions (no truncation)
 4. **Clean chat history:** No button artifacts in persisted messages
 5. **Graceful degradation:** Clear message when rewrite also fails
+6. **Fresh query experience:** Removes blocked messages before submitting rewrite
 
 ## Expected Behavior
 
 **When clicking Option 1/2/3:**
 1. Button click sets pending_prompt and flag
 2. Page reruns immediately
-3. Rewritten prompt appears as user message in chat
-4. Processing starts with "Retrieving relevant information..."
-5. If successful: response appears normally
-6. If blocked again: show "Still Blocked" message (no more rewrites)
+3. **Last 2 messages removed** (blocked question + policy block response)
+4. Rewritten prompt submitted as fresh query
+5. Rewritten prompt appears as user message in chat
+6. Processing starts with "Retrieving relevant information..."
+7. If successful: response appears normally
+8. If blocked again: show "Still Blocked" message (no more rewrites)
+
+**Key improvement:** The rewrite replaces the blocked question in history, making it appear as if the user asked the compliant version originally.
 
 **No more:**
 - ❌ Buttons disappearing without action
-- ❌ Rewrite text shown as plain text
+- ❌ Rewrite text shown as plain text (full text shown)
+- ❌ Truncated captions with "..."
 - ❌ Infinite loop of policy blocks
 - ❌ Confusing intermediate screens
+- ❌ Blocked message cluttering chat history
 
 ---
 

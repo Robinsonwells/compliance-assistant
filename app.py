@@ -1470,7 +1470,13 @@ def show_main_application():
     if st.session_state.get('pending_prompt'):
         prompt = st.session_state.pending_prompt
         del st.session_state['pending_prompt']  # Clear it
-        # Directly call handle_chat_input which will add message and process
+
+        # Remove the last two messages (user's blocked question + assistant's policy block message)
+        # This makes the rewrite appear as if it was the original question
+        if len(st.session_state.messages) >= 2:
+            st.session_state.messages = st.session_state.messages[:-2]
+
+        # Now submit the rewritten prompt as a fresh query
         handle_chat_input(prompt)
         # Don't fall through to chat_input
     else:
@@ -1701,8 +1707,8 @@ def handle_chat_input(prompt):
                                     st.session_state.just_used_rewrite = True
                                     st.rerun()
 
-                                # Show full text below button in smaller text
-                                st.caption(rewrite[:150] + "..." if len(rewrite) > 150 else rewrite)
+                                # Show full text below button
+                                st.caption(rewrite)
 
                     # Create assistant message documenting the block (for chat history)
                     block_message = (
