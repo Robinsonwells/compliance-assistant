@@ -46,75 +46,90 @@ COST_PER_TOKEN = {
 
 class ContentFilterError(Exception):
     """Exception raised when OpenAI blocks content due to content policy."""
-    def __init__(self, reason: str, response_id: str, elapsed: float, suggested_prompts: List[str], partial_len: int = 0):
-        self.reason = reason
+    def __init__(self, response_id: str, elapsed: float, original_prompt: str, rag_meta: Dict[str, Any], reason: str = "content_filter"):
         self.response_id = response_id
         self.elapsed = elapsed
-        self.suggested_prompts = suggested_prompts
-        self.partial_len = partial_len
+        self.original_prompt = original_prompt
+        self.rag_meta = rag_meta
+        self.reason = reason
         super().__init__(f"Content blocked by policy: {reason}")
 
 
-def suggest_safe_rephrases(original: str) -> List[str]:
+def generate_safe_rewrite(original_prompt: str) -> List[str]:
     """
-    Generate 3 safe alternative prompts that preserve complexity but reframe
-    away from potentially problematic language toward governance/compliance/risk-management language.
-    This is a deterministic, rule-based rewrite (no AI calls).
+    Calls OpenAI (gpt-4o-mini) to produce 3 compliant rephrasings of the original prompt.
+    Returns exactly 3 strings.
+    Uses Chat Completions API with JSON mode for reliable parsing.
     """
-    original_lower = original.lower()
+    import json
 
-    # Check for various problematic patterns and create targeted rephrases
-    has_litigation = any(word in original_lower for word in ['litigation', 'sue', 'lawsuit', 'case', 'litigate'])
-    has_strategy = any(word in original_lower for word in ['strategy', 'tactics', 'approach', 'plan'])
-    has_maximize = any(word in original_lower for word in ['maximize', 'optimize', 'best', 'winning'])
-    has_selection = any(word in original_lower for word in ['select', 'choose', 'pick', 'which'])
-    has_funding = any(word in original_lower for word in ['funding', 'finance', 'payment', 'cost'])
+    system_prompt = """You are a compliance assistant that rewrites user prompts to be policy-compliant and non-actionable.
 
-    suggestions = []
+Your task: Rewrite the user's prompt into 3 alternatives that are compliant, educational, and focused on understanding governance frameworks.
 
-    # Suggestion 1: Reframe toward risk management and compliance
-    if has_litigation or has_strategy:
-        suggestions.append(
-            "What are the key compliance considerations and risk management factors when evaluating "
-            "legal disputes, including regulatory requirements and ethical obligations that govern "
-            "attorney decision-making processes?"
-        )
-    else:
-        suggestions.append(
-            "What governance frameworks and compliance standards should attorneys follow when "
-            "making decisions about resource allocation and case management, with emphasis on "
-            "professional responsibility and ethical guidelines?"
-        )
+Guidelines:
+- Preserve the topic and complexity of the original question
+- Reframe AWAY from: litigation optimization, tactical strategy, selecting targets, maximizing recovery, gaming processes, case selection for profit
+- Reframe TOWARD: governance, risk management, budgeting, compliance, capacity planning, ethics, attorney oversight, professional responsibility, regulatory requirements
+- Focus on understanding systems, not optimizing outcomes
+- Make questions educational and policy-oriented
 
-    # Suggestion 2: Reframe toward capacity planning and budgeting
-    if has_funding or has_selection:
-        suggestions.append(
-            "How do law firms approach capacity planning and budget allocation for legal matters, "
-            "including assessment criteria for resource deployment that align with fiduciary duties "
-            "and professional standards?"
-        )
-    else:
-        suggestions.append(
-            "What budgeting methodologies and capacity planning frameworks do legal organizations "
-            "use to manage caseloads, ensuring compliance with professional responsibility rules "
-            "and maintaining quality client service?"
+Output ONLY valid JSON in this exact format:
+{"rewrites":["rewrite1","rewrite2","rewrite3"]}
+
+Each rewrite should be a complete, standalone question that is substantive and preserves complexity."""
+
+    try:
+        # Call gpt-4o-mini with JSON mode
+        print(f"[REWRITE] Calling gpt-4o-mini to generate compliant rephrases...")
+
+        response = openai_client.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": f"Original prompt: {original_prompt}"}
+            ],
+            temperature=0.2,
+            max_tokens=400,
+            response_format={"type": "json_object"}
         )
 
-    # Suggestion 3: Reframe toward ethical controls and oversight
-    if has_maximize or has_strategy:
-        suggestions.append(
-            "What ethical oversight mechanisms and quality control processes guide legal decision-making, "
-            "including peer review systems, compliance audits, and professional conduct standards that "
-            "ensure adherence to bar association rules and client protection regulations?"
-        )
-    else:
-        suggestions.append(
-            "How do legal ethics rules and professional responsibility standards inform attorney "
-            "decision-making processes, including oversight by bar associations, internal compliance "
-            "reviews, and adherence to client protection guidelines?"
-        )
+        content = response.choices[0].message.content
+        print(f"[REWRITE] Received response, parsing JSON...")
 
-    return suggestions
+        # Parse JSON
+        try:
+            data = json.loads(content)
+            rewrites = data.get("rewrites", [])
+
+            if isinstance(rewrites, list) and len(rewrites) >= 3:
+                print(f"[REWRITE] SUCCESS: Generated {len(rewrites)} rewrites")
+                return rewrites[:3]  # Take first 3
+            elif isinstance(rewrites, list) and len(rewrites) > 0:
+                # Pad with conservative rewrites
+                print(f"[REWRITE] WARNING: Only got {len(rewrites)} rewrites, padding to 3")
+                while len(rewrites) < 3:
+                    rewrites.append(
+                        "What are the key governance frameworks and compliance standards that guide professional decision-making in this domain?"
+                    )
+                return rewrites[:3]
+        except json.JSONDecodeError as e:
+            print(f"[REWRITE] JSON parse failed: {e}, attempting fallback parsing")
+            # Fallback: try to extract lines
+            lines = [line.strip() for line in content.split('\n') if line.strip() and not line.strip().startswith('{') and not line.strip().startswith('}')]
+            if len(lines) >= 3:
+                return lines[:3]
+
+    except Exception as e:
+        print(f"[REWRITE] API call failed: {repr(e)}")
+
+    # Ultimate fallback: return 3 conservative rewrites
+    print(f"[REWRITE] FALLBACK: Using default conservative rewrites")
+    return [
+        "What are the key compliance considerations and risk management factors when evaluating legal matters, including regulatory requirements and ethical obligations?",
+        "How do legal organizations approach capacity planning and budget allocation while maintaining compliance with professional responsibility rules?",
+        "What ethical oversight mechanisms and quality control processes guide professional decision-making in accordance with regulatory standards?"
+    ]
 
 
 def get_error_suggestions(error_type: str, error_message: str) -> str:
@@ -1026,22 +1041,26 @@ def generate_legal_response_polling(
                 if reason == "content_filter":
                     input_chars = len(query)
                     rag_chunks = len(search_results)
-                    print(f"[POLICY] response_id={response_id} elapsed={elapsed:.1f}s reason=content_filter input_chars={input_chars} rag_chunks={rag_chunks} partial_len={partial_len}")
+                    print(f"[POLICY] response_id={response_id} elapsed={elapsed:.1f}s reason=content_filter input_chars={input_chars} rag_chunks={rag_chunks}")
 
-                    # Generate safe rephrases
-                    suggested_prompts = suggest_safe_rephrases(query)
+                    # Build rag_meta dict for exception
+                    rag_meta = {
+                        "input_chars": input_chars,
+                        "rag_chunks": rag_chunks
+                    }
 
                     # Mark as failed in background manager
                     error_msg = f"Content blocked by policy: content_filter"
                     background_manager.mark_failed(response_id, error_msg)
 
                     # Raise ContentFilterError (stops polling immediately)
+                    # Rewrite will be generated in UI layer via generate_safe_rewrite()
                     raise ContentFilterError(
-                        reason="content_filter",
                         response_id=response_id,
                         elapsed=elapsed,
-                        suggested_prompts=suggested_prompts,
-                        partial_len=partial_len
+                        original_prompt=query,
+                        rag_meta=rag_meta,
+                        reason="content_filter"
                     )
 
                 # For other incomplete reasons, log and fail
@@ -1446,10 +1465,10 @@ def show_main_application():
     # Show legal assistant content directly
     show_legal_assistant_content()
 
-    # Check if user selected a suggested rephrase (from content filter)
-    if st.session_state.get('selected_suggestion'):
-        prompt = st.session_state.selected_suggestion
-        st.session_state.selected_suggestion = None  # Clear it
+    # Check if there's a pending prompt (from content filter rewrite button click)
+    if st.session_state.get('pending_prompt'):
+        prompt = st.session_state.pending_prompt
+        del st.session_state['pending_prompt']  # Clear it
         handle_chat_input(prompt)
 
     # Handle chat input outside of tabs
@@ -1604,35 +1623,50 @@ def handle_chat_input(prompt):
                 # CRITICAL: Handle content policy block explicitly (NOT a timeout)
                 status_placeholder.empty()
                 elapsed_placeholder.empty()
-                elapsed_time = time.time() - start_time
 
                 # Log the content filter event
                 print(f"[POLICY-BLOCK] ContentFilterError caught in UI: response_id={e.response_id} elapsed={e.elapsed:.1f}s")
+                print(f"[POLICY-BLOCK] RAG meta: {e.rag_meta}")
 
                 # Display prominent policy block warning
                 text_placeholder.error("⚠️ **Response Blocked by Content Policy**")
                 st.warning(
-                    f"**This is NOT a timeout.** OpenAI's content filter blocked this response due to policy restrictions "
-                    f"(reason: `{e.reason}`).\n\n"
+                    f"**This request couldn't be answered due to content restrictions.** "
+                    f"OpenAI's content filter blocked this response (reason: `{e.reason}`).\n\n"
                     f"**Response ID:** `{e.response_id}`  \n"
-                    f"**Elapsed:** {e.elapsed:.1f}s"
+                    f"**Elapsed:** {e.elapsed:.1f}s\n\n"
+                    f"Generating safer ways to ask your question..."
                 )
 
+                # Generate safe rewrites using OpenAI API
+                try:
+                    rewrites = generate_safe_rewrite(e.original_prompt)
+                    print(f"[POLICY-BLOCK] Generated {len(rewrites)} compliant rewrites")
+                except Exception as rewrite_error:
+                    print(f"[POLICY-BLOCK] Rewrite generation failed: {repr(rewrite_error)}")
+                    # Fallback to default rewrites
+                    rewrites = [
+                        "What are the key compliance considerations and risk management factors when evaluating legal matters?",
+                        "How do legal organizations approach capacity planning and budget allocation while maintaining professional standards?",
+                        "What ethical oversight mechanisms guide professional decision-making in accordance with regulatory standards?"
+                    ]
+
                 # Show suggested safe rephrases
-                st.markdown("### 💡 Suggested Safe Rephrases")
+                st.markdown("### 💡 Safer Ways to Ask This Question")
                 st.markdown(
-                    "These alternatives preserve the complexity of your question but reframe it using "
+                    "These alternatives preserve the complexity and topic but reframe your question using "
                     "governance, compliance, and risk-management language:"
                 )
 
-                # Create session state variable for selected suggestion if not exists
-                if 'selected_suggestion' not in st.session_state:
-                    st.session_state.selected_suggestion = None
+                # Display suggestions as buttons with pending_prompt pattern
+                for i, rewrite in enumerate(rewrites, 1):
+                    # Show full text in expandable section
+                    with st.expander(f"**Option {i}** (click to expand)", expanded=False):
+                        st.markdown(rewrite)
 
-                # Display suggestions as buttons
-                for i, suggestion in enumerate(e.suggested_prompts, 1):
-                    if st.button(f"**Option {i}:** {suggestion[:100]}...", key=f"suggest_{e.response_id}_{i}"):
-                        st.session_state.selected_suggestion = suggestion
+                    # Button to submit this rewrite
+                    if st.button(f"✅ Use Option {i}", key=f"rewrite_{e.response_id}_{i}", use_container_width=True):
+                        st.session_state.pending_prompt = rewrite
                         st.rerun()
 
                 # Create assistant message documenting the block
@@ -1640,10 +1674,10 @@ def handle_chat_input(prompt):
                     f"⚠️ **Content Policy Block**\n\n"
                     f"Your prompt was blocked by OpenAI's content filter (reason: `{e.reason}`). "
                     f"This is a policy restriction, not a technical error.\n\n"
-                    f"**Suggested rephrases:**\n\n"
+                    f"**Suggested compliant rephrases:**\n\n"
                 )
-                for i, suggestion in enumerate(e.suggested_prompts, 1):
-                    block_message += f"{i}. {suggestion}\n\n"
+                for i, rewrite in enumerate(rewrites, 1):
+                    block_message += f"{i}. {rewrite}\n\n"
 
                 ai_response_text = block_message
                 total_tokens = 0
