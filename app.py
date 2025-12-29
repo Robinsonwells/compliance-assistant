@@ -1465,11 +1465,7 @@ def show_main_application():
             except Exception as e:
                 st.sidebar.error(f"DB error: {e}")
 
-    # Show legal assistant content directly
-    show_legal_assistant_content()
-
-    # Check if there's a pending prompt (from content filter rewrite button click)
-    # This must be checked AFTER show_legal_assistant_content() but before chat_input
+    # Check if there's a pending prompt BEFORE showing content (from content filter rewrite button click)
     if st.session_state.get('pending_prompt'):
         prompt = st.session_state.pending_prompt
         del st.session_state['pending_prompt']  # Clear it
@@ -1479,13 +1475,19 @@ def show_main_application():
         if len(st.session_state.messages) >= 1 and st.session_state.messages[-1]["role"] == "assistant":
             st.session_state.messages = st.session_state.messages[:-1]
 
+        # Show legal assistant content (after cleanup)
+        show_legal_assistant_content()
+
         # Now submit the rewritten prompt as a fresh query
         handle_chat_input(prompt)
-        st.stop()  # Stop execution immediately after handling pending prompt
-    else:
-        # Handle chat input outside of tabs (only if no pending_prompt)
-        if prompt := st.chat_input("Ask any compliance question"):
-            handle_chat_input(prompt)
+        return  # End execution after handling pending prompt
+
+    # Show legal assistant content directly
+    show_legal_assistant_content()
+
+    # Handle chat input outside of tabs (only if no pending_prompt)
+    if prompt := st.chat_input("Ask any compliance question"):
+        handle_chat_input(prompt)
 
 def show_legal_assistant_content():
     """Display legal assistant chat interface content (without chat input)"""
