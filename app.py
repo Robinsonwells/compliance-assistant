@@ -633,9 +633,24 @@ def extract_output_text_from_response(response) -> str:
     """
     Extract output text from an OpenAI Responses API response object.
     Handles multiple possible response structures with fallbacks.
+    ALWAYS returns a string (never config objects or None).
     """
-    if hasattr(response, 'output_text') and response.output_text:
-        return response.output_text
+    print(f"[DEBUG] extract_output_text_from_response called with type={type(response)}")
+
+    def safe_string(obj, attr_name: str) -> str:
+        """Safely extract string from attribute, ensuring it's actually a string."""
+        val = getattr(obj, attr_name, None)
+        if val is None:
+            return ""
+        if isinstance(val, str):
+            return val
+        print(f"[DEBUG] {attr_name} is type {type(val)}, not str - skipping")
+        return ""
+
+    output_text_val = safe_string(response, 'output_text')
+    if output_text_val:
+        print(f"[DEBUG] Extracted from output_text: {len(output_text_val)} chars")
+        return output_text_val
 
     if hasattr(response, 'output') and response.output:
         output_items = response.output
@@ -643,20 +658,29 @@ def extract_output_text_from_response(response) -> str:
         for item in output_items:
             if hasattr(item, 'content') and item.content:
                 for content_block in item.content:
-                    if hasattr(content_block, 'text') and content_block.text:
-                        text_parts.append(content_block.text)
-            elif hasattr(item, 'text') and item.text:
-                text_parts.append(item.text)
+                    text_val = safe_string(content_block, 'text')
+                    if text_val:
+                        text_parts.append(text_val)
+            else:
+                text_val = safe_string(item, 'text')
+                if text_val:
+                    text_parts.append(text_val)
         if text_parts:
-            return "\n".join(text_parts)
+            result = "\n".join(text_parts)
+            print(f"[DEBUG] Extracted from output items: {len(result)} chars")
+            return result
 
-    if hasattr(response, 'text') and response.text:
-        return response.text
+    text_val = safe_string(response, 'text')
+    if text_val:
+        print(f"[DEBUG] Extracted from text: {len(text_val)} chars")
+        return text_val
 
-    if hasattr(response, 'content') and response.content:
-        return response.content
+    content_val = safe_string(response, 'content')
+    if content_val:
+        print(f"[DEBUG] Extracted from content: {len(content_val)} chars")
+        return content_val
 
-    print(f"[DEBUG] Response structure: {type(response)}")
+    print(f"[DEBUG] No text extracted - Response structure: {type(response)}")
     print(f"[DEBUG] Response attributes: {dir(response)}")
     if hasattr(response, 'output'):
         print(f"[DEBUG] Output type: {type(response.output)}")
@@ -869,9 +893,16 @@ def generate_legal_response_polling(
                     reasoning_tokens = getattr(usage.output_tokens_details, 'reasoning_tokens', 0)
 
                 response_text = extract_output_text_from_response(result)
+
+                print(f"[DEBUG] type(response_text) after extraction: {type(response_text)}")
+                if not isinstance(response_text, str):
+                    print(f"[ERROR] response_text is not a string! type={type(response_text)}, repr={repr(response_text)[:500]}")
+                    response_text = str(response_text) if response_text else ""
+
                 if not response_text:
                     print(f"[POLLING] WARNING: No output text extracted from response")
                     print(f"[POLLING] Response object: {result}")
+
                 elapsed = time.time() - start_time
                 print(f"[COMPLETE] ✅ Finished successfully in {elapsed:.1f}s ({elapsed/60:.1f} minutes)")
                 print(f"[COMPLETE] Response length: {len(response_text)} characters")
