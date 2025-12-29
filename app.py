@@ -623,9 +623,98 @@ def format_audit_with_citations(audit_content: str, citations: List[Dict]) -> st
         print(f"Error formatting citations: {e}")
         return audit_content
 
-# REMOVED: generate_legal_response() - synchronous mode (background=False)
-# Issue: Synchronous calls block for 5-10 minutes and timeout
-# Solution: Always use generate_legal_response_smart() which uses polling
+def generate_legal_response(query: str, search_results: List[Dict[str, Any]], selected_model: str, reasoning_effort: str) -> str:
+    """Generate response using OpenAI with legal context"""
+    try:
+        # Prepare context from search results
+        context = ""
+        for i, result in enumerate(search_results, 1):
+            context += f"\n--- Source {i} ---\n"
+            context += f"Citation: {result['citation']}\n"
+            context += f"Jurisdiction: {result['jurisdiction']}\n"
+            context += f"Content: {result['text']}\n"
+        
+        if selected_model == "GPT-5":
+            # Prepare input for GPT-5 Responses API
+            input_text = f"{LEGAL_COMPLIANCE_SYSTEM_PROMPT}\n\nQuery: {query}\n\nRelevant Legal Sources:\n{context}"
+            
+            # Generate response using GPT-5 Responses API
+            response = openai_client.responses.create(
+                model="gpt-5",
+                input=input_text,
+                max_output_tokens=None,  # No token limit - track usage
+                reasoning={"effort": reasoning_effort},
+                text={"verbosity": "high"}
+            )
+
+            # Extract token usage information
+            usage = response.usage
+            input_tokens = usage.input_tokens
+            output_tokens = usage.output_tokens
+            reasoning_tokens = getattr(getattr(usage, 'output_tokens_details', None), 'reasoning_tokens', 0)
+            total_tokens = usage.total_tokens
+            
+            # Get the AI response text
+            ai_response = response.output_text
+            
+        else:  # Sonar Reasoning Pro (RAG Only)
+            # Prepare messages for Perplexity API
+            messages = [
+                {"role": "system", "content": LEGAL_COMPLIANCE_SYSTEM_PROMPT},
+                {"role": "user", "content": f"Query: {query}\n\nRelevant Legal Sources:\n{context}"}
+            ]
+            
+            # Make request to Perplexity API with search disabled
+            url = "https://api.perplexity.ai/chat/completions"
+            payload = {
+                "model": "sonar-reasoning-pro",
+                "messages": messages,
+                "disable_search": True,  # Disable web search - use only provided context
+                "stream": False
+            }
+            
+            headers = {
+                "Authorization": f"Bearer {PERPLEXITY_API_KEY}",
+                "Content-Type": "application/json"
+            }
+            
+            response = requests.post(url, json=payload, headers=headers, timeout=300)
+            response.raise_for_status()
+            
+            response_data = response.json()
+            
+            # Extract the message content
+            ai_response = response_data["choices"][0]["message"]["content"]
+            
+            # Extract usage information
+            usage = response_data.get("usage", {})
+            input_tokens = usage.get("prompt_tokens", 0)
+            output_tokens = usage.get("completion_tokens", 0)
+            reasoning_tokens = 0  # Sonar Reasoning Pro doesn't separate reasoning tokens
+            total_tokens = usage.get("total_tokens", input_tokens + output_tokens)
+        
+        # Log token usage to console
+        print(f"Model: {selected_model}")
+        print(f"Query: {query[:100]}...")
+        print(f"Reasoning Effort: {reasoning_effort}")
+        print(f"Input Tokens: {input_tokens:,}")
+        print(f"Output Tokens: {output_tokens:,}")
+        print(f"Reasoning Tokens: {reasoning_tokens:,}")
+        print(f"Total Tokens: {total_tokens:,}")
+        
+        # Calculate estimated cost (using GPT-5 pricing as baseline)
+        estimated_cost = calculate_estimated_cost(total_tokens, reasoning_effort)
+        
+        return ai_response, total_tokens, estimated_cost, input_tokens, output_tokens, reasoning_tokens
+        
+    except Exception as e:
+        error_msg = str(e).lower()
+        print(f"Error generating response with {selected_model}: {e}")
+        
+        if "timeout" in error_msg:
+            return "The query is taking longer than expected to process. Please try simplifying your question or try again later.", 0, 0.0, 0, 0, 0
+        else:
+            st.error(f"Error generating response with {selected_model}: {e}")
 
 
 def extract_output_text_from_response(response) -> str:
@@ -655,8 +744,15 @@ def extract_output_text_from_response(response) -> str:
     if hasattr(response, 'content') and response.content:
         return response.content
 
-    # No text found - log minimal error info
-    print(f"[WARNING] Could not extract text from response (type: {type(response).__name__})")
+    print(f"[DEBUG] Response structure: {type(response)}")
+    print(f"[DEBUG] Response attributes: {dir(response)}")
+    if hasattr(response, 'output'):
+        print(f"[DEBUG] Output type: {type(response.output)}")
+        if response.output:
+            print(f"[DEBUG] First output item: {response.output[0] if response.output else 'None'}")
+            if response.output and hasattr(response.output[0], '__dict__'):
+                print(f"[DEBUG] First output item attrs: {response.output[0].__dict__}")
+
     return ""
 
 # REMOVED: generate_legal_response_streaming() - caused Cloudflare timeouts
@@ -835,112 +931,6 @@ def generate_legal_response_smart(
         status_callback=status_callback,
         text_callback=text_callback
     )
-
-
-def generate_legal_response_via_fastapi(
-    query: str,
-    search_results: List[Dict[str, Any]],
-    reasoning_effort: str,
-    access_code: str,
-    session_id: str,
-    status_callback=None,
-    text_callback=None
-) -> Tuple[str, int, float, int, int, int, Optional[str]]:
-    """
-    NEW: Cloudflare-safe response generator using FastAPI backend polling.
-
-    This is the ONLY method that guarantees no Cloudflare timeouts:
-    - Submits query to FastAPI backend (returns immediately)
-    - FastAPI spawns true background task (decoupled from HTTP)
-    - Streamlit polls FastAPI status endpoint (each poll is <100ms)
-    - No HTTP request ever exceeds Cloudflare's 100s limit
-
-    Returns: (response_text, total_tokens, cost, input_tokens, output_tokens, reasoning_tokens, response_id)
-    """
-    fastapi_url = os.getenv("FASTAPI_URL", "http://localhost:8000")
-
-    try:
-        if status_callback:
-            status_callback("Submitting query to backend...")
-
-        response = requests.post(
-            f"{fastapi_url}/api/chat",
-            json={
-                "query": query,
-                "session_id": session_id,
-                "access_code": access_code,
-                "reasoning_effort": reasoning_effort,
-                "search_results": search_results
-            },
-            timeout=10
-        )
-        response.raise_for_status()
-        data = response.json()
-        response_id = data["response_id"]
-
-        print(f"[FASTAPI] Submitted query, response_id: {response_id}")
-
-        start_time = time.time()
-        last_sequence = 0
-
-        while True:
-            elapsed = time.time() - start_time
-
-            status_msg = get_polling_status_message(elapsed)
-            if status_callback:
-                status_callback(status_msg)
-
-            try:
-                status_response = requests.get(
-                    f"{fastapi_url}/api/response/{response_id}",
-                    timeout=5
-                )
-                status_response.raise_for_status()
-                status_data = status_response.json()
-
-                status = status_data["status"]
-                partial = status_data.get("partial_response", "")
-                sequence = status_data.get("sequence_number", 0)
-
-                if sequence > last_sequence and partial and text_callback:
-                    text_callback(partial)
-                    last_sequence = sequence
-
-                if status == "completed":
-                    final_response = requests.get(
-                        f"{fastapi_url}/api/response/{response_id}/final",
-                        timeout=5
-                    )
-                    final_response.raise_for_status()
-                    final_data = final_response.json()
-
-                    response_text = final_data.get("text", "")
-                    token_usage = final_data.get("token_usage", {})
-
-                    total_tokens = token_usage.get("total_tokens", 0)
-                    input_tokens = token_usage.get("input_tokens", 0)
-                    output_tokens = token_usage.get("output_tokens", 0)
-                    reasoning_tokens = token_usage.get("reasoning_tokens", 0)
-
-                    estimated_cost = calculate_estimated_cost(total_tokens, reasoning_effort)
-
-                    print(f"[FASTAPI] Completed in {elapsed:.1f}s")
-                    return response_text, total_tokens, estimated_cost, input_tokens, output_tokens, reasoning_tokens, response_id
-
-                elif status == "failed":
-                    error_msg = status_data.get("error_message", "Unknown error")
-                    raise Exception(f"Backend processing failed: {error_msg}")
-
-                interval = 0.5 if status == "streaming" else 1.0 if status == "in_progress" else 2.0
-                time.sleep(interval)
-
-            except requests.exceptions.RequestException as e:
-                print(f"[FASTAPI] Poll error: {e}")
-                time.sleep(2.0)
-
-    except Exception as e:
-        print(f"[FASTAPI] Error: {e}")
-        raise
 
 
 def check_and_recover_pending_response(session_id: str) -> Optional[Dict[str, Any]]:
@@ -1414,7 +1404,7 @@ def handle_chat_input(prompt):
                 status_placeholder.info(msg)
 
             try:
-                result = generate_legal_response_via_fastapi(
+                result = generate_legal_response_smart(
                     query=prompt,
                     search_results=search_results,
                     reasoning_effort=reasoning_effort,
@@ -1438,24 +1428,39 @@ def handle_chat_input(prompt):
                 error_placeholder = st.empty()
                 display_streaming_error(e, elapsed_time, error_placeholder)
 
-                # If we have partial text, show it
-                if current_text[0]:
-                    ai_response_text = current_text[0] + "\n\n[Response interrupted - partial content shown]"
+                if streaming_text[0]:
+                    ai_response_text = streaming_text[0] + "\n\n[Response interrupted - partial content shown]"
                     text_placeholder.markdown(ai_response_text)
+                    total_tokens = 0
+                    estimated_cost = 0.0
+                    input_tokens = 0
+                    output_tokens = 0
+                    reasoning_tokens = 0
                 else:
-                    ai_response_text = f"An error occurred while processing your query. Please try again.\n\nError: {str(e)}"
-                    text_placeholder.error(ai_response_text)
+                    ai_response_text, total_tokens, estimated_cost, input_tokens, output_tokens, reasoning_tokens = generate_legal_response(
+                        prompt, search_results, selected_model, reasoning_effort
+                    )
+                    text_placeholder.markdown(ai_response_text)
 
-                # Set safe defaults for token counts
-                total_tokens = 0
-                estimated_cost = 0.0
-                input_tokens = 0
-                output_tokens = 0
-                reasoning_tokens = 0
+        else:
+            if reasoning_effort == "medium":
+                status_placeholder.info(f"Sonar Reasoning Pro analyzing legal sources with medium effort ({reasoning_effort_source})...")
+            else:
+                status_placeholder.info(f"Sonar Reasoning Pro performing deep analysis with high effort ({reasoning_effort_source})...")
 
-        # Display token usage (GPT-5 only)
+            ai_response_text, total_tokens, estimated_cost, input_tokens, output_tokens, reasoning_tokens = generate_legal_response(
+                prompt, search_results, selected_model, reasoning_effort
+            )
+
+            status_placeholder.empty()
+            text_placeholder.markdown(ai_response_text)
+
+        model_short = "GPT-5" if selected_model == "GPT-5" else "Sonar-RP"
         effort_with_source = f"{reasoning_effort.upper()} ({reasoning_effort_source})"
-        st.caption(f"Input: {input_tokens:,} | Output: {output_tokens:,} | Reasoning: {reasoning_tokens:,} | Total: {total_tokens:,} | Model: GPT-5 | Effort: {effort_with_source}")
+        if selected_model == "Sonar Reasoning Pro (RAG Only)":
+            st.caption(f"Input: {input_tokens:,} | Output: {output_tokens:,} | Total: {total_tokens:,} | Model: {model_short} | Effort: {effort_with_source} | *Cost estimate based on GPT-5 pricing")
+        else:
+            st.caption(f"Input: {input_tokens:,} | Output: {output_tokens:,} | Reasoning: {reasoning_tokens:,} | Total: {total_tokens:,} | Model: {model_short} | Effort: {effort_with_source}")
 
         show_chunks_enabled = st.session_state.settings_cache.get('show_rag_chunks_enabled', False)
 
