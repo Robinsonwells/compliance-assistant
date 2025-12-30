@@ -1,2 +1,2 @@
-# compliance-assistant
+# legal-assistant
 Legal Assistant

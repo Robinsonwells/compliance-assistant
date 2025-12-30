@@ -1,7 +1,7 @@
 # Mobile Chat Interface Redesign - Implementation Summary
 
 ## Overview
-Complete mobile-first redesign of the PEO Compliance Assistant chat interface, addressing sizing issues, improving performance, and enhancing accessibility.
+Complete mobile-first redesign of the PEO Legal Assistant chat interface, addressing sizing issues, improving performance, and enhancing accessibility.
 
 ## Implementation Date
 November 1, 2025

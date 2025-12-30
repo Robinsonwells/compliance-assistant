@@ -53,7 +53,7 @@ def generate_safe_rewrite(original_prompt: str) -> List[str]
 
 **System Prompt:**
 ```
-You are a compliance assistant that rewrites user prompts to be policy-compliant and non-actionable.
+You are a legal assistant that rewrites user prompts to be policy-compliant and non-actionable.
 
 Your task: Rewrite the user's prompt into 3 alternatives that are compliant, educational, and focused on understanding governance frameworks.
 

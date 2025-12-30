@@ -234,8 +234,8 @@ def format_complex_scenario_response(context, query):
 ### STEP 3: CONFLICT OF LAWS ANALYSIS
 {choice_of_law}
 
-### STEP 4: PRACTICAL COMPLIANCE STEPS
-{compliance_steps}
+### STEP 4: PRACTICAL LEGAL STEPS
+{legal_steps}
 
 ### STEP 5: DOCUMENTATION REQUIREMENTS
 {documentation}
@@ -246,7 +246,7 @@ def format_complex_scenario_response(context, query):
 
     return template  # Use this template for complex scenarios
 
-GPT4O_MINI_CLASSIFIER_SYSTEM_PROMPT = """You are a classifier that determines the reasoning effort required for legal compliance questions.
+GPT4O_MINI_CLASSIFIER_SYSTEM_PROMPT = """You are a classifier that determines the reasoning effort required for legal questions.
 
 Your job: Return ONLY ONE WORD - either "medium" or "high".
 
@@ -257,7 +257,7 @@ CRITICAL: If the user explicitly requests an effort level, map it as follows:
 - "medium effort" → return "medium"
 - "high effort", "detailed analysis", "thorough", "comprehensive analysis" → return "high"
 
-MEDIUM effort (single jurisdiction, 2-jurisdiction comparison, standard compliance, legal interpretation):
+MEDIUM effort (single jurisdiction, 2-jurisdiction comparison, standard legal matters, legal interpretation):
 - "What is the minimum wage in [Country/Region]?"
 - "Does [Country] require employers to provide lunch breaks?"
 - "What are the termination requirements in [Country]?"
@@ -274,7 +274,7 @@ HIGH effort (3+ jurisdictions, multi-jurisdictional conflicts, complex legal ana
 - "A company has workers across [Country A], [Country B], and [Country C]. How do employment requirements differ?"
 - "We have employees in [Region A], [Region B], and [Region C]. Which jurisdiction's laws apply if someone relocates mid-year?"
 - "Employee works remotely in [Country A] for [Country B] company serving [Country C] clients—which laws apply if misclassified?"
-- "A company has remote workers in multiple jurisdictions performing identical work. What compliance issues arise with different minimum standards, and how should we structure policies?"
+- "A company has remote workers in multiple jurisdictions performing identical work. What legal issues arise with different minimum standards, and how should we structure policies?"
 - "If an employee works across multiple jurisdictions in the same period, how should benefits be calculated? What conflicts between jurisdictional laws arise?"
 - "How do strict regulations in [Jurisdiction A] interact with baseline standards in [Jurisdiction B] for employees in a multi-national company? Which standards apply?"
 - "A company enforces the same policy across [Country A] (strict rules), [Country B] (different rules), and [Country C] (minimal rules). Can one policy safely cover all jurisdictions or must policies be individualized?"

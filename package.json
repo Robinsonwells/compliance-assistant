@@ -1,5 +1,5 @@
 {
-  "name": "compliance-assistant",
+  "name": "legal-assistant",
   "version": "1.0.0",
   "description": "Legal Assistant - Python/Streamlit application",
   "main": "app.py",
@@ -7,7 +7,7 @@
     "start": "streamlit run app.py",
     "dev": "echo 'This project is deployed via Streamlit Cloud. No local dev server needed.'"
   },
-  "keywords": ["streamlit", "python", "legal", "compliance"],
+  "keywords": ["streamlit", "python", "legal"],
   "author": "",
   "license": "ISC",
   "dependencies": {},

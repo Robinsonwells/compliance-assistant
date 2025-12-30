@@ -76,9 +76,9 @@ def generate_safe_rewrite(original_prompt: str) -> List[str]:
         text_lower = rewrite.lower()
         return any(phrase in text_lower for phrase in BANNED_PHRASES)
 
-    system_prompt = """You are a compliance assistant that rewrites user prompts to be policy-compliant.
+    system_prompt = """You are a legal assistant that rewrites user prompts to be policy-compliant.
 
-Goal: produce 3 alternative questions that are educational, compliance-oriented, and non-actionable.
+Goal: produce 3 alternative questions that are educational, legal-oriented, and non-actionable.
 
 HARD RULES (MUST FOLLOW):
 - Do NOT ask how to "technically comply", "work around", "circumvent", "exploit loopholes", "avoid detection", "preserve control", "retain veto", "control outcomes", or "pressure" any party.
@@ -91,7 +91,7 @@ MUST REFRAME TOWARD:
 - Risk management, disclosures, privilege/work-product protection (high-level)
 - Non-control funding structures and ethical safeguards
 - Conflicts checks, client consent, reporting, and auditability
-- General compliance frameworks and regulatory requirements
+- General legal frameworks and regulatory requirements
 
 Output ONLY valid JSON:
 {"rewrites":["rewrite1","rewrite2","rewrite3"]}
@@ -132,9 +132,9 @@ Each rewrite must be a complete standalone question."""
                     # Some rewrites were filtered out - pad with safe defaults
                     print(f"[REWRITE] WARNING: Only {len(compliant_rewrites)} compliant rewrites after filtering, padding to 3")
                     safe_defaults = [
-                        "What are the key governance frameworks and compliance standards that guide professional decision-making in this domain?",
-                        "What ethical oversight mechanisms ensure attorney independence and compliance with professional responsibility rules?",
-                        "How do legal organizations approach risk management and disclosure requirements while maintaining regulatory compliance?"
+                        "What are the key governance frameworks and legal standards that guide professional decision-making in this domain?",
+                        "What ethical oversight mechanisms ensure attorney independence and adherence to professional responsibility rules?",
+                        "How do legal organizations approach risk management and disclosure requirements while maintaining regulatory adherence?"
                     ]
                     # Combine compliant rewrites with safe defaults
                     combined = compliant_rewrites + safe_defaults
@@ -144,9 +144,9 @@ Each rewrite must be a complete standalone question."""
                 compliant_rewrites = [r for r in rewrites if not is_noncompliant(r)]
                 print(f"[REWRITE] WARNING: Only got {len(compliant_rewrites)} compliant rewrites after filtering, padding to 3")
                 safe_defaults = [
-                    "What are the key governance frameworks and compliance standards that guide professional decision-making in this domain?",
-                    "What ethical oversight mechanisms ensure attorney independence and compliance with professional responsibility rules?",
-                    "How do legal organizations approach risk management and disclosure requirements while maintaining regulatory compliance?"
+                    "What are the key governance frameworks and legal standards that guide professional decision-making in this domain?",
+                    "What ethical oversight mechanisms ensure attorney independence and adherence to professional responsibility rules?",
+                    "How do legal organizations approach risk management and disclosure requirements while maintaining regulatory adherence?"
                 ]
                 combined = compliant_rewrites + safe_defaults
                 return combined[:3]
@@ -163,8 +163,8 @@ Each rewrite must be a complete standalone question."""
     # Ultimate fallback: return 3 conservative rewrites
     print(f"[REWRITE] FALLBACK: Using default conservative rewrites")
     return [
-        "What are the key compliance considerations and risk management factors when evaluating legal matters, including regulatory requirements and ethical obligations?",
-        "How do legal organizations approach capacity planning and budget allocation while maintaining compliance with professional responsibility rules?",
+        "What are the key legal considerations and risk management factors when evaluating legal matters, including regulatory requirements and ethical obligations?",
+        "How do legal organizations approach capacity planning and budget allocation while maintaining adherence to professional responsibility rules?",
         "What ethical oversight mechanisms and quality control processes guide professional decision-making in accordance with regulatory standards?"
     ]
 
@@ -1416,7 +1416,7 @@ def show_main_application():
 
     header_col1, header_col2 = st.columns([4, 1])
     with header_col1:
-        st.markdown("<h1 style='margin-bottom: 4px;'>Compliance Assistant</h1>", unsafe_allow_html=True)
+        st.markdown("<h1 style='margin-bottom: 4px;'>Legal Assistant</h1>", unsafe_allow_html=True)
 
         # Set GPT-5 as the only model
         st.session_state.selected_model = "GPT-5"
@@ -1525,7 +1525,7 @@ def show_main_application():
     show_legal_assistant_content()
 
     # Handle chat input outside of tabs (only if no pending_prompt)
-    if prompt := st.chat_input("Ask any compliance question"):
+    if prompt := st.chat_input("Ask any legal question"):
         handle_chat_input(prompt)
 
 def show_legal_assistant_content():
