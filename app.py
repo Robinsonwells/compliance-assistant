@@ -1212,29 +1212,18 @@ def retrieve_background_response(response_id: str) -> Optional[Dict[str, Any]]:
 
 # Authentication functions
 def check_authentication():
-    """Check if user is authenticated"""
+    """Check if user is authenticated - ACCESS CODE DISABLED: Auto-authenticate all users"""
     if 'authenticated' not in st.session_state:
-        st.session_state.authenticated = False
-    
+        st.session_state.authenticated = True  # Auto-authenticate
+
     if 'session_id' not in st.session_state:
         st.session_state.session_id = str(uuid.uuid4())
-    
-    # If not authenticated but we have session data, try to restore authentication
-    if (not st.session_state.authenticated and 
-        'access_code' in st.session_state and 
-        'session_id' in st.session_state):
-        
-        # Check if the existing session is still valid
-        if user_manager.is_session_valid(st.session_state.session_id):
-            # Restore authentication
-            st.session_state.authenticated = True
-            # Update session activity for tracking purposes
-            user_manager.update_session_activity(st.session_state.session_id)
-        else:
-            # Session/access code is no longer valid, clear everything
-            logout_user()
-    
-    return st.session_state.authenticated
+
+    if 'access_code' not in st.session_state:
+        st.session_state.access_code = 'public'  # Default access code for logging
+
+    # Always return True - no access code required
+    return True
 
 def authenticate_user(access_code: str) -> bool:
     """Authenticate user with access code"""
@@ -1257,19 +1246,10 @@ def logout_user():
 
 # Main application
 def main():
-    # Check authentication
-    if not check_authentication():
-        show_login_page()
-        return
-    
-    # Validate session
-    if not user_manager.is_session_valid(st.session_state.session_id):
-        st.error("Your access code has expired or is no longer valid. Please log in again.")
-        logout_user()
-        return
-    
-    # Update session activity
-    user_manager.update_session_activity(st.session_state.session_id)
+    # Check authentication (auto-authenticates all users now)
+    check_authentication()
+
+    # Skip session validation - no access codes required anymore
 
     # Initialize settings cache in session state (once per session only)
     if 'settings_cache' not in st.session_state:
